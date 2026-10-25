@@ -69,6 +69,75 @@ static void x11_shutdown(void)
     n_outputs = 0;
 }
 
+/* --- time --- */
+
+guint32 backend_x11_event_time(const XEvent *e)
+{
+    Time t = CurrentTime;
+
+    /* grab the lasttime and hack up the state */
+    switch (e->type) {
+    case ButtonPress:
+    case ButtonRelease:
+        t = e->xbutton.time;
+        break;
+    case KeyPress:
+        t = e->xkey.time;
+        break;
+    case KeyRelease:
+        t = e->xkey.time;
+        break;
+    case MotionNotify:
+        t = e->xmotion.time;
+        break;
+    case PropertyNotify:
+        t = e->xproperty.time;
+        break;
+    case EnterNotify:
+    case LeaveNotify:
+        t = e->xcrossing.time;
+        break;
+    default:
+#ifdef SYNC
+        if (obt_display_extension_sync &&
+            e->type == obt_display_extension_sync_basep + XSyncAlarmNotify)
+        {
+            t = ((const XSyncAlarmNotifyEvent*)e)->time;
+        }
+#endif
+        /* if more event types are anticipated, get their timestamp
+           explicitly */
+        break;
+    }
+
+    return t;
+}
+
+static gboolean find_timestamp(XEvent *e, gpointer data)
+{
+    Time *t = data;
+
+    *t = backend_x11_event_time(e);
+    return *t != CurrentTime;
+}
+
+static guint32 x11_time(void)
+{
+    Time t = CurrentTime;
+
+    /* Some events don't come with timestamps :(
+       ...but we can get one anyways >:)
+       Generate a timestamp so there is guaranteed at least one in the queue
+       eventually */
+    XChangeProperty(obt_display, screen_support_win,
+                    OBT_PROP_ATOM(WM_CLASS), OBT_PROP_ATOM(STRING),
+                    8, PropModeAppend, NULL, 0);
+
+    /* Grab the first timestamp available */
+    xqueue_exists(find_timestamp, &t);
+    return t;
+}
+
 /* --- the screen --- */
 
 /*! The event mask to grab on the root window */
@@ -1548,6 +1617,7 @@ const ObBackend ob_backend_x11 = {
     .startup = x11_startup,
     .shutdown = x11_shutdown,
     .event_source = x11_event_source,
+    .time = x11_time,
     .claim_screen = x11_claim_screen,
     .release_screen = x11_release_screen,
 
