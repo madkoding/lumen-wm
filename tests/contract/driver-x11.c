@@ -9,6 +9,10 @@
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#ifdef CT_HAVE_XTEST
+#include <X11/keysym.h>
+#include <X11/extensions/XTest.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -160,7 +164,11 @@ const char *ct_driver_name(void)
 ct_caps ct_driver_caps(void)
 {
     return CT_CAP_CLIENT_POSITION | CT_CAP_DESKTOPS | CT_CAP_STRUTS |
-        CT_CAP_STACKING | CT_CAP_CLIENT_FOCUS;
+        CT_CAP_STACKING | CT_CAP_CLIENT_FOCUS
+#ifdef CT_HAVE_XTEST
+        | CT_CAP_INPUT
+#endif
+        ;
 }
 
 void ct_pump(void)
@@ -555,3 +563,83 @@ int ct_current_desktop(void)
 {
     return (int)get_card(root, NET_CURRENT_DESKTOP, 0);
 }
+
+#ifdef CT_HAVE_XTEST
+/* Leave a person's gap between two key or button events. */
+static void fake_sync(void)
+{
+    struct timespec gap = { 0, 20 * 1000 * 1000 };
+    XSync(dpy, False);
+    nanosleep(&gap, NULL);
+}
+
+/* Press (or release) the modifiers in mods, a string of C, A, S and W. */
+static void fake_mods(const char *mods, size_t n, Bool press)
+{
+    for (size_t i = 0; i < n; ++i) {
+        KeySym sym = mods[i] == 'C' ? XK_Control_L :
+            mods[i] == 'A' ? XK_Alt_L :
+            mods[i] == 'S' ? XK_Shift_L :
+            mods[i] == 'W' ? XK_Super_L : NoSymbol;
+        if (sym == NoSymbol) continue;
+        XTestFakeKeyEvent(dpy, XKeysymToKeycode(dpy, sym), press, 0);
+        fake_sync();
+    }
+}
+
+/* "C-A-Right" -> mods "CA", key "Right" */
+static const char *split_keys(const char *keys, char *mods, size_t *n)
+{
+    *n = 0;
+    while (keys[0] && keys[1] == '-') {
+        mods[(*n)++] = keys[0];
+        keys += 2;
+    }
+    return keys;
+}
+
+void ct_input_keys(const char *keys)
+{
+    char mods[8];
+    size_t n;
+    const char *name = split_keys(keys, mods, &n);
+    KeyCode code = XKeysymToKeycode(dpy, XStringToKeysym(name));
+
+    fake_mods(mods, n, True);
+    XTestFakeKeyEvent(dpy, code, True, 0);
+    fake_sync();
+    XTestFakeKeyEvent(dpy, code, False, 0);
+    fake_sync();
+    /* release in the opposite order */
+    for (size_t i = n; i > 0; --i)
+        fake_mods(&mods[i - 1], 1, False);
+    XFlush(dpy);
+}
+
+void ct_input_drag(ct_win *w, const char *mods, int dx, int dy)
+{
+    ct_rect c = ct_window_client(w);
+    int x = c.x + c.w / 2, y = c.y + c.h / 2;
+    const int steps = 10;
+
+    XTestFakeMotionEvent(dpy, -1, x, y, 0);
+    fake_mods(mods, strlen(mods), True);
+    XTestFakeButtonEvent(dpy, 1, True, 0);
+    fake_sync();
+    for (int i = 1; i <= steps; ++i) {
+        XTestFakeMotionEvent(dpy, -1, x + dx * i / steps, y + dy * i / steps,
+                             0);
+        fake_sync();
+    }
+    XTestFakeButtonEvent(dpy, 1, False, 0);
+    fake_sync();
+    fake_mods(mods, strlen(mods), False);
+    XFlush(dpy);
+}
+#else
+void ct_input_keys(const char *keys) { (void)keys; }
+void ct_input_drag(ct_win *w, const char *mods, int dx, int dy)
+{
+    (void)w; (void)mods; (void)dx; (void)dy;
+}
+#endif

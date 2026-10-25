@@ -25,7 +25,7 @@ jobs:
             autopoint gettext pkg-config libglib2.0-dev libxml2-dev \
             libpango1.0-dev libcairo2-dev libx11-dev libxext-dev \
             libxcursor-dev libxrandr-dev libxinerama-dev libxkbcommon-dev \
-            libimlib2-dev libsm-dev libice-dev \
+            libimlib2-dev libsm-dev libice-dev libxtst-dev \
             xvfb xdotool xterm imagemagick fonts-dejavu-core picom hsetroot
       - name: Build and install
         run: |

@@ -24,6 +24,7 @@ typedef enum {
     CT_CAP_STRUTS          = 1 << 2, /* docks that reserve screen edges */
     CT_CAP_STACKING        = 1 << 3, /* the full stacking order is visible */
     CT_CAP_CLIENT_FOCUS    = 1 << 4, /* a client can take the focus itself */
+    CT_CAP_INPUT           = 1 << 5, /* the driver can type and click */
 } ct_caps;
 
 typedef enum {
@@ -105,6 +106,13 @@ void ct_request_close(ct_win *w);
 void ct_request_move_resize(ct_win *w, ct_rect r);
 void ct_request_desktop(int d);
 void ct_request_window_desktop(ct_win *w, int d);
+
+/* What the user does (CT_CAP_INPUT). keys are the window manager's own
+   syntax: modifiers C, A, S and W, then a key name, as in "C-A-Right". */
+void ct_input_keys(const char *keys);
+/* Hold mods ("A", or "" for none), press the first button over the middle of
+   the window, drag it by dx, dy and let go. */
+void ct_input_drag(ct_win *w, const char *mods, int dx, int dy);
 
 ct_rect ct_screen(void);
 ct_rect ct_workarea(void);
