@@ -176,7 +176,11 @@ struct _ObBackend {
 
     /* --- outputs --- */
 
+    /*! Look at the outputs again and say how many there are; at least
+      one. */
     guint (*output_count)(void);
+    /*! An output's area in layout coordinates, as output_count() last
+      found it. */
     void (*output_area)(guint output, Rect *area);
 
     /* --- managed surfaces --- */

@@ -24,6 +24,10 @@
 
 static const ObBackendEvents *events;
 
+/* the outputs as output_count() last found them */
+static Rect *outputs;
+static guint n_outputs;
+
 static gboolean x11_startup(const gchar *display, gboolean replace,
                             const ObBackendEvents *ev)
 {
@@ -37,12 +41,51 @@ static void x11_shutdown(void)
 {
     obt_display_close();
     events = NULL;
+    g_free(outputs);
+    outputs = NULL;
+    n_outputs = 0;
 }
 
 static GSource *x11_event_source(void)
 {
     /* event.c reads the queue through its xqueue callback */
     return xqueue_source_new();
+}
+
+static guint x11_output_count(void)
+{
+    Screen *scr = DefaultScreenOfDisplay(obt_display);
+#ifdef XINERAMA
+    XineramaScreenInfo *info;
+    gint n;
+#endif
+
+    g_free(outputs);
+#ifdef XINERAMA
+    if (obt_display_extension_xinerama &&
+        (info = XineramaQueryScreens(obt_display, &n)))
+    {
+        gint i;
+
+        n_outputs = n;
+        outputs = g_new(Rect, n_outputs);
+        for (i = 0; i < n; ++i)
+            RECT_SET(outputs[i], info[i].x_org, info[i].y_org,
+                     info[i].width, info[i].height);
+        XFree(info);
+        return n_outputs;
+    }
+#endif
+    n_outputs = 1;
+    outputs = g_new(Rect, 1);
+    RECT_SET(outputs[0], 0, 0, WidthOfScreen(scr), HeightOfScreen(scr));
+    return n_outputs;
+}
+
+static void x11_output_area(guint output, Rect *area)
+{
+    g_return_if_fail(output < n_outputs);
+    *area = outputs[output];
 }
 
 const ObBackend ob_backend_x11 = {
@@ -56,4 +99,7 @@ const ObBackend ob_backend_x11 = {
     .startup = x11_startup,
     .shutdown = x11_shutdown,
     .event_source = x11_event_source,
+
+    .output_count = x11_output_count,
+    .output_area = x11_output_area,
 };

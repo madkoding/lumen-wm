@@ -18,6 +18,7 @@
 */
 
 #include "debug.h"
+#include "backend.h"
 #include "openbox.h"
 #include "dock.h"
 #include "shelf.h"
@@ -1372,36 +1373,20 @@ static void get_xinerama_screens(Rect **xin_areas, guint *nxin)
 {
     guint i;
     gint l, r, t, b;
-#ifdef XINERAMA
-    gint n;
-    XineramaScreenInfo *info;
-#endif
 
-    if (ob_debug_xinerama) {
-        gint w = WidthOfScreen(ScreenOfDisplay(obt_display, ob_screen));
-        gint h = HeightOfScreen(ScreenOfDisplay(obt_display, ob_screen));
+    *nxin = ob_backend->output_count();
+    *xin_areas = g_new(Rect, *nxin + 1);
+    for (i = 0; i < *nxin; ++i)
+        ob_backend->output_area(i, &(*xin_areas)[i]);
+
+    if (ob_debug_xinerama && *nxin == 1) {
+        /* pretend the one output is two, side by side */
+        const Rect all = (*xin_areas)[0];
         *nxin = 2;
-        *xin_areas = g_new(Rect, *nxin + 1);
-        RECT_SET((*xin_areas)[0], 0, 0, w/2, h);
-        RECT_SET((*xin_areas)[1], w/2, 0, w-(w/2), h);
-    }
-#ifdef XINERAMA
-    else if (obt_display_extension_xinerama &&
-             (info = XineramaQueryScreens(obt_display, &n))) {
-        *nxin = n;
-        *xin_areas = g_new(Rect, *nxin + 1);
-        for (i = 0; i < *nxin; ++i)
-            RECT_SET((*xin_areas)[i], info[i].x_org, info[i].y_org,
-                     info[i].width, info[i].height);
-        XFree(info);
-    }
-#endif
-    else {
-        *nxin = 1;
-        *xin_areas = g_new(Rect, *nxin + 1);
-        RECT_SET((*xin_areas)[0], 0, 0,
-                 WidthOfScreen(ScreenOfDisplay(obt_display, ob_screen)),
-                 HeightOfScreen(ScreenOfDisplay(obt_display, ob_screen)));
+        *xin_areas = g_renew(Rect, *xin_areas, *nxin + 1);
+        RECT_SET((*xin_areas)[0], all.x, all.y, all.width/2, all.height);
+        RECT_SET((*xin_areas)[1], all.x + all.width/2, all.y,
+                 all.width - all.width/2, all.height);
     }
 
     /* returns one extra with the total area in it */
