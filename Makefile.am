@@ -596,7 +596,6 @@ dist_doc_DATA = \
 	COMPLIANCE \
 	README \
 	README.md \
-	docs/screenshots/shelf-desktop.png \
 	AUTHORS \
 	CHANGELOG \
 	COPYING \
