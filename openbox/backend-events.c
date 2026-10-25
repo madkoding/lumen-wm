@@ -36,6 +36,40 @@ static ObClient *client_of(ObSurfaceId s)
     return w && WINDOW_IS_CLIENT(w) ? WINDOW_AS_CLIENT(w) : NULL;
 }
 
+static void surface_new(ObSurfaceId s)
+{
+    ObClient *client = client_of(s);
+
+    if (!client)
+        window_manage((Window)s);
+    /* one already managed normally doesn't ask, and when it does it is on
+       another desktop or iconified, and only an iconified one is shown */
+    else if (client->iconic)
+        client_activate(client, FALSE, FALSE, TRUE, TRUE, TRUE);
+}
+
+static void surface_gone(ObSurfaceId s)
+{
+    ObClient *client = client_of(s);
+
+    if (client) client_unmanage(client);
+}
+
+static void surface_withdrawn(ObSurfaceId s)
+{
+    ObClient *client = client_of(s);
+
+    if (!client) return;
+
+    /* the core hid it itself (X11: unmapping it to reparent or iconify) */
+    if (client->ignore_unmaps) {
+        ob_debug("  ignoring it, %d ignores left", client->ignore_unmaps);
+        client->ignore_unmaps--;
+        return;
+    }
+    client_unmanage(client);
+}
+
 static void surface_changed(ObSurfaceId s, ObSurfaceInfoFields changed,
                             guint32 time)
 {
@@ -512,6 +546,9 @@ static void request_restack(ObSurfaceId s, guintptr sibling_id,
 }
 
 const ObBackendEvents ob_backend_events = {
+    .surface_new = surface_new,
+    .surface_gone = surface_gone,
+    .surface_withdrawn = surface_withdrawn,
     .surface_changed = surface_changed,
     .request_states = request_states,
     .request_iconify = request_iconify,

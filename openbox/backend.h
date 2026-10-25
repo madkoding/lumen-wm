@@ -390,9 +390,13 @@ struct _ObBackend {
 /*! What a backend tells the core. The core fills it in; the backend calls
   it from its event source. */
 struct _ObBackendEvents {
-    /*! A client wants to be shown. The core decides where, configures it and
-      shows it, or leaves it alone (for one, when it is a dock app). */
-    void (*surface_new)(ObSurfaceId s, const ObSurfaceInfo *info);
+    /*! A client wants to be shown (X11 MapRequest, a first buffer on
+      Wayland). The core asks surface_info() about a new one and decides
+      where, configures it and shows it, or leaves it alone (for one, when
+      it is a dock app); one it already manages is shown again if it was
+      iconified. */
+    void (*surface_new)(ObSurfaceId s);
+    /*! The client is gone (destroyed, or on X11 reparented away). */
     void (*surface_gone)(ObSurfaceId s);
     /*! The client changed what it says about itself; ask surface_info()
       for the new values. time: when, in event time. */
