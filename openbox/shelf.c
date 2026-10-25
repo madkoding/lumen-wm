@@ -275,7 +275,7 @@ static const Material *theme_material(void)
     }
     m->divider = m->ink;
     m->divider_a = 0.22;
-    m->accent = contrast(accent, body) >= 2.0 ? accent : m->ink;
+    m->accent = contrast(accent, body) >= 3.0 ? accent : m->ink;
     if (m->accent.r != accent.r || m->accent.g != accent.g ||
         m->accent.b != accent.b)
         m->accent_fill.kind = G_SOLID;
@@ -2022,6 +2022,12 @@ static void shelf_menu_place(ObMenuFrame *frame, gint *x, gint *y,
     menu_frame_move_on_screen(frame, *x, *y, &dx, &dy);
     *x += dx;
     *y += dy;
+}
+
+gint shelf_menu_limit(void)
+{
+    if (!S.win || !S.shown) return -1;
+    return S.wy + S.island_y - 8;
 }
 
 void shelf_menu_startup(void)

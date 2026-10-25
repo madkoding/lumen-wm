@@ -20,6 +20,7 @@
 #include "menuframe.h"
 #include "client.h"
 #include "menu.h"
+#include "shelf.h"
 #include "screen.h"
 #include "actions.h"
 #include "event.h"
@@ -341,7 +342,7 @@ void menu_frame_move_on_screen(ObMenuFrame *self, gint x, gint y,
 {
     const Rect *a = NULL;
     Rect search = self->area;
-    gint pos, half, monitor;
+    gint pos, half, monitor, bottom, limit;
 
     *dx = *dy = 0;
     RECT_SET_POINT(search, x, y);
@@ -352,6 +353,11 @@ void menu_frame_move_on_screen(ObMenuFrame *self, gint x, gint y,
         monitor = screen_find_monitor(&search);
 
     a = screen_physical_area_monitor(monitor);
+    bottom = a->y + a->height;
+    /* a submenu that starts above the shelf stays above it */
+    if (self->parent && (limit = shelf_menu_limit()) > 0 && y < limit &&
+        limit < bottom)
+        bottom = limit;
 
     half = g_list_length(self->entries) / 2;
     pos = g_list_index(self->entries, self->selected);
@@ -363,7 +369,7 @@ void menu_frame_move_on_screen(ObMenuFrame *self, gint x, gint y,
         *dy = MAX(*dy, a->y - y);
     }
     *dx = MIN(*dx, (a->x + a->width) - (x + self->area.width));
-    *dy = MIN(*dy, (a->y + a->height) - (y + self->area.height));
+    *dy = MIN(*dy, bottom - (y + self->area.height));
     /* if in the top half then check this stuff last, will keep the top
        edge of the menu visible */
     if (pos <= half) {

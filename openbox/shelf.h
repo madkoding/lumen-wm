@@ -26,6 +26,10 @@
 /*! The space the shelf takes from the work area (bottom edge only) */
 extern StrutPartial shelf_strut;
 
+/*! The screen y a submenu should not go below so the shelf stays clear, or
+  -1 when the shelf is not shown */
+gint shelf_menu_limit(void);
+
 /*! The shelf is two floating islands at the bottom of the screen: a dock
   listing the running applications, and a clock with status glyphs. It is
   drawn by the window manager itself with cairo, and is off unless the

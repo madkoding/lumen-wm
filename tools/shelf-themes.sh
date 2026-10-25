@@ -1,7 +1,7 @@
 #!/bin/bash
 # Take a screenshot of the shelf under every bundled Openbox theme and check
 # that its text reads on its islands (4.5:1), on the hovered tile (3:1) and that
-# the running mark shows (2:1).
+# the running mark shows (3:1).
 #
 #   tools/shelf-themes.sh [PREFIX [OUTPUT.png]]
 #
@@ -108,9 +108,9 @@ PY
     val() { sed -n "s/.* $1=\([0-9.]*\).*/\1/p" <<<"$line"; }
     c=$(val contrast); h=$(val hover_ink); a=$(val accent)
     if [ -z "$c" ] || [ -z "$h" ] || [ -z "$a" ] ||
-       awk "BEGIN{exit !($c < 4.5 || $h < 3.0 || $a < 2.0)}"; then
+       awk "BEGIN{exit !($c < 4.5 || $h < 3.0 || $a < 3.0)}"; then
         echo "FAIL $t: text ${c:-?}:1 (>= 4.5), hover ${h:-?}:1 (>= 3)," \
-             "mark ${a:-?}:1 (>= 2)" >&2
+             "mark ${a:-?}:1 (>= 3)" >&2
         status=1
     else
         echo "ok   $t: text $c:1, hover $h:1, mark $a:1"
