@@ -19,6 +19,13 @@ volume and power controls. It looks like a modern desktop and keeps the speed of
 
 The shelf is **off by default**. Until you turn it on, Lumen behaves like plain [Openbox](http://openbox.org).
 
+## Design
+
+Lumen's look is based on [LumaUI](https://hub.simplyluma.com/developer/agents/design-with-lumaui.md), the design system of Luma: content sits in rounded **islands**,
+colours come from a small set of tokens with one accent per view, and text keeps at least 4.5:1 contrast. Lumen
+applies that language to an X11 window manager: the shelf's dock and status islands, the rounded menus, and
+the colours it takes from your window theme.
+
 ## What you get
 
 - 🚀 **A dock**: open your pinned apps with one click, switch between open windows, and drag tiles to reorder them.
@@ -41,8 +48,8 @@ sudo apt-get install build-essential autoconf automake libtool pkg-config gettex
   libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev libx11-dev libxft-dev \
   libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev libimlib2-dev
 
-git clone https://github.com/madkoding/openbox lumen
-cd lumen
+git clone https://github.com/madkoding/lumen-wm
+cd lumen-wm
 ./bootstrap
 ./configure --prefix=/usr --sysconfdir=/etc
 make
@@ -329,8 +336,9 @@ Lumen is based on Openbox and, like it, is free software under the GNU General P
 
 - Openbox: Copyright (C) 2004 Mikael Magnusson, Copyright (C) 2002 Dana Jansens, and all the contributors in
   `AUTHORS`. Upstream: <http://openbox.org>.
-- The shelf's design is inspired by the shelf of LumaUI. Lumen is not affiliated with LumaUI or Openbox and
-  does not use their logos.
+- Design: Lumen's look (islands, menus, colour tokens and contrast) is based on
+  [LumaUI](https://hub.simplyluma.com/developer/agents/design-with-lumaui.md), Luma's design system. Lumen reimplements that design in C on Openbox; it does not ship Luma
+  code, logos or artwork. Lumen is not affiliated with Luma or Openbox.
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
 implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.

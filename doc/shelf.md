@@ -1,7 +1,10 @@
 # Shelf
 
 An optional bar drawn by Lumen itself: two rounded islands held 16 px off
-the bottom edge, centred on the primary monitor.
+the bottom edge, centred on the primary monitor. Its look follows
+[LumaUI](https://hub.simplyluma.com/developer/agents/design-with-lumaui.md): content in islands, colours from a few tokens
+(body, text, hover, accent) with one accent, and text kept at 4.5:1 contrast or
+better.
 
 - **Dock island**: an applications tile (opens `root-menu`), a rule, then one
   40 px tile per window. Left click activates or minimises, right click opens

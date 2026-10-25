@@ -15,4 +15,4 @@ Replaces: openbox
 Provides: x-window-manager, openbox
 Description: Lumen, a light X11 window manager with colour themes and a shelf.
  Based on Openbox (http://openbox.org/).
- https://github.com/madkoding/openbox
+ https://github.com/madkoding/lumen-wm
