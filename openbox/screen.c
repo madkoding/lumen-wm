@@ -1396,7 +1396,7 @@ static void get_xinerama_screens(Rect **xin_areas, guint *nxin)
     b = (*xin_areas)[0].y + (*xin_areas)[0].height - 1;
     for (i = 1; i < *nxin; ++i) {
         l = MIN(l, (*xin_areas)[i].x);
-        t = MIN(l, (*xin_areas)[i].y);
+        t = MIN(t, (*xin_areas)[i].y);
         r = MAX(r, (*xin_areas)[i].x + (*xin_areas)[i].width - 1);
         b = MAX(b, (*xin_areas)[i].y + (*xin_areas)[i].height - 1);
     }
