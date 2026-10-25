@@ -59,6 +59,9 @@ void ct_window_set_app_id(ct_win *w, const char *app_id);
 void ct_window_set_undecorated(ct_win *w);
 /* Reserve this many pixels at the top of the screen (a dock). */
 void ct_window_set_strut(ct_win *w, int top);
+/* Before mapping: ask to show up in this state, or on this desktop. */
+void ct_window_set_initial_state(ct_win *w, ct_state s);
+void ct_window_set_initial_desktop(ct_win *w, int d);
 void ct_window_map(ct_win *w);
 /* The handle stays valid, to ask what the window manager did. */
 void ct_window_destroy(ct_win *w);

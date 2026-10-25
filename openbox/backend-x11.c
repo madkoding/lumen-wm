@@ -561,6 +561,39 @@ static void get_icon_area(Window w, ObSurfaceInfo *info)
     }
 }
 
+static void get_states(Window w, ObSurfaceInfo *info)
+{
+    static const struct { int atom; ObSurfaceStates state; } states[] = {
+        { OBT_PROP_NET_WM_STATE_MODAL, OB_SURFACE_STATE_MODAL },
+        { OBT_PROP_NET_WM_STATE_SHADED, OB_SURFACE_STATE_SHADED },
+        { OBT_PROP_NET_WM_STATE_HIDDEN, OB_SURFACE_STATE_ICONIC },
+        { OBT_PROP_NET_WM_STATE_SKIP_TASKBAR, OB_SURFACE_STATE_SKIP_TASKBAR },
+        { OBT_PROP_NET_WM_STATE_SKIP_PAGER, OB_SURFACE_STATE_SKIP_PAGER },
+        { OBT_PROP_NET_WM_STATE_FULLSCREEN, OB_SURFACE_STATE_FULLSCREEN },
+        { OBT_PROP_NET_WM_STATE_MAXIMIZED_VERT,
+          OB_SURFACE_STATE_MAXIMIZED_VERT },
+        { OBT_PROP_NET_WM_STATE_MAXIMIZED_HORZ,
+          OB_SURFACE_STATE_MAXIMIZED_HORZ },
+        { OBT_PROP_NET_WM_STATE_ABOVE, OB_SURFACE_STATE_ABOVE },
+        { OBT_PROP_NET_WM_STATE_BELOW, OB_SURFACE_STATE_BELOW },
+        { OBT_PROP_NET_WM_STATE_DEMANDS_ATTENTION, OB_SURFACE_STATE_URGENT },
+        { OBT_PROP_OB_WM_STATE_UNDECORATED, OB_SURFACE_STATE_UNDECORATED },
+    };
+    guint32 *state;
+    guint num, i, j;
+
+    info->states = 0;
+    if (!OBT_PROP_GETA32(w, NET_WM_STATE, ATOM, &state, &num))
+        return;
+    for (i = 0; i < num; ++i)
+        for (j = 0; j < G_N_ELEMENTS(states); ++j)
+            if (state[i] == obt_prop_atom(states[j].atom)) {
+                info->states |= states[j].state;
+                break;
+            }
+    g_free(state);
+}
+
 static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
                              ObSurfaceInfo *info)
 {
@@ -586,6 +619,27 @@ static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
         get_icons((Window)s, info);
     if (fields & OB_SURFACE_INFO_ICON_AREA)
         get_icon_area((Window)s, info);
+    if (fields & OB_SURFACE_INFO_STARTUP) {
+        g_free(info->startup_id);
+        if (!OBT_PROP_GETS_UTF8((Window)s, NET_STARTUP_ID, &info->startup_id))
+            info->startup_id = NULL;
+    }
+    if (fields & OB_SURFACE_INFO_DESKTOP) {
+        guint32 d;
+        info->has_desktop =
+            OBT_PROP_GET32((Window)s, NET_WM_DESKTOP, CARDINAL, &d);
+        if (info->has_desktop)
+            info->desktop = d;
+    }
+    if (fields & OB_SURFACE_INFO_STATES)
+        get_states((Window)s, info);
+    if (fields & OB_SURFACE_INFO_USER_TIME) {
+        guint32 t;
+        info->has_user_time =
+            OBT_PROP_GET32((Window)s, NET_WM_USER_TIME, CARDINAL, &t);
+        if (info->has_user_time)
+            info->user_time = t;
+    }
 }
 
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)

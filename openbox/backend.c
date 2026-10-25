@@ -59,6 +59,7 @@ void backend_surface_info_clear(ObSurfaceInfo *info)
     g_free(info->session_id);
     g_free(info->command);
     g_free(info->machine);
+    g_free(info->startup_id);
     for (i = 0; i < info->n_icons; ++i)
         g_free(info->icons[i].argb);
     g_free(info->icons);

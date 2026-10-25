@@ -147,6 +147,18 @@ static void fullscreen_covers_screen(void)
     ct_window_destroy(w);
 }
 
+/* A window can ask to show up fullscreen. */
+static void starts_fullscreen(void)
+{
+    ct_win *w = ct_window_new(CT_WIN_NORMAL, "starts fullscreen", SMALL);
+    ct_window_set_initial_state(w, CT_STATE_FULLSCREEN);
+    ct_window_map(w);
+    CT_EVENTUALLY(ct_window_managed(w) && ct_window_viewable(w));
+    CT_EVENTUALLY(ct_window_has_state(w, CT_STATE_FULLSCREEN));
+    CT_EVENTUALLY(ct_rect_eq(ct_window_client(w), ct_screen()));
+    ct_window_destroy(w);
+}
+
 /* An iconified window is hidden and gives up the focus; activating it
    shows it again. */
 static void iconify_hides(void)
@@ -286,6 +298,24 @@ static void desktops_switch(void)
     ct_window_destroy(w);
 }
 
+/* A window can ask to show up on another desktop; it stays there, hidden,
+   and the current desktop doesn't change. */
+static void starts_on_desktop(void)
+{
+    CT_REQUIRE(CT_CAP_DESKTOPS);
+    int home = ct_current_desktop();
+    int away = (home + 1) % ct_desktop_count();
+
+    ct_win *w = ct_window_new(CT_WIN_NORMAL, "starts away", SMALL);
+    ct_window_set_initial_desktop(w, away);
+    ct_window_map(w);
+    CT_EVENTUALLY(ct_window_managed(w));
+    CT_EVENTUALLY(ct_window_desktop(w) == away);
+    CT_CHECK(!ct_window_viewable(w));
+    CT_CHECK(ct_current_desktop() == home);
+    ct_window_destroy(w);
+}
+
 const ct_case ct_cases[] = {
     { "map_manages", map_manages },
     { "title_shown", title_shown },
@@ -297,6 +327,7 @@ const ct_case ct_cases[] = {
     { "close_falls_back", close_falls_back },
     { "maximize_fills_workarea", maximize_fills_workarea },
     { "fullscreen_covers_screen", fullscreen_covers_screen },
+    { "starts_fullscreen", starts_fullscreen },
     { "iconify_hides", iconify_hides },
     { "above_stays_above", above_stays_above },
     { "dialog_above_parent", dialog_above_parent },
@@ -304,5 +335,6 @@ const ct_case ct_cases[] = {
     { "resize_request_honoured", resize_request_honoured },
     { "move_request_honoured", move_request_honoured },
     { "desktops_switch", desktops_switch },
+    { "starts_on_desktop", starts_on_desktop },
     { NULL, NULL }
 };
