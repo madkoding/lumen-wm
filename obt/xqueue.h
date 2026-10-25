@@ -93,6 +93,10 @@ typedef void (*ObtXQueueFunc)(const XEvent *ev, gpointer data);
   to the registered callback functions, added with xqueue_add_callback(). */
 void xqueue_listen(void);
 
+/*! The source xqueue_listen() attaches, for a caller that attaches it
+  itself. */
+GSource *xqueue_source_new(void);
+
 void xqueue_add_callback(ObtXQueueFunc f, gpointer data);
 void xqueue_remove_callback(ObtXQueueFunc f, gpointer data);
 

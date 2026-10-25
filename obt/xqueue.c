@@ -365,7 +365,7 @@ static GSourceFuncs x_source_funcs = {
     NULL
 };
 
-void xqueue_listen(void)
+GSource *xqueue_source_new(void)
 {
     GSource *source = g_source_new(&x_source_funcs, sizeof(struct x_source));
     struct x_source *x_source = (struct x_source *)source;
@@ -373,7 +373,14 @@ void xqueue_listen(void)
 
     *pfd = (GPollFD){ ConnectionNumber(obt_display), G_IO_IN, G_IO_IN };
     g_source_add_poll(source, pfd);
+    return source;
+}
+
+void xqueue_listen(void)
+{
+    GSource *source = xqueue_source_new();
     g_source_attach(source, NULL);
+    g_source_unref(source);
 }
 
 void xqueue_add_callback(ObtXQueueFunc f, gpointer data)
