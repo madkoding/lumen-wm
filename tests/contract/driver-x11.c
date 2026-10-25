@@ -33,7 +33,7 @@ enum {
     NET_WM_STATE, NET_WM_STATE_MAXIMIZED_VERT, NET_WM_STATE_MAXIMIZED_HORZ,
     NET_WM_STATE_FULLSCREEN, NET_WM_STATE_HIDDEN, NET_WM_STATE_ABOVE,
     NET_WM_WINDOW_TYPE, NET_WM_WINDOW_TYPE_NORMAL, NET_WM_WINDOW_TYPE_DOCK,
-    NET_WM_WINDOW_TYPE_DIALOG, UTF8_STRING,
+    NET_WM_WINDOW_TYPE_DIALOG, UTF8_STRING, NET_WM_VISIBLE_NAME,
     NUM_ATOMS
 };
 
@@ -49,6 +49,7 @@ static char *atom_names[NUM_ATOMS] = {
     "_NET_WM_STATE_HIDDEN", "_NET_WM_STATE_ABOVE",
     "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NORMAL",
     "_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_WINDOW_TYPE_DIALOG", "UTF8_STRING",
+    "_NET_WM_VISIBLE_NAME",
 };
 
 static Atom atoms[NUM_ATOMS];
@@ -197,10 +198,7 @@ ct_win *ct_window_new(ct_win_type type, const char *title, ct_rect want)
     w->id = XCreateSimpleWindow(dpy, root, want.x, want.y, want.w, want.h, 0,
                                 0, WhitePixel(dpy, DefaultScreen(dpy)));
     XSelectInput(dpy, w->id, StructureNotifyMask | PropertyChangeMask);
-    XStoreName(dpy, w->id, title);
-    XChangeProperty(dpy, w->id, atoms[NET_WM_NAME], atoms[UTF8_STRING], 8,
-                    PropModeReplace, (const unsigned char *)title,
-                    (int)strlen(title));
+    ct_window_set_title(w, title);
     XSetWMHints(dpy, w->id, &wmhints);
     XSetWMProtocols(dpy, w->id, protocols, 1);
 
@@ -231,6 +229,14 @@ void ct_window_set_min_size(ct_win *w, int minw, int minh)
 void ct_window_set_parent(ct_win *w, ct_win *parent)
 {
     XSetTransientForHint(dpy, w->id, parent->id);
+}
+
+void ct_window_set_title(ct_win *w, const char *title)
+{
+    XStoreName(dpy, w->id, title);
+    XChangeProperty(dpy, w->id, atoms[NET_WM_NAME], atoms[UTF8_STRING], 8,
+                    PropModeReplace, (const unsigned char *)title,
+                    (int)strlen(title));
 }
 
 void ct_window_set_strut(ct_win *w, int top)
@@ -330,6 +336,25 @@ ct_rect ct_window_frame(ct_win *w)
     }
     if (e) XFree(e);
     return r;
+}
+
+bool ct_window_title_is(ct_win *w, const char *title)
+{
+    Atom ret_type;
+    int format;
+    unsigned long n = 0, after;
+    unsigned char *data = NULL;
+    bool same;
+
+    if (XGetWindowProperty(dpy, w->id, atoms[NET_WM_VISIBLE_NAME], 0, 1024,
+                           False, atoms[UTF8_STRING], &ret_type, &format, &n,
+                           &after, &data) != Success || format != 8 || !data) {
+        if (data) XFree(data);
+        return false;
+    }
+    same = n == strlen(title) && !memcmp(data, title, n);
+    XFree(data);
+    return same;
 }
 
 int ct_window_desktop(ct_win *w)

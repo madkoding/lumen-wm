@@ -29,6 +29,16 @@ static void map_manages(void)
     ct_window_destroy(w);
 }
 
+/* Taskbars see the title a window gives itself, and see it change. */
+static void title_shown(void)
+{
+    ct_win *w = mapped(CT_WIN_NORMAL, "contract title", SMALL);
+    CT_EVENTUALLY(ct_window_title_is(w, "contract title"));
+    ct_window_set_title(w, "renamed");
+    CT_EVENTUALLY(ct_window_title_is(w, "renamed"));
+    ct_window_destroy(w);
+}
+
 /* A destroyed window stops being managed. */
 static void destroy_unmanages(void)
 {
@@ -255,6 +265,7 @@ static void desktops_switch(void)
 
 const ct_case ct_cases[] = {
     { "map_manages", map_manages },
+    { "title_shown", title_shown },
     { "destroy_unmanages", destroy_unmanages },
     { "new_window_focused", new_window_focused },
     { "activate_focuses_and_raises", activate_focuses_and_raises },
