@@ -1187,7 +1187,7 @@ void config_startup(ObtXmlInst *i)
     g_free(config_shelf_material);
     config_shelf_material = g_strdup("dark");
     g_free(config_shelf_font);
-    config_shelf_font = g_strdup("Figtree");
+    config_shelf_font = g_strdup("");
     config_dock_show_delay = 300;
     config_dock_app_move_button = 2; /* middle */
     config_dock_app_move_modifiers = 0;

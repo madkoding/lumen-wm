@@ -196,8 +196,9 @@ static PangoLayout *text(cairo_t *cr, const gchar *str, gdouble px,
 {
     PangoLayout *l = pango_cairo_create_layout(cr);
     PangoFontDescription *fd =
-        pango_font_description_from_string(config_shelf_font ?
-                                           config_shelf_font : "Figtree");
+        pango_font_description_from_string(config_shelf_font &&
+                                           *config_shelf_font ?
+                                           config_shelf_font : "Sans");
     pango_font_description_set_absolute_size(fd, px * PANGO_SCALE);
     pango_font_description_set_weight(fd, weight);
     pango_layout_set_font_description(l, fd);
