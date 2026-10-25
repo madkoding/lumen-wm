@@ -167,6 +167,7 @@ obt_libobt_la_SOURCES = \
 ## openbox ##
 
 openbox_openbox_CPPFLAGS = \
+	$(SHELF_CFLAGS) \
 	$(SM_CFLAGS) \
 	$(X_CFLAGS) \
 	$(XCURSOR_CFLAGS) \
@@ -180,6 +181,7 @@ openbox_openbox_CPPFLAGS = \
 	-DCONFIGDIR=\"$(configdir)\" \
 	-DG_LOG_DOMAIN=\"Openbox\"
 openbox_openbox_LDADD = \
+	$(SHELF_LIBS) \
 	$(XINERAMA_LIBS) \
 	$(XRANDR_LIBS) \
 	$(SM_LIBS) \
@@ -251,6 +253,8 @@ openbox_openbox_SOURCES = \
 	openbox/debug.c \
 	openbox/debug.h \
 	openbox/dock.c \
+	openbox/shelf.c \
+	openbox/shelf.h \
 	openbox/dock.h \
 	openbox/event.c \
 	openbox/event.h \

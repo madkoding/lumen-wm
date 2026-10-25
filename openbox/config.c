@@ -81,6 +81,9 @@ gint            config_dock_y;
 ObOrientation   config_dock_orient;
 gboolean        config_dock_hide;
 guint           config_dock_hide_delay;
+gboolean        config_shelf_enabled;
+gchar          *config_shelf_material;
+gchar          *config_shelf_font;
 guint           config_dock_show_delay;
 guint           config_dock_app_move_button;
 guint           config_dock_app_move_modifiers;
@@ -961,6 +964,24 @@ static void parse_dock(xmlNodePtr node, gpointer d)
     }
 }
 
+static void parse_shelf(xmlNodePtr node, gpointer d)
+{
+    xmlNodePtr n;
+
+    node = node->children;
+
+    if ((n = obt_xml_find_node(node, "enabled")))
+        config_shelf_enabled = obt_xml_node_bool(n);
+    if ((n = obt_xml_find_node(node, "material"))) {
+        g_free(config_shelf_material);
+        config_shelf_material = obt_xml_node_string(n);
+    }
+    if ((n = obt_xml_find_node(node, "font"))) {
+        g_free(config_shelf_font);
+        config_shelf_font = obt_xml_node_string(n);
+    }
+}
+
 static void parse_menu(xmlNodePtr node, gpointer d)
 {
     xmlNodePtr n;
@@ -1162,11 +1183,17 @@ void config_startup(ObtXmlInst *i)
     config_dock_orient = OB_ORIENTATION_VERT;
     config_dock_hide = FALSE;
     config_dock_hide_delay = 300;
+    config_shelf_enabled = FALSE;
+    g_free(config_shelf_material);
+    config_shelf_material = g_strdup("dark");
+    g_free(config_shelf_font);
+    config_shelf_font = g_strdup("Figtree");
     config_dock_show_delay = 300;
     config_dock_app_move_button = 2; /* middle */
     config_dock_app_move_modifiers = 0;
 
     obt_xml_register(i, "dock", parse_dock, NULL);
+    obt_xml_register(i, "shelf", parse_shelf, NULL);
 
     translate_key("C-g", &config_keyboard_reset_state,
                   &config_keyboard_reset_keycode);

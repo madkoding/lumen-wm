@@ -138,6 +138,12 @@ extern ObOrientation config_dock_orient;
 extern gboolean config_dock_hide;
 /*! The number of milliseconds to wait before hiding the dock */
 extern guint config_dock_hide_delay;
+
+/*! The floating shelf (dock island and status island) drawn by the WM */
+extern gboolean config_shelf_enabled;
+/*! "dark" or "light" */
+extern gchar   *config_shelf_material;
+extern gchar   *config_shelf_font;
 /*! The number of milliseconds to wait before showing the dock */
 extern guint config_dock_show_delay;
 /*! The mouse button to be used to move dock apps */

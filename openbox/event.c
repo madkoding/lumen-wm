@@ -22,6 +22,7 @@
 #include "window.h"
 #include "openbox.h"
 #include "dock.h"
+#include "shelf.h"
 #include "actions.h"
 #include "client.h"
 #include "config.h"
@@ -471,6 +472,8 @@ static void event_process(const XEvent *ec, gpointer data)
     e = &ee;
 
     window = event_get_window(e);
+    if (shelf_event(e))
+        return;
     if (window == obt_root(ob_screen))
         /* don't do any lookups, waste of cpu */;
     else if ((obwin = window_find(window))) {

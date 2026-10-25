@@ -21,6 +21,7 @@
 #include "openbox.h"
 #include "session.h"
 #include "dock.h"
+#include "shelf.h"
 #include "event.h"
 #include "menu.h"
 #include "client.h"
@@ -322,6 +323,7 @@ gint main(gint argc, gchar **argv)
             ping_startup(reconfigure);
             client_startup(reconfigure);
             dock_startup(reconfigure);
+            shelf_startup(reconfigure);
             moveresize_startup(reconfigure);
             keyboard_startup(reconfigure);
             mouse_startup(reconfigure);
@@ -397,6 +399,7 @@ gint main(gint argc, gchar **argv)
             mouse_shutdown(reconfigure);
             keyboard_shutdown(reconfigure);
             moveresize_shutdown(reconfigure);
+            shelf_shutdown(reconfigure);
             dock_shutdown(reconfigure);
             client_shutdown(reconfigure);
             ping_shutdown(reconfigure);
