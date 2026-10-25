@@ -143,6 +143,8 @@ static struct {
     GHashTable      *pin_icons;  /* ObShelfPin* -> RrImage* (or NULL) */
     gint             hover;      /* -1 nothing, 0 the apps tile, n the nth app */
     gchar           *sig;
+    gint             press, press_x;  /* a tile held down with button 1 */
+    gboolean         dragging;
     gint             batt_pct;   /* -1 when there is no battery */
     gboolean         batt_charging;
     guint            pins_rev;   /* bumped when the pins change */
@@ -1522,7 +1524,8 @@ void shelf_startup(gboolean reconfig)
     attr.override_redirect = True;
     attr.border_pixel = 0;
     attr.background_pixmap = None;
-    attr.event_mask = ExposureMask | ButtonPressMask | PointerMotionMask |
+    attr.event_mask = ExposureMask | ButtonPressMask | ButtonReleaseMask |
+                      PointerMotionMask |
                       LeaveWindowMask;
     mask = CWOverrideRedirect | CWBorderPixel | CWBackPixmap | CWEventMask;
     if (S.argb) {
@@ -1806,6 +1809,14 @@ static void sys_menu_add(const gchar *label, const gchar *command,
     e->data.normal.enabled = enabled && command;
 }
 
+static gchar *replace_all(const gchar *s, const gchar *what, const gchar *with)
+{
+    gchar **parts = g_strsplit(s, what, -1);
+    gchar *r = g_strjoinv(with, parts);
+    g_strfreev(parts);
+    return r;
+}
+
 /* "in-use:name" lines; a ':' in the name is escaped with a backslash */
 static void network_menu(void)
 {
@@ -1822,7 +1833,7 @@ static void network_menu(void)
         gchar *colon = strchr(lines[i], ':');
         gboolean active;
         GString *name;
-        gchar *c, *label, *cmd = NULL, *q, *signal = NULL;
+        gchar *c, *label, *cmd = NULL, *q, *signal = NULL, *secure = NULL;
 
         if (!colon || !colon[1]) continue;
         active = lines[i][0] == '*';
@@ -1837,6 +1848,15 @@ static void network_menu(void)
                 c = e + 1;
             }
         }
+        /* a ':' that is not escaped now ends the security column */
+        {
+            gchar *e = c;
+            while (*e && *e != ':') { if (*e == '\\' && e[1]) ++e; ++e; }
+            if (signal && *e == ':' && e[1]) {
+                secure = g_strndup(c, e - c);
+                c = e + 1;
+            }
+        }
         for (; *c; ++c) {
             if (*c == '\\' && c[1]) ++c;
             g_string_append_c(name, *c);
@@ -1844,6 +1864,7 @@ static void network_menu(void)
         if (g_hash_table_contains(seen, name->str)) {
             g_string_free(name, TRUE);
             g_free(signal);
+            g_free(secure);
             continue;
         }
         g_hash_table_add(seen, g_strdup(name->str));
@@ -1852,14 +1873,24 @@ static void network_menu(void)
                                 signal ? signal : "", signal ? "%" : "");
         g_free(signal);
         if (config_shelf_network->connect && !active) {
-            gchar **parts;
+            gboolean locked = secure && *secure && strcmp(secure, "--") &&
+                              config_shelf_network->secured &&
+                              config_shelf_network->password;
             q = g_shell_quote(name->str);
-            parts = g_strsplit(config_shelf_network->connect, "%s", 2);
-            cmd = parts[1] ? g_strconcat(parts[0], q, parts[1], NULL) :
-                  g_strdup(config_shelf_network->connect);
-            g_strfreev(parts);
+            if (locked) {
+                /* ask first; the answer reaches the command as "$pw" */
+                gchar *t = replace_all(config_shelf_network->secured, "%p",
+                                       "\"$pw\""), *c2 = replace_all(t, "%s", q);
+                cmd = g_strdup_printf("pw=$(%s) || exit 0; %s",
+                                      config_shelf_network->password, c2);
+                g_free(t);
+                g_free(c2);
+            } else {
+                cmd = replace_all(config_shelf_network->connect, "%s", q);
+            }
             g_free(q);
         }
+        g_free(secure);
         sys_menu_add(label, cmd, TRUE);
         g_free(label);
         g_free(cmd);
@@ -1940,6 +1971,37 @@ static void show_tile_menu(Tile *t, gint rx, gint ry)
     show_menu(SHELF_MENU_NAME, rx, ry, t->client);
 }
 
+/* Left click on a tile: start it, or focus it, or minimise it */
+static void tile_click(Tile *t)
+{
+    ObClient *c = t->client;
+
+    if (!c) {
+        if (t->pin) launch(t->pin->command);
+        return;
+    }
+    if (!g_list_find(client_list, c)) return;
+    if (c == focus_client && !c->iconic)
+        client_iconify(c, TRUE, TRUE, TRUE);
+    else
+        client_activate(c, TRUE, TRUE, TRUE, TRUE, TRUE);
+}
+
+/* Drops a dragged pin where another one is */
+static void move_pin(gint from, gint to)
+{
+    Tile *a = &g_array_index(S.tiles, Tile, from - 1);
+    Tile *b = &g_array_index(S.tiles, Tile, to - 1);
+    ObShelfPin *p = a->pin;
+    gint at;
+
+    if (!p || !b->pin || p == b->pin) return;
+    at = g_slist_index(config_shelf_pins, b->pin);
+    config_shelf_pins = g_slist_remove(config_shelf_pins, p);
+    config_shelf_pins = g_slist_insert(config_shelf_pins, p, at);
+    pins_changed();
+}
+
 gboolean shelf_event(const XEvent *e)
 {
     gint h;
@@ -1952,7 +2014,21 @@ gboolean shelf_event(const XEvent *e)
         break;
     case MotionNotify:
         h = hit(e->xmotion.x, e->xmotion.y);
+        if (S.press && ABS(e->xmotion.x - S.press_x) > 6) S.dragging = TRUE;
         if (h != S.hover) { S.hover = h; paint(); }
+        break;
+    case ButtonRelease:
+        if (e->xbutton.button == 1 && S.press) {
+            gint from = S.press;
+            S.press = 0;
+            h = hit(e->xbutton.x, e->xbutton.y);
+            if (!S.dragging) {
+                if (h == from) tile_click(&g_array_index(S.tiles, Tile, from - 1));
+            } else if (h > 0) {
+                move_pin(from, h);
+            }
+            S.dragging = FALSE;
+        }
         break;
     case LeaveNotify:
         if (S.hover != -1) { S.hover = -1; paint(); }
@@ -1970,7 +2046,7 @@ gboolean shelf_event(const XEvent *e)
                                    b == 5 ? config_shelf_volume->down : NULL;
                 if (cmd) {
                     launch(cmd);
-                    g_timeout_add(500, refresh_status_later, NULL);
+                    g_timeout_add(200, refresh_status_later, NULL);
                 } else if (b == 1)
                     show_status_menu(h, e->xbutton.x_root,
                                      S.wy + S.island_y - MENU_GAP);
@@ -1989,23 +2065,13 @@ gboolean shelf_event(const XEvent *e)
             }
         } else if (h > 0) {
             Tile *t = &g_array_index(S.tiles, Tile, h - 1);
-            ObClient *c = t->client;
             if (e->xbutton.button == 3) {
                 show_tile_menu(t, S.wx + t->x, S.wy + S.island_y - MENU_GAP);
-                break;
-            }
-            if (!c) {
-                /* a pin that is not running: left click starts it */
-                if (t->pin && e->xbutton.button == 1)
-                    launch(t->pin->command);
-                break;
-            }
-            if (!g_list_find(client_list, c)) break;
-            if (e->xbutton.button == 1) {
-                if (c == focus_client && !c->iconic)
-                    client_iconify(c, TRUE, TRUE, TRUE);
-                else
-                    client_activate(c, TRUE, TRUE, TRUE, TRUE, TRUE);
+            } else if (e->xbutton.button == 1) {
+                /* acts on release: a drag moves a pin instead */
+                S.press = h;
+                S.press_x = e->xbutton.x;
+                S.dragging = FALSE;
             }
         }
         break;

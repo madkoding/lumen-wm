@@ -189,6 +189,10 @@ typedef struct _ObShelfNetwork {
     gchar *list;     /*!< prints the networks: "in-use:name", as
                        nmcli -t -f IN-USE,SSID dev wifi does */
     gchar *connect;  /*!< run to join one; %s is the quoted name */
+    gchar *secured;  /*!< same for a network that needs a password: the list
+                       then prints "in-use:signal:security:name", and %p is the
+                       password that <password> printed */
+    gchar *password; /*!< asks for it: prints the answer, e.g. zenity --password */
 } ObShelfNetwork;
 extern ObShelfNetwork *config_shelf_network;
 typedef struct _ObShelfVolume {

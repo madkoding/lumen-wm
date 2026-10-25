@@ -998,6 +998,8 @@ static void free_shelf_system(void)
     if (config_shelf_network) {
         g_free(config_shelf_network->list);
         g_free(config_shelf_network->connect);
+        g_free(config_shelf_network->secured);
+        g_free(config_shelf_network->password);
         g_slice_free(ObShelfNetwork, config_shelf_network);
         config_shelf_network = NULL;
     }
@@ -1095,6 +1097,8 @@ static void parse_shelf_system(xmlNodePtr node)
         ObShelfNetwork *w = g_slice_new0(ObShelfNetwork);
         w->list = shelf_string(n->children, "list");
         w->connect = shelf_string(n->children, "connect");
+        w->secured = shelf_string(n->children, "secured");
+        w->password = shelf_string(n->children, "password");
         if (w->list) config_shelf_network = w;
         else { g_free(w->connect); g_slice_free(ObShelfNetwork, w); }
     }

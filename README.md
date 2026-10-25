@@ -57,6 +57,11 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
   <network>
     <list>nmcli -t -f IN-USE,SIGNAL,SSID dev wifi</list>  <!-- "in-use:signal:name" lines -->
     <connect>nmcli dev wifi connect %s</connect>   <!-- %s: the quoted name -->
+    <!-- optional: networks with a password. The list then prints "in-use:signal:security:name"
+         (nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID dev wifi); %p is what <password> prints.
+         Note: the password is an argument of the command, visible to `ps` while it runs. -->
+    <secured>nmcli dev wifi connect %s password %p</secured>
+    <password>zenity --entry --hide-text --text=Password</password>
   </network>
   <volume>                            <!-- click: menu, middle click: toggle, wheel: up and down -->
     <level>pamixer --get-volume-human</level>  <!-- optional: shown at the top of the menu -->
@@ -88,6 +93,7 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
 
 - **Pins**: a click starts the command, or focuses the window of that class (and minimises it if it
   already has focus). Bare icon names are searched in `$XDG_DATA_DIRS/icons/<iconTheme>/`.
+- **Reorder**: drag a pinned tile onto another to put it in that place (saved with `<pinsFile>`).
 - **Pin and unpin**: right click a tile for *Pin to dock* or *Unpin from dock* (running apps also get their
   window menu). With `<pinsFile>` set, each change is saved there as `name|icon|command|class` lines, and the
   file replaces the `<pins>` of rc.xml from then on. The window's command line, with its arguments, is the command.
