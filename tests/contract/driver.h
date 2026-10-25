@@ -63,6 +63,8 @@ void ct_window_set_strut(ct_win *w, int top);
 void ct_window_set_initial_state(ct_win *w, ct_state s);
 void ct_window_set_initial_desktop(ct_win *w, int d);
 void ct_window_map(ct_win *w);
+/* The client hides the window by itself (ICCCM withdraw). */
+void ct_window_withdraw(ct_win *w);
 /* The handle stays valid, to ask what the window manager did. */
 void ct_window_destroy(ct_win *w);
 

@@ -71,6 +71,21 @@ static void destroy_unmanages(void)
     CT_CHECK(ct_window_stack_index(w) == -1);
 }
 
+/* A window the client withdraws is let go, and managed again when the
+   client maps it again. */
+static void withdraw_unmanages(void)
+{
+    ct_win *w = mapped(CT_WIN_NORMAL, "withdraw", SMALL);
+    ct_window_withdraw(w);
+    CT_EVENTUALLY(!ct_window_managed(w));
+    CT_CHECK(!ct_window_viewable(w));
+
+    ct_window_map(w);
+    CT_EVENTUALLY(ct_window_managed(w));
+    CT_EVENTUALLY(ct_window_viewable(w));
+    ct_window_destroy(w);
+}
+
 /* A new window takes the focus. */
 static void new_window_focused(void)
 {
@@ -195,6 +210,20 @@ static void iconify_hides(void)
     CT_EVENTUALLY(ct_window_focused(w));
     ct_window_destroy(w);
     ct_window_destroy(a);
+}
+
+/* Mapping an iconified window again shows it. */
+static void map_restores_iconic(void)
+{
+    ct_win *w = mapped(CT_WIN_NORMAL, "remap", SMALL);
+    ct_request_state(w, CT_STATE_ICONIC, true);
+    CT_EVENTUALLY(!ct_window_viewable(w));
+
+    ct_window_map(w);
+    CT_EVENTUALLY(ct_window_viewable(w));
+    CT_CHECK(!ct_window_has_state(w, CT_STATE_ICONIC));
+    CT_CHECK(ct_window_managed(w));
+    ct_window_destroy(w);
 }
 
 /* A window that is kept above stays above the windows that get raised. */
@@ -380,6 +409,7 @@ const ct_case ct_cases[] = {
     { "untitled_shows_app_id", untitled_shows_app_id },
     { "undecorated_request_honoured", undecorated_request_honoured },
     { "destroy_unmanages", destroy_unmanages },
+    { "withdraw_unmanages", withdraw_unmanages },
     { "new_window_focused", new_window_focused },
     { "activate_focuses_and_raises", activate_focuses_and_raises },
     { "close_falls_back", close_falls_back },
@@ -388,6 +418,7 @@ const ct_case ct_cases[] = {
     { "fullscreen_covers_screen", fullscreen_covers_screen },
     { "starts_fullscreen", starts_fullscreen },
     { "iconify_hides", iconify_hides },
+    { "map_restores_iconic", map_restores_iconic },
     { "above_stays_above", above_stays_above },
     { "restack_requests_honoured", restack_requests_honoured },
     { "dialog_above_parent", dialog_above_parent },

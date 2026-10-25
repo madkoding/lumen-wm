@@ -299,6 +299,12 @@ void ct_window_map(ct_win *w)
     XFlush(dpy);
 }
 
+void ct_window_withdraw(ct_win *w)
+{
+    XWithdrawWindow(dpy, w->id, DefaultScreen(dpy));
+    XFlush(dpy);
+}
+
 void ct_window_destroy(ct_win *w)
 {
     if (!w->destroyed) XDestroyWindow(dpy, w->id);
