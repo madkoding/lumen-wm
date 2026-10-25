@@ -119,7 +119,10 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       theme's icon with `publish_surface_icon` for a window that has none. Still read in `client.c`: the geometry,
       shape, colormap, opacity and sync counter, which go with the frames and move/resize.
    7. Requests: `event.c` splits in two. The X11 half turns XEvents into `ObBackendEvents`, and the core half
-      handles them.
+      (`backend-events.c`) handles them. While `event.c` still reads the X queue, it hands each kind of event
+      that has moved to a `backend_x11_*` function (`backend-x11.h`). Done for property changes on clients
+      (`surface_changed`, with the queue compression for titles and icons in the backend); opacity and the
+      sync counter stay in `event.c` until the frames and move/resize move.
    8. Input: `grab.c`, `keyboard.c`, `mouse.c`.
    9. Move/resize: XSync and pointer warps go behind the backend.
 4. **Render without Xlib**: obrender, frames, the shelf, menus and popups draw into cairo image surfaces and hand

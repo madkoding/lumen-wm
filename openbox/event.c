@@ -40,6 +40,7 @@
 #include "group.h"
 #include "stacking.h"
 #include "ping.h"
+#include "backend-x11.h"
 #include "obt/display.h"
 #include "obt/xqueue.h"
 #include "obt/prop.h"
@@ -948,37 +949,6 @@ static gboolean more_client_message_event(Window window, Atom msgtype)
     return xqueue_exists_local(xqueue_match_window_message, &wm);
 }
 
-struct ObSkipPropertyChange {
-    Window window;
-    Atom prop;
-};
-
-static gboolean skip_property_change(XEvent *e, gpointer data)
-{
-    const struct ObSkipPropertyChange s = *(struct ObSkipPropertyChange*)data;
-
-    if (e->type == PropertyNotify && e->xproperty.window == s.window) {
-        const Atom a = e->xproperty.atom;
-        const Atom b = s.prop;
-
-        /* these are all updated together */
-        if ((a == OBT_PROP_ATOM(NET_WM_NAME) ||
-             a == OBT_PROP_ATOM(WM_NAME) ||
-             a == OBT_PROP_ATOM(NET_WM_ICON_NAME) ||
-             a == OBT_PROP_ATOM(WM_ICON_NAME))
-            &&
-            (b == OBT_PROP_ATOM(NET_WM_NAME) ||
-             b == OBT_PROP_ATOM(WM_NAME) ||
-             b == OBT_PROP_ATOM(NET_WM_ICON_NAME) ||
-             b == OBT_PROP_ATOM(WM_ICON_NAME)))
-        {
-            return TRUE;
-        }
-        else if (a == b && a == OBT_PROP_ATOM(NET_WM_ICON))
-            return TRUE;
-    }
-    return FALSE;
-}
 
 static void event_handle_client(ObClient *client, XEvent *e)
 {
@@ -1628,90 +1598,11 @@ static void event_handle_client(ObClient *client, XEvent *e)
 
         msgtype = e->xproperty.atom;
 
-        /* ignore changes to some properties if there is another change
-           coming in the queue */
-        {
-            struct ObSkipPropertyChange s;
-            s.window = client->window;
-            s.prop = msgtype;
-            if (xqueue_exists_local(skip_property_change, &s))
-                break;
-        }
+        /* what the client says about itself goes through the backend */
+        if (backend_x11_property_notify(&e->xproperty))
+            break;
 
-        msgtype = e->xproperty.atom;
-        if (msgtype == XA_WM_NORMAL_HINTS) {
-            int x, y, w, h, lw, lh;
-
-            ob_debug("Update NORMAL hints");
-            client_update_normal_hints(client);
-            /* normal hints can make a window non-resizable */
-            client_setup_decor_and_functions(client, FALSE);
-
-            x = client->area.x;
-            y = client->area.y;
-            w = client->area.width;
-            h = client->area.height;
-
-            /* apply the new normal hints */
-            client_try_configure(client, &x, &y, &w, &h, &lw, &lh, FALSE);
-            /* make sure the window is visible, and if the window is resized
-               off-screen due to the normal hints changing then this will push
-               it back onto the screen. */
-            client_find_onscreen(client, &x, &y, w, h, FALSE);
-
-            /* make sure the client's sizes are within its bounds, but don't
-               make it reply with a configurenotify unless something changed.
-               emacs will update its normal hints every time it receives a
-               configurenotify */
-            client_configure(client, x, y, w, h, FALSE, TRUE, FALSE);
-        } else if (msgtype == OBT_PROP_ATOM(MOTIF_WM_HINTS)) {
-            client_get_mwm_hints(client);
-            /* This can override some mwm hints */
-            client_get_type_and_transientness(client);
-
-            /* Apply the changes to the window */
-            client_setup_decor_and_functions(client, TRUE);
-        } else if (msgtype == XA_WM_HINTS) {
-            client_update_wmhints(client);
-        } else if (msgtype == XA_WM_TRANSIENT_FOR) {
-            /* get the transient-ness first, as this affects if the client
-               decides to be transient for the group or not in
-               client_update_transient_for() */
-            client_get_type_and_transientness(client);
-            client_update_transient_for(client);
-            /* type may have changed, so update the layer */
-            client_calc_layer(client);
-            client_setup_decor_and_functions(client, TRUE);
-        } else if (msgtype == OBT_PROP_ATOM(NET_WM_NAME) ||
-                   msgtype == OBT_PROP_ATOM(WM_NAME) ||
-                   msgtype == OBT_PROP_ATOM(NET_WM_ICON_NAME) ||
-                   msgtype == OBT_PROP_ATOM(WM_ICON_NAME)) {
-            client_update_title(client);
-        } else if (msgtype == OBT_PROP_ATOM(WM_PROTOCOLS)) {
-            client_update_protocols(client);
-        }
-        else if (msgtype == OBT_PROP_ATOM(NET_WM_STRUT) ||
-                 msgtype == OBT_PROP_ATOM(NET_WM_STRUT_PARTIAL)) {
-            client_update_strut(client);
-        }
-        else if (msgtype == OBT_PROP_ATOM(NET_WM_ICON)) {
-            client_update_icons(client);
-        }
-        else if (msgtype == OBT_PROP_ATOM(NET_WM_ICON_GEOMETRY)) {
-            client_update_icon_geometry(client);
-        }
-        else if (msgtype == OBT_PROP_ATOM(NET_WM_USER_TIME)) {
-            guint32 t;
-            if (client == focus_client &&
-                OBT_PROP_GET32(client->window, NET_WM_USER_TIME, CARDINAL, &t)
-                && t && !event_time_after(t, e->xproperty.time) &&
-                (!event_last_user_time ||
-                 event_time_after(t, event_last_user_time)))
-            {
-                event_last_user_time = t;
-            }
-        }
-        else if (msgtype == OBT_PROP_ATOM(NET_WM_WINDOW_OPACITY)) {
+        if (msgtype == OBT_PROP_ATOM(NET_WM_WINDOW_OPACITY)) {
             client_update_opacity(client);
         }
 #ifdef SYNC

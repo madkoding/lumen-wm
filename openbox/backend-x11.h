@@ -1,0 +1,33 @@
+/* -*- indent-tabs-mode: nil; tab-width: 4; c-basic-offset: 4; -*-
+
+   backend-x11.h for the Lumen window manager
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   See the COPYING file for a copy of the GNU General Public License.
+*/
+
+/* What event.c hands to the X11 backend while it still reads the X event
+   queue itself. Each function turns one kind of XEvent into ObBackendEvents
+   and goes away once the backend reads the queue (docs/design/backends.md,
+   step 7). Only event.c includes this. */
+
+#ifndef __backend_x11_h
+#define __backend_x11_h
+
+#include <X11/Xlib.h>
+#include <glib.h>
+
+/*! A property of a managed window changed. Returns FALSE when it isn't one
+  the backend reports, so event.c handles it. */
+gboolean backend_x11_property_notify(const XPropertyEvent *e);
+
+#endif

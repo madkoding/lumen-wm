@@ -354,8 +354,10 @@ struct _ObBackendEvents {
       shows it, or leaves it alone (for one, when it is a dock app). */
     void (*surface_new)(ObSurfaceId s, const ObSurfaceInfo *info);
     void (*surface_gone)(ObSurfaceId s);
-    void (*surface_changed)(ObSurfaceId s, const ObSurfaceInfo *info,
-                            ObSurfaceInfoFields changed);
+    /*! The client changed what it says about itself; ask surface_info()
+      for the new values. time: when, in event time. */
+    void (*surface_changed)(ObSurfaceId s, ObSurfaceInfoFields changed,
+                            guint32 time);
     /*! The client hid itself (X11 unmap, a null buffer on Wayland). */
     void (*surface_withdrawn)(ObSurfaceId s);
     void (*pong)(ObSurfaceId s, guint32 serial);
