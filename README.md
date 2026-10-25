@@ -62,6 +62,30 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
   </pins>
   <pinsFile>~/.config/kitties/pins</pinsFile> <!-- optional: pins saved from the dock; replaces <pins> once it exists -->
 
+  <!-- the status island's glyphs; each is optional and does nothing without its section -->
+  <network>
+    <list>nmcli -t -f IN-USE,SIGNAL,SSID dev wifi</list>  <!-- "in-use:signal:name" lines -->
+    <connect>nmcli dev wifi connect %s</connect>   <!-- %s: the quoted name -->
+    <!-- optional: networks with a password. The list then prints "in-use:signal:security:name"
+         (nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID dev wifi); %p is what <password> prints.
+         Note: the password is an argument of the command, visible to `ps` while it runs. -->
+    <secured>nmcli dev wifi connect %s password %p</secured>
+    <password>zenity --entry --hide-text --text=Password</password>
+  </network>
+  <volume>                            <!-- click: menu, middle click: toggle, wheel: up and down -->
+    <level>pamixer --get-volume-human</level>  <!-- optional: shown at the top of the menu -->
+    <up>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+</up>
+    <down>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-</down>
+    <toggle>wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle</toggle>
+  </volume>
+  <power>
+    <item><name>Log out</name><command>openbox --exit</command></item>
+    <item><name>Shut down</name><command>systemctl poweroff</command></item>
+  </power>
+  <battery>yes</battery>              <!-- shown only when the machine has one -->
+  <menuRadius>10</menuRadius>         <!-- rounded corners of every menu; 0 = square -->
+  <menuPadding>8</menuPadding>        <!-- air around and inside every menu, in pixels -->
+
   <media>
     <command>my-media-script</command>  <!-- prints what the island shows -->
     <previous>playerctl previous</previous>
@@ -84,9 +108,14 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
   any material, for a theme that does not suit the shelf. Empty keeps the material's own.
 - **Pins**: a click starts the command, or focuses the window of that class (and minimises it if it
   already has focus). Bare icon names are searched in `$XDG_DATA_DIRS/icons/<iconTheme>/`.
+- **Reorder**: drag a pinned tile onto another to put it in that place (saved with `<pinsFile>`).
 - **Pin and unpin**: right click a tile for *Pin to dock* or *Unpin from dock* (running apps also get their
   window menu). With `<pinsFile>` set, each change is saved there as `name|icon|command|class` lines, and the
-  file replaces the `<pins>` of rc.xml from then on. The first word of the window's command line is the command.
+  file replaces the `<pins>` of rc.xml from then on. The window's command line, with its arguments, is the command.
+- **Status glyphs**: the network glyph opens a menu of the networks `<list>` prints, and picking one runs
+  `<connect>`. The volume glyph opens a menu (level, louder, quieter, mute), steps with the wheel and mutes on middle click. The power glyph opens the `<power>`
+  items. With `<battery>` and a battery in `/sys/class/power_supply` (or `<batteryDir>`), its glyph joins them and a
+  click tells the state. The charge, the active network's signal and the volume (`<level>`) show under their glyphs. Without these sections the glyphs only show.
 - **Font**: `Sansation` is the font Kitties uses. Install it and name it in `<font>`.
 - **Media command**: prints four lines: `Playing` or `Paused`, the title, the artist and a path to the cover
   (may be empty). The `previous`, `toggle` and `next` commands run on the buttons.

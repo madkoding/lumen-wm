@@ -189,6 +189,42 @@ typedef struct _ObShelfWeather {
     guint  interval;
 } ObShelfWeather;
 extern ObShelfWeather *config_shelf_weather;
+/*! What the status island's glyphs do when clicked. All are optional: a
+  control without its section does nothing. */
+typedef struct _ObShelfNetwork {
+    gchar *list;     /*!< prints the networks: "in-use:name", as
+                       nmcli -t -f IN-USE,SSID dev wifi does */
+    gchar *connect;  /*!< run to join one; %s is the quoted name */
+    gchar *secured;  /*!< same for a network that needs a password: the list
+                       then prints "in-use:signal:security:name", and %p is the
+                       password that <password> printed */
+    gchar *password; /*!< asks for it: prints the answer, e.g. zenity --password */
+} ObShelfNetwork;
+extern ObShelfNetwork *config_shelf_network;
+typedef struct _ObShelfVolume {
+    gchar *up;       /*!< the wheel and the click */
+    gchar *down;
+    gchar *toggle;
+    gchar *level;    /*!< prints the volume as a percentage, or "muted" */
+} ObShelfVolume;
+extern ObShelfVolume *config_shelf_volume;
+typedef struct _ObShelfPower {
+    gchar *name;
+    gchar *command;
+} ObShelfPower;
+/*! The entries of the power menu (ObShelfPower*) */
+extern GSList *config_shelf_power;
+/*! Show the battery, when the machine has one (a /sys/class/power_supply
+  entry of type Battery) */
+extern gboolean config_shelf_battery;
+/*! Where the kernel lists power supplies (default /sys/class/power_supply) */
+extern gchar   *config_shelf_battery_dir;
+
+/*! Radius, in pixels, of the corners of menus; 0 keeps them square */
+extern gint config_shelf_menu_radius;
+/*! Extra room, in pixels, around and inside the entries of menus */
+extern gint config_shelf_menu_padding;
+
 /*! The number of milliseconds to wait before showing the dock */
 extern guint config_dock_show_delay;
 /*! The mouse button to be used to move dock apps */

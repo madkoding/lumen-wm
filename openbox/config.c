@@ -91,6 +91,13 @@ gchar          *config_shelf_font;
 gchar          *config_shelf_icon_theme;
 GSList         *config_shelf_pins;
 gchar          *config_shelf_pins_file;
+ObShelfNetwork *config_shelf_network;
+ObShelfVolume  *config_shelf_volume;
+GSList         *config_shelf_power;
+gboolean        config_shelf_battery;
+gint            config_shelf_menu_radius;
+gint            config_shelf_menu_padding;
+gchar          *config_shelf_battery_dir;
 ObShelfMedia   *config_shelf_media;
 ObShelfWeather *config_shelf_weather;
 guint           config_dock_show_delay;
@@ -988,6 +995,41 @@ static void free_shelf_pins(void)
     config_shelf_pins = NULL;
 }
 
+static void free_shelf_system(void)
+{
+    GSList *it;
+
+    if (config_shelf_network) {
+        g_free(config_shelf_network->list);
+        g_free(config_shelf_network->connect);
+        g_free(config_shelf_network->secured);
+        g_free(config_shelf_network->password);
+        g_slice_free(ObShelfNetwork, config_shelf_network);
+        config_shelf_network = NULL;
+    }
+    if (config_shelf_volume) {
+        g_free(config_shelf_volume->up);
+        g_free(config_shelf_volume->down);
+        g_free(config_shelf_volume->toggle);
+        g_free(config_shelf_volume->level);
+        g_slice_free(ObShelfVolume, config_shelf_volume);
+        config_shelf_volume = NULL;
+    }
+    for (it = config_shelf_power; it; it = g_slist_next(it)) {
+        ObShelfPower *p = it->data;
+        g_free(p->name);
+        g_free(p->command);
+        g_slice_free(ObShelfPower, p);
+    }
+    g_slist_free(config_shelf_power);
+    config_shelf_power = NULL;
+    config_shelf_battery = FALSE;
+    config_shelf_menu_radius = 0;
+    config_shelf_menu_padding = 0;
+    g_free(config_shelf_battery_dir);
+    config_shelf_battery_dir = NULL;
+}
+
 static void free_shelf_media(void)
 {
     if (!config_shelf_media) return;
@@ -1043,6 +1085,57 @@ static void parse_shelf_weather(xmlNodePtr node)
     w->interval = 900;
     if ((n = obt_xml_find_node(node, "interval")))
         w->interval = MAX(obt_xml_node_int(n), 1);
+}
+
+static gchar *shelf_string(xmlNodePtr node, const gchar *name)
+{
+    xmlNodePtr n = obt_xml_find_node(node, name);
+    return n ? obt_xml_node_string(n) : NULL;
+}
+
+static void parse_shelf_system(xmlNodePtr node)
+{
+    xmlNodePtr n;
+
+    if ((n = obt_xml_find_node(node, "network"))) {
+        ObShelfNetwork *w = g_slice_new0(ObShelfNetwork);
+        w->list = shelf_string(n->children, "list");
+        w->connect = shelf_string(n->children, "connect");
+        w->secured = shelf_string(n->children, "secured");
+        w->password = shelf_string(n->children, "password");
+        if (w->list) config_shelf_network = w;
+        else { g_free(w->connect); g_slice_free(ObShelfNetwork, w); }
+    }
+    if ((n = obt_xml_find_node(node, "volume"))) {
+        ObShelfVolume *v = g_slice_new0(ObShelfVolume);
+        v->up = shelf_string(n->children, "up");
+        v->down = shelf_string(n->children, "down");
+        v->toggle = shelf_string(n->children, "toggle");
+        v->level = shelf_string(n->children, "level");
+        config_shelf_volume = v;
+    }
+    if ((n = obt_xml_find_node(node, "power"))) {
+        for (n = obt_xml_find_node(n->children, "item"); n;
+             n = obt_xml_find_node(n->next, "item")) {
+            ObShelfPower *p = g_slice_new0(ObShelfPower);
+            p->name = shelf_string(n->children, "name");
+            p->command = shelf_string(n->children, "command");
+            if (p->name && p->command)
+                config_shelf_power = g_slist_append(config_shelf_power, p);
+            else {
+                g_free(p->name); g_free(p->command);
+                g_slice_free(ObShelfPower, p);
+            }
+        }
+    }
+    if ((n = obt_xml_find_node(node, "battery")))
+        config_shelf_battery = obt_xml_node_bool(n);
+    if ((n = obt_xml_find_node(node, "menuRadius")))
+        config_shelf_menu_radius = CLAMP(obt_xml_node_int(n), 0, 32);
+    if ((n = obt_xml_find_node(node, "menuPadding")))
+        config_shelf_menu_padding = CLAMP(obt_xml_node_int(n), 0, 24);
+    if ((n = obt_xml_find_node(node, "batteryDir")))
+        config_shelf_battery_dir = obt_xml_node_string(n);
 }
 
 static void parse_shelf_pin(xmlNodePtr node, gpointer d)
@@ -1147,6 +1240,8 @@ static void parse_shelf(xmlNodePtr node, gpointer d)
         g_free(f);
     }
     load_shelf_pins_file();
+    free_shelf_system();
+    parse_shelf_system(node);
     if ((n = obt_xml_find_node(node, "media")))
         parse_shelf_media(n);
     if ((n = obt_xml_find_node(node, "weather")))
@@ -1372,6 +1467,7 @@ void config_startup(ObtXmlInst *i)
     free_shelf_pins();
     g_free(config_shelf_pins_file);
     config_shelf_pins_file = NULL;
+    free_shelf_system();
     free_shelf_media();
     free_shelf_weather();
     config_dock_show_delay = 300;

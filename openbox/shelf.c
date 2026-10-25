@@ -51,7 +51,6 @@
 #define CLOCK_W     78
 #define GLYPH       15
 #define GLYPH_GAP   10
-#define CONTROLS_W  (3 * GLYPH + 2 * GLYPH_GAP)
 /* Room the shadow needs left and right of the islands, and above them */
 #define SIDE        24
 #define LIP         2
@@ -61,11 +60,19 @@
 #define BTN_GAP     6
 #define DAY_W       46
 #define WPAD        16
+#define MENU_GAP    10    /* between a menu and the island it opens from */
+#define HIT_NET     (-90)
+#define HIT_VOL     (-91)
+#define HIT_POWER   (-92)
+#define HIT_BATT    (-93)
 #define HIT_PREV    (-100)
 #define HIT_TOGGLE  (-101)
 #define HIT_NEXT    (-102)
 
 StrutPartial shelf_strut;
+
+/* the commands behind the entries of the status glyphs' menus */
+static GPtrArray *sys_cmds;
 
 typedef struct {
     gdouble r, g, b;
@@ -344,7 +351,7 @@ typedef struct {
 
 static struct {
     Window           win;
-    Feed             media, weather;
+    Feed             media, weather, net, vol;
     gboolean         has_media, has_weather;
     gchar           *art_file;   /* the picture the media island shows */
     RrImage         *art;
@@ -360,6 +367,10 @@ static struct {
     GHashTable      *pin_icons;  /* ObShelfPin* -> RrImage* (or NULL) */
     gint             hover;      /* -1 nothing, 0 the apps tile, n the nth app */
     gchar           *sig;
+    gint             press, press_x;  /* a tile held down with button 1 */
+    gboolean         dragging;
+    gint             batt_pct;   /* -1 when there is no battery */
+    gboolean         batt_charging;
     guint            pins_rev;   /* bumped when the pins change */
     guint            tick_id;
     guint            snap_id;
@@ -481,6 +492,7 @@ static void centred_text(cairo_t *cr, const gchar *str, gdouble px,
 /* Lucide-style glyphs, 24 unit grid drawn with a 2 unit round stroke. */
 static void glyph_begin(cairo_t *cr, gdouble x, gdouble y, Rgb ink)
 {
+    cairo_new_path(cr);   /* text leaves a current point behind */
     cairo_save(cr);
     cairo_translate(cr, x, y);
     cairo_scale(cr, GLYPH / 24.0, GLYPH / 24.0);
@@ -514,6 +526,25 @@ static void glyph_volume(cairo_t *cr, gdouble x, gdouble y, Rgb ink)
     cairo_stroke(cr);
     cairo_new_path(cr); cairo_arc(cr, 11, 12, 10.5, -G_PI / 4, G_PI / 4);
     cairo_stroke(cr);
+    cairo_restore(cr);
+}
+
+static void glyph_battery(cairo_t *cr, gdouble x, gdouble y, Rgb ink,
+                          gint pct, gboolean charging)
+{
+    glyph_begin(cr, x, y, ink);
+    rrect(cr, 2, 6.5, 17, 11, 2.5);
+    cairo_stroke(cr);
+    cairo_move_to(cr, 22, 10.5); cairo_line_to(cr, 22, 13.5);
+    cairo_stroke(cr);
+    if (charging) {
+        cairo_move_to(cr, 11.5, 8); cairo_line_to(cr, 8.5, 12.5);
+        cairo_line_to(cr, 12.5, 12.5); cairo_line_to(cr, 9.5, 17);
+        cairo_stroke(cr);
+    } else {
+        rrect(cr, 4.5, 9, MAX(1.5, 12 * CLAMP(pct, 0, 100) / 100.0), 6, 1);
+        cairo_fill(cr);
+    }
     cairo_restore(cr);
 }
 
@@ -776,6 +807,93 @@ static void layout_islands(void)
     cairo_surface_destroy(sc);
 }
 
+/* The first battery the kernel lists, or -1 */
+static void battery_poll(void)
+{
+    GDir *dir;
+    const gchar *name, *root;
+
+    S.batt_pct = -1;
+    S.batt_charging = FALSE;
+    if (!config_shelf_battery) return;
+    root = config_shelf_battery_dir && *config_shelf_battery_dir ?
+           config_shelf_battery_dir : "/sys/class/power_supply";
+    dir = g_dir_open(root, 0, NULL);
+    while (dir && (name = g_dir_read_name(dir))) {
+        gchar *base = g_build_filename(root, name, NULL);
+        gchar *f, *type = NULL, *cap = NULL, *st = NULL;
+
+        f = g_build_filename(base, "type", NULL);
+        g_file_get_contents(f, &type, NULL, NULL);
+        g_free(f);
+        f = g_build_filename(base, "capacity", NULL);
+        g_file_get_contents(f, &cap, NULL, NULL);
+        g_free(f);
+        f = g_build_filename(base, "status", NULL);
+        g_file_get_contents(f, &st, NULL, NULL);
+        g_free(f);
+        if (type && cap && g_ascii_isdigit(*cap) &&
+            g_str_has_prefix(type, "Battery")) {
+            S.batt_pct = CLAMP((gint)g_ascii_strtoll(cap, NULL, 10), 0, 100);
+            S.batt_charging = st && g_str_has_prefix(st, "Charging");
+        }
+        g_free(base); g_free(type); g_free(cap); g_free(st);
+        if (S.batt_pct >= 0) break;
+    }
+    if (dir) g_dir_close(dir);
+}
+
+/* A column of the status island: the glyph, and under it a value when the
+   config can tell one. Wider when there are values to show. */
+static gint col_w(void)
+{
+    return config_shelf_battery ||
+           (config_shelf_network && config_shelf_network->list) ||
+           (config_shelf_volume && config_shelf_volume->level) ?
+           34 : GLYPH + GLYPH_GAP;
+}
+
+static gint battery_w(void)
+{
+    return S.batt_pct >= 0 ? col_w() : 0;
+}
+
+/* The active network's signal, from the "in-use:signal:name" lines */
+static gchar *net_text(void)
+{
+    gchar **lines, *res = NULL;
+    gint i;
+
+    if (!S.net.out) return NULL;
+    lines = g_strsplit(S.net.out, "\n", -1);
+    for (i = 0; lines[i] && !res; ++i) {
+        gchar *c = lines[i], *e;
+        if (*c != '*' || !(c = strchr(c, ':'))) continue;
+        for (e = ++c; g_ascii_isdigit(*e); ++e);
+        if (e > c && *e == ':') res = g_strdup_printf("%.*s%%", (gint)(e - c), c);
+    }
+    g_strfreev(lines);
+    return res;
+}
+
+/* The volume as the command prints it: a number gets a percent sign */
+static gchar *vol_text(void)
+{
+    gchar *t, *e;
+
+    if (!S.vol.out || !*S.vol.out) return NULL;
+    t = g_strdup(S.vol.out);
+    t[strcspn(t, "\n \t")] = 0;
+    for (e = t; g_ascii_isdigit(*e); ++e);
+    if (e > t && !*e) {
+        gchar *p = g_strdup_printf("%s%%", t);
+        g_free(t);
+        return p;
+    }
+    if (strlen(t) > 5) t[5] = 0;
+    return t;
+}
+
 static void layout(void)
 {
     const Rect *mon = screen_physical_area_monitor(screen_monitor_primary(FALSE));
@@ -810,7 +928,8 @@ static void layout(void)
     S.dock_w = 2 * PAD + TILE;
     if (n) S.dock_w += DIVIDER_W + n * TILE + (n - 1) * TILE_GAP;
     layout_islands();
-    S.status_w = 2 * PAD + CLOCK_W + DIVIDER_W + CONTROLS_W;
+    battery_poll();
+    S.status_w = 2 * PAD + CLOCK_W + DIVIDER_W + battery_w() + 3 * col_w();
     row_w = S.dock_w + ISLAND_GAP + S.status_w;
     if (S.media_w) row_w += ISLAND_GAP + S.media_w;
     if (S.weather_w) row_w += ISLAND_GAP + S.weather_w;
@@ -1196,14 +1315,37 @@ static void paint(void)
                  m->ink, 0.62);
     {
         gdouble dx = S.status_x + PAD + CLOCK_W + 8;
+        gint cw = col_w();
         gdouble gx = S.status_x + PAD + CLOCK_W + DIVIDER_W;
-        gdouble gy = y + (ISLAND_H - GLYPH) / 2.0;
+        gchar *bt = S.batt_pct >= 0 ?
+                    g_strdup_printf("%d%%", S.batt_pct) : NULL;
+        gchar *nt = net_text(), *vt = vol_text();
+        gdouble gy_text = y + 13, gy_bare = y + (ISLAND_H - GLYPH) / 2.0;
+
         cairo_rectangle(cr, dx, y + (ISLAND_H - DIVIDER_H) / 2.0, 1, DIVIDER_H);
         set_rgb(cr, m->divider, m->divider_a);
         cairo_fill(cr);
-        glyph_wifi(cr, gx, gy, m->ink);
-        glyph_volume(cr, gx + GLYPH + GLYPH_GAP, gy, m->ink);
-        glyph_power(cr, gx + 2 * (GLYPH + GLYPH_GAP), gy, m->ink);
+        if (bt) {
+            gdouble cx0 = gx + cw / 2.0;
+            glyph_battery(cr, cx0 - GLYPH / 2.0, gy_text, m->ink,
+                          S.batt_pct, S.batt_charging);
+            centred_text(cr, bt, 10, PANGO_WEIGHT_MEDIUM, cx0, y + 38, m->ink,
+                         0.7);
+            gx += cw;
+        }
+        glyph_wifi(cr, gx + (cw - GLYPH) / 2.0, nt ? gy_text : gy_bare, m->ink);
+        if (nt)
+            centred_text(cr, nt, 10, PANGO_WEIGHT_MEDIUM, gx + cw / 2.0, y + 38,
+                         m->ink, 0.7);
+        gx += cw;
+        glyph_volume(cr, gx + (cw - GLYPH) / 2.0, vt ? gy_text : gy_bare,
+                     m->ink);
+        if (vt)
+            centred_text(cr, vt, 10, PANGO_WEIGHT_MEDIUM, gx + cw / 2.0, y + 38,
+                         m->ink, 0.7);
+        gx += cw;
+        glyph_power(cr, gx + (cw - GLYPH) / 2.0, gy_bare, m->ink);
+        g_free(bt); g_free(nt); g_free(vt);
     }
     cairo_destroy(cr);
 
@@ -1298,10 +1440,14 @@ static gchar *signature(void)
     localtime_r(&now, &tm);
     strftime(buf, sizeof buf, "%H:%M", &tm);
     g_string_append(g, buf);
-    g_string_append_printf(g, "|%d|%d|%u", covered_by_fullscreen(), S.hover,
-                           S.pins_rev);
-    g_string_append_printf(g, "|m:%s|w:%s", S.media.out ? S.media.out : "",
-                           S.weather.out ? S.weather.out : "");
+    battery_poll();
+    g_string_append_printf(g, "|%d|%d|%u|b:%d%d", covered_by_fullscreen(),
+                           S.hover, S.pins_rev, S.batt_pct, S.batt_charging);
+    g_string_append_printf(g, "|m:%s|w:%s|n:%s|v:%s",
+                           S.media.out ? S.media.out : "",
+                           S.weather.out ? S.weather.out : "",
+                           S.net.out ? S.net.out : "",
+                           S.vol.out ? S.vol.out : "");
     for (it = client_list; it; it = g_list_next(it)) {
         ObClient *c = it->data;
         if (!listed(c)) continue;
@@ -1455,7 +1601,8 @@ static gboolean run_read(GIOChannel *ch, GIOCondition cond, gpointer data)
     if (!eof) return TRUE;
 
     /* S is zeroed when the shelf shuts down: the feed is then not ours */
-    if (S.win && (r->feed == &S.media || r->feed == &S.weather))
+    if (S.win && (r->feed == &S.media || r->feed == &S.weather ||
+                  r->feed == &S.net || r->feed == &S.vol))
         feed_done(r->feed, r->buf);
     g_string_free(r->buf, TRUE);
     g_io_channel_shutdown(ch, FALSE, NULL);
@@ -1504,6 +1651,18 @@ static void start_feeds(void)
         S.media.timer = g_timeout_add_seconds(S.media.interval, feed_timer,
                                               &S.media);
     }
+    if (config_shelf_network && config_shelf_network->list) {
+        S.net.command = config_shelf_network->list;
+        S.net.interval = 10;
+        refresh_feed(&S.net);
+        S.net.timer = g_timeout_add_seconds(S.net.interval, feed_timer, &S.net);
+    }
+    if (config_shelf_volume && config_shelf_volume->level) {
+        S.vol.command = config_shelf_volume->level;
+        S.vol.interval = 3;
+        refresh_feed(&S.vol);
+        S.vol.timer = g_timeout_add_seconds(S.vol.interval, feed_timer, &S.vol);
+    }
     if (config_shelf_weather) {
         S.has_weather = TRUE;
         S.weather.command = config_shelf_weather->command;
@@ -1518,6 +1677,10 @@ static void stop_feeds(void)
 {
     if (S.media.timer) g_source_remove(S.media.timer);
     if (S.weather.timer) g_source_remove(S.weather.timer);
+    if (S.net.timer) g_source_remove(S.net.timer);
+    if (S.vol.timer) g_source_remove(S.vol.timer);
+    g_free(S.net.out);
+    g_free(S.vol.out);
     g_free(S.media.out);
     g_free(S.weather.out);
     if (S.art) RrImageUnref(S.art);
@@ -1541,6 +1704,13 @@ static void update_art(void)
 }
 
 static void launch(const gchar *command);
+
+static gboolean refresh_status_later(gpointer data)
+{
+    if (S.net.command) refresh_feed(&S.net);
+    if (S.vol.command) refresh_feed(&S.vol);
+    return FALSE;
+}
 
 static gboolean refresh_media_later(gpointer data)
 {
@@ -1592,7 +1762,8 @@ void shelf_startup(gboolean reconfig)
     attr.override_redirect = True;
     attr.border_pixel = 0;
     attr.background_pixmap = None;
-    attr.event_mask = ExposureMask | ButtonPressMask | PointerMotionMask |
+    attr.event_mask = ExposureMask | ButtonPressMask | ButtonReleaseMask |
+                      PointerMotionMask |
                       LeaveWindowMask;
     mask = CWOverrideRedirect | CWBorderPixel | CWBackPixmap | CWEventMask;
     if (S.argb) {
@@ -1630,6 +1801,7 @@ void shelf_shutdown(gboolean reconfig)
     if (S.cmap) XFreeColormap(obt_display, S.cmap);
     if (S.bg) cairo_surface_destroy(S.bg);
     if (S.tiles) g_array_free(S.tiles, TRUE);
+    if (sys_cmds) { g_ptr_array_free(sys_cmds, TRUE); sys_cmds = NULL; }
     stop_feeds();
     unload_pin_icons();
     g_free(S.sig);
@@ -1649,6 +1821,17 @@ static gint hit(gint x, gint y)
             if (x >= bx + i * (BTN + BTN_GAP) &&
                 x < bx + i * (BTN + BTN_GAP) + BTN)
                 return HIT_PREV - i;
+    }
+    if (y >= S.island_y + PAD && y < S.island_y + PAD + TILE) {
+        gint cw = col_w();
+        gint gx = S.status_x + PAD + CLOCK_W + DIVIDER_W;
+        if (S.batt_pct >= 0) {
+            if (x >= gx && x < gx + cw) return HIT_BATT;
+            gx += cw;
+        }
+        for (i = 0; i < 3; ++i)
+            if (x >= gx + i * cw && x < gx + (i + 1) * cw)
+                return HIT_NET - i;
     }
     if (y < S.island_y + PAD || y >= S.island_y + PAD + TILE) return -1;
     if (x >= S.dock_x + PAD && x < S.dock_x + PAD + TILE) return 0;
@@ -1674,6 +1857,7 @@ static void show_menu(const gchar *name, gint rx, gint ry, ObClient *c)
 
 #define SHELF_MENU_NAME "shelf-menu"
 enum { SM_PIN = 1, SM_UNPIN, SM_WINDOW };
+#define SM_COMMAND  100   /* ids from here run sys_cmds[id - SM_COMMAND] */
 
 static ObMenu *shelf_menu;
 static ObShelfPin *menu_pin;     /* the tile the menu was opened on */
@@ -1719,24 +1903,37 @@ static void pins_changed(void)
     S.sig = NULL;   /* repaint on the next tick */
 }
 
-/* The first word of the window's command line, to start it again */
+/* The window's command line, to start it again: every argument, quoted. The
+   first one alone when the line is long or the process is gone. */
 static gchar *client_command(const ObClient *c, gchar **exe)
 {
     gchar *path = g_strdup_printf("/proc/%d/cmdline", (gint)c->pid);
     gchar *data = NULL;
-    gsize len = 0;
-    gchar *cmd = NULL;
+    gsize len = 0, off;
+    GString *cmd = NULL;
 
     if (c->pid > 0 && g_file_get_contents(path, &data, &len, NULL) && len &&
-        *data)
-        *exe = g_strdup(data), cmd = g_shell_quote(data); /* argv[0] */
+        *data) {
+        cmd = g_string_new(NULL);
+        *exe = g_strdup(data);
+        for (off = 0; off < len; off += strlen(data + off) + 1) {
+            gchar *q = g_shell_quote(data + off);
+            if (cmd->len) {
+                if (cmd->len + strlen(q) > 480) { g_free(q); break; }
+                g_string_append_c(cmd, ' ');
+            }
+            g_string_append(cmd, q);
+            g_free(q);
+        }
+    }
     g_free(data);
     g_free(path);
     if (!cmd) {
-        cmd = g_ascii_strdown(c->class ? c->class : c->name, -1);
-        *exe = g_strdup(cmd);
+        gchar *low = g_ascii_strdown(c->class ? c->class : c->name, -1);
+        *exe = g_strdup(low);
+        return low;
     }
-    return cmd;
+    return g_string_free(cmd, FALSE);
 }
 
 static void pin_client(ObClient *c)
@@ -1796,6 +1993,13 @@ static void shelf_menu_execute(ObMenuEntry *e, ObMenuFrame *f, ObClient *c,
     switch (e->id) {
     case SM_PIN:   pin_client(menu_client); break;
     case SM_UNPIN: unpin(menu_pin); break;
+    default:
+        if (e->id >= SM_COMMAND && sys_cmds &&
+            (guint)(e->id - SM_COMMAND) < sys_cmds->len)
+        {
+            launch(g_ptr_array_index(sys_cmds, e->id - SM_COMMAND));
+            g_timeout_add(700, refresh_status_later, NULL);
+        }
     }
     menu_pin = NULL;
     menu_client = NULL;
@@ -1821,6 +2025,173 @@ void shelf_menu_startup(void)
     menu_set_place_func(shelf_menu, shelf_menu_place);
 }
 
+/* ---- the status glyphs' menus --------------------------------------------- */
+
+static void sys_menu_begin(void)
+{
+    menu_clear_entries(shelf_menu);
+    menu_pin = NULL;
+    menu_client = NULL;
+    if (sys_cmds) g_ptr_array_free(sys_cmds, TRUE);
+    sys_cmds = g_ptr_array_new_with_free_func(g_free);
+}
+
+static void sys_menu_add(const gchar *label, const gchar *command,
+                         gboolean enabled)
+{
+    ObMenuEntry *e;
+    gint id = SM_COMMAND + sys_cmds->len;
+
+    g_ptr_array_add(sys_cmds, g_strdup(command ? command : ""));
+    e = menu_add_normal(shelf_menu, id, label, NULL, FALSE);
+    e->data.normal.enabled = enabled && command;
+}
+
+static gchar *replace_all(const gchar *s, const gchar *what, const gchar *with)
+{
+    gchar **parts = g_strsplit(s, what, -1);
+    gchar *r = g_strjoinv(with, parts);
+    g_strfreev(parts);
+    return r;
+}
+
+/* "in-use:name" lines; a ':' in the name is escaped with a backslash */
+static void network_menu(void)
+{
+    gchar *argv[] = { "/bin/sh", "-c", config_shelf_network->list, NULL };
+    gchar *out = NULL, **lines;
+    GHashTable *seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
+                                             NULL);
+    gint i, n = 0;
+
+    g_spawn_sync(NULL, argv, NULL, G_SPAWN_STDERR_TO_DEV_NULL, NULL, NULL,
+                 &out, NULL, NULL, NULL);
+    lines = g_strsplit(out ? out : "", "\n", -1);
+    for (i = 0; lines[i] && n < 20; ++i) {
+        gchar *colon = strchr(lines[i], ':');
+        gboolean active;
+        GString *name;
+        gchar *c, *label, *cmd = NULL, *q, *signal = NULL, *secure = NULL;
+
+        if (!colon || !colon[1]) continue;
+        active = lines[i][0] == '*';
+        name = g_string_new(NULL);
+        c = colon + 1;
+        /* "in-use:signal:name" when the command prints the signal too */
+        {
+            gchar *e = c;
+            while (g_ascii_isdigit(*e)) ++e;
+            if (e > c && *e == ':' && e[1]) {
+                signal = g_strndup(c, e - c);
+                c = e + 1;
+            }
+        }
+        /* a ':' that is not escaped now ends the security column */
+        {
+            gchar *e = c;
+            while (*e && *e != ':') { if (*e == '\\' && e[1]) ++e; ++e; }
+            if (signal && *e == ':' && e[1]) {
+                secure = g_strndup(c, e - c);
+                c = e + 1;
+            }
+        }
+        for (; *c; ++c) {
+            if (*c == '\\' && c[1]) ++c;
+            g_string_append_c(name, *c);
+        }
+        if (g_hash_table_contains(seen, name->str)) {
+            g_string_free(name, TRUE);
+            g_free(signal);
+            g_free(secure);
+            continue;
+        }
+        g_hash_table_add(seen, g_strdup(name->str));
+        label = g_strdup_printf("%s%s%s%s%s", active ? "\342\234\223 " : "",
+                                name->str, signal ? "   " : "",
+                                signal ? signal : "", signal ? "%" : "");
+        g_free(signal);
+        if (config_shelf_network->connect && !active) {
+            gboolean locked = secure && *secure && strcmp(secure, "--") &&
+                              config_shelf_network->secured &&
+                              config_shelf_network->password;
+            q = g_shell_quote(name->str);
+            if (locked) {
+                /* ask first; the answer reaches the command as "$pw" */
+                gchar *t = replace_all(config_shelf_network->secured, "%p",
+                                       "\"$pw\""), *c2 = replace_all(t, "%s", q);
+                cmd = g_strdup_printf("pw=$(%s) || exit 0; %s",
+                                      config_shelf_network->password, c2);
+                g_free(t);
+                g_free(c2);
+            } else {
+                cmd = replace_all(config_shelf_network->connect, "%s", q);
+            }
+            g_free(q);
+        }
+        g_free(secure);
+        sys_menu_add(label, cmd, TRUE);
+        g_free(label);
+        g_free(cmd);
+        g_string_free(name, TRUE);
+        ++n;
+    }
+    if (!n) sys_menu_add("No networks found", NULL, FALSE);
+    g_strfreev(lines);
+    g_free(out);
+    g_hash_table_destroy(seen);
+}
+
+/* Level (when the config can print it) and the steps of the volume */
+static void volume_menu(void)
+{
+    ObShelfVolume *v = config_shelf_volume;
+
+    if (v->level) {
+        gchar *argv[] = { "/bin/sh", "-c", v->level, NULL };
+        gchar *out = NULL, *l;
+        g_spawn_sync(NULL, argv, NULL, G_SPAWN_STDERR_TO_DEV_NULL, NULL, NULL,
+                     &out, NULL, NULL, NULL);
+        if (out) g_strstrip(out);
+        l = g_strdup_printf("Volume %s", out && *out ? out : "unknown");
+        sys_menu_add(l, NULL, FALSE);
+        g_free(l);
+        g_free(out);
+    }
+    if (v->up) sys_menu_add("Louder", v->up, TRUE);
+    if (v->down) sys_menu_add("Quieter", v->down, TRUE);
+    if (v->toggle) sys_menu_add("Mute / unmute", v->toggle, TRUE);
+}
+
+static void show_status_menu(gint h, gint rx, gint ry)
+{
+    GSList *it;
+
+    if (!shelf_menu) return;
+    if (h == HIT_NET && config_shelf_network) {
+        sys_menu_begin();
+        network_menu();
+    } else if (h == HIT_VOL && config_shelf_volume) {
+        sys_menu_begin();
+        volume_menu();
+    } else if (h == HIT_POWER && config_shelf_power) {
+        sys_menu_begin();
+        for (it = config_shelf_power; it; it = g_slist_next(it)) {
+            ObShelfPower *p = it->data;
+            sys_menu_add(p->name, p->command, TRUE);
+        }
+    } else if (h == HIT_BATT && S.batt_pct >= 0) {
+        gchar *l;
+        sys_menu_begin();
+        l = g_strdup_printf("%d%%, %s", S.batt_pct,
+                            S.batt_charging ? "charging" : "on battery");
+        sys_menu_add(l, NULL, FALSE);
+        g_free(l);
+    } else {
+        return;
+    }
+    show_menu(SHELF_MENU_NAME, rx, ry, NULL);
+}
+
 static void show_tile_menu(Tile *t, gint rx, gint ry)
 {
     if (!shelf_menu) return;
@@ -1838,6 +2209,37 @@ static void show_tile_menu(Tile *t, gint rx, gint ry)
     show_menu(SHELF_MENU_NAME, rx, ry, t->client);
 }
 
+/* Left click on a tile: start it, or focus it, or minimise it */
+static void tile_click(Tile *t)
+{
+    ObClient *c = t->client;
+
+    if (!c) {
+        if (t->pin) launch(t->pin->command);
+        return;
+    }
+    if (!g_list_find(client_list, c)) return;
+    if (c == focus_client && !c->iconic)
+        client_iconify(c, TRUE, TRUE, TRUE);
+    else
+        client_activate(c, TRUE, TRUE, TRUE, TRUE, TRUE);
+}
+
+/* Drops a dragged pin where another one is */
+static void move_pin(gint from, gint to)
+{
+    Tile *a = &g_array_index(S.tiles, Tile, from - 1);
+    Tile *b = &g_array_index(S.tiles, Tile, to - 1);
+    ObShelfPin *p = a->pin;
+    gint at;
+
+    if (!p || !b->pin || p == b->pin) return;
+    at = g_slist_index(config_shelf_pins, b->pin);
+    config_shelf_pins = g_slist_remove(config_shelf_pins, p);
+    config_shelf_pins = g_slist_insert(config_shelf_pins, p, at);
+    pins_changed();
+}
+
 gboolean shelf_event(const XEvent *e)
 {
     gint h;
@@ -1850,7 +2252,21 @@ gboolean shelf_event(const XEvent *e)
         break;
     case MotionNotify:
         h = hit(e->xmotion.x, e->xmotion.y);
+        if (S.press && ABS(e->xmotion.x - S.press_x) > 6) S.dragging = TRUE;
         if (h != S.hover) { S.hover = h; paint(); }
+        break;
+    case ButtonRelease:
+        if (e->xbutton.button == 1 && S.press) {
+            gint from = S.press;
+            S.press = 0;
+            h = hit(e->xbutton.x, e->xbutton.y);
+            if (!S.dragging) {
+                if (h == from) tile_click(&g_array_index(S.tiles, Tile, from - 1));
+            } else if (h > 0) {
+                move_pin(from, h);
+            }
+            S.dragging = FALSE;
+        }
         break;
     case LeaveNotify:
         if (S.hover != -1) { S.hover = -1; paint(); }
@@ -1858,8 +2274,24 @@ gboolean shelf_event(const XEvent *e)
     case ButtonPress:
         h = hit(e->xbutton.x, e->xbutton.y);
         if (h == 0 && e->xbutton.button == 1) {
-            show_menu("root-menu", e->xbutton.x_root,
-                      S.wy + S.island_y - 4, NULL);
+            show_menu("root-menu", S.wx + S.dock_x,
+                      S.wy + S.island_y - MENU_GAP, NULL);
+        } else if (h <= HIT_NET && h >= HIT_BATT) {
+            guint b = e->xbutton.button;
+            if (h == HIT_VOL && config_shelf_volume) {
+                const gchar *cmd = b == 2 ? config_shelf_volume->toggle :
+                                   b == 4 ? config_shelf_volume->up :
+                                   b == 5 ? config_shelf_volume->down : NULL;
+                if (cmd) {
+                    launch(cmd);
+                    g_timeout_add(200, refresh_status_later, NULL);
+                } else if (b == 1)
+                    show_status_menu(h, e->xbutton.x_root,
+                                     S.wy + S.island_y - MENU_GAP);
+            } else if (b == 1) {
+                show_status_menu(h, e->xbutton.x_root,
+                                 S.wy + S.island_y - MENU_GAP);
+            }
         } else if (h <= HIT_PREV && e->xbutton.button == 1) {
             const gchar *cmd = h == HIT_PREV ? config_shelf_media->previous :
                                h == HIT_TOGGLE ? config_shelf_media->toggle :
@@ -1871,23 +2303,13 @@ gboolean shelf_event(const XEvent *e)
             }
         } else if (h > 0) {
             Tile *t = &g_array_index(S.tiles, Tile, h - 1);
-            ObClient *c = t->client;
             if (e->xbutton.button == 3) {
-                show_tile_menu(t, e->xbutton.x_root, S.wy + S.island_y - 4);
-                break;
-            }
-            if (!c) {
-                /* a pin that is not running: left click starts it */
-                if (t->pin && e->xbutton.button == 1)
-                    launch(t->pin->command);
-                break;
-            }
-            if (!g_list_find(client_list, c)) break;
-            if (e->xbutton.button == 1) {
-                if (c == focus_client && !c->iconic)
-                    client_iconify(c, TRUE, TRUE, TRUE);
-                else
-                    client_activate(c, TRUE, TRUE, TRUE, TRUE, TRUE);
+                show_tile_menu(t, S.wx + t->x, S.wy + S.island_y - MENU_GAP);
+            } else if (e->xbutton.button == 1) {
+                /* acts on release: a drag moves a pin instead */
+                S.press = h;
+                S.press_x = e->xbutton.x;
+                S.dragging = FALSE;
             }
         }
         break;
