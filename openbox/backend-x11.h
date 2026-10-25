@@ -34,5 +34,9 @@ gboolean backend_x11_property_notify(const XPropertyEvent *e);
 gboolean backend_x11_client_message(const XClientMessageEvent *e);
 /*! A managed window configures itself. */
 void backend_x11_configure_request(const XConfigureRequestEvent *e);
+/*! A window asks to be mapped (MapRequest), or a managed window was
+  unmapped, destroyed or reparented out of its frame (UnmapNotify,
+  DestroyNotify, ReparentNotify). */
+void backend_x11_map_event(const XEvent *e);
 
 #endif

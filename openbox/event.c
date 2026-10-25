@@ -643,7 +643,7 @@ static void event_process(const XEvent *ec, gpointer data)
     else if (window == obt_root(ob_screen))
         event_handle_root(e);
     else if (e->type == MapRequest)
-        window_manage(window);
+        backend_x11_map_event(e);
     else if (e->type == MappingNotify) {
         /* keyboard layout changes for modifier mapping changes. reload the
            modifier map, and rebind all the key bindings as appropriate */
@@ -1140,21 +1140,6 @@ static void event_handle_client(ObClient *client, XEvent *e)
     case ConfigureRequest:
         backend_x11_configure_request(&e->xconfigurerequest);
         break;
-    case UnmapNotify:
-        ob_debug("UnmapNotify for window 0x%x eventwin 0x%x sendevent %d "
-                 "ignores left %d",
-                 client->window, e->xunmap.event, e->xunmap.from_configure,
-                 client->ignore_unmaps);
-        if (client->ignore_unmaps) {
-            client->ignore_unmaps--;
-            break;
-        }
-        client_unmanage(client);
-        break;
-    case DestroyNotify:
-        ob_debug("DestroyNotify for window 0x%x", client->window);
-        client_unmanage(client);
-        break;
     case ReparentNotify:
         /* this is when the client is first taken captive in the frame */
         if (e->xreparent.parent == client->frame->window) break;
@@ -1165,18 +1150,12 @@ static void event_handle_client(ObClient *client, XEvent *e)
           the window manager never sees it because an unmap event is not sent
           to an already unmapped window.
         */
-
-        ob_debug("ReparentNotify for window 0x%x", client->window);
-        client_unmanage(client);
+        backend_x11_map_event(e);
         break;
+    case UnmapNotify:
+    case DestroyNotify:
     case MapRequest:
-        ob_debug("MapRequest for 0x%lx", client->window);
-        if (!client->iconic) break; /* this normally doesn't happen, but if it
-                                       does, we don't want it!
-                                       it can happen now when the window is on
-                                       another desktop, but we still don't
-                                       want it! */
-        client_activate(client, FALSE, FALSE, TRUE, TRUE, TRUE);
+        backend_x11_map_event(e);
         break;
     case ClientMessage:
         /* validate cuz we query stuff off the client here */

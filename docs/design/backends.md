@@ -126,8 +126,11 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       about states, iconifying, activating, closing and desktops (`request_*`; `client_set_state()` now
       takes `ObSurfaceStates`). Configure requests, `_NET_MOVERESIZE_WINDOW` and
       `_NET_RESTACK_WINDOW` are `request_configure`, `request_geometry` and `request_restack`, with
-      `ObConfigureRequest` and `ObStackMode` in place of X's value masks and stack modes. Next: map, unmap and
-      destroy, focus changes, then the interactive `_NET_WM_MOVERESIZE` with move/resize (9).
+      `ObConfigureRequest` and `ObStackMode` in place of X's value masks and stack modes. Map requests,
+      unmaps, destroys and reparents out of the frame are `surface_new`, `surface_withdrawn` and
+      `surface_gone` (`backend_x11_map_event`); the core still counts the unmaps it causes itself
+      (`ignore_unmaps`), and dock apps stay X11-only in `event.c`. Next: focus changes, then the interactive
+      `_NET_WM_MOVERESIZE` with move/resize (9).
    8. Input: `grab.c`, `keyboard.c`, `mouse.c`.
    9. Move/resize: XSync and pointer warps go behind the backend.
 4. **Render without Xlib**: obrender, frames, the shelf, menus and popups draw into cairo image surfaces and hand

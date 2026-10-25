@@ -1008,3 +1008,27 @@ const ObBackend ob_backend_x11 = {
     .publish_surface_titles = x11_publish_surface_titles,
     .publish_workareas = x11_publish_workareas,
 };
+
+void backend_x11_map_event(const XEvent *e)
+{
+    switch (e->type) {
+    case MapRequest:
+        ob_debug("MapRequest for 0x%lx", e->xmaprequest.window);
+        events->surface_new((ObSurfaceId)e->xmaprequest.window);
+        break;
+    case UnmapNotify:
+        ob_debug("UnmapNotify for window 0x%lx eventwin 0x%lx "
+                 "fromconfigure %d", e->xunmap.window, e->xunmap.event,
+                 e->xunmap.from_configure);
+        events->surface_withdrawn((ObSurfaceId)e->xunmap.window);
+        break;
+    case DestroyNotify:
+        ob_debug("DestroyNotify for window 0x%lx", e->xdestroywindow.window);
+        events->surface_gone((ObSurfaceId)e->xdestroywindow.window);
+        break;
+    case ReparentNotify:
+        ob_debug("ReparentNotify for window 0x%lx", e->xreparent.window);
+        events->surface_gone((ObSurfaceId)e->xreparent.window);
+        break;
+    }
+}
