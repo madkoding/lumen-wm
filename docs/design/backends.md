@@ -143,7 +143,10 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       and modifier masks, which are X11's) and `bind_button` (on a frame, a client, or a dock app), with
       every lock-key combination in the backend; a held click reaches the client with `pass_click`. What is
       left in `mouse.c` and `keyboard.c` reads the XEvent itself (and asks the size of the window a click is
-      let go over), and becomes the `button`, `motion` and `key` events when the backend reads the queue. Next: move/resize (9).
+      let go over), and becomes the `button`, `motion` and `key` events when the backend reads the queue. The core's
+      handlers take an `ObInputEvent` (keysym, keycode, button, modifiers and pointer position) instead of the
+      XEvent, one at a time: `moveresize_event()` does (done), and `backend_x11_input_event()` builds it, skipping
+      to the last queued motion while a window moves. Next: move/resize (9).
    9. Move/resize: XSync and pointer warps go behind the backend. Done: `moveresize_start()` takes an
       `ObMoveResize` (the `_NET_WM_MOVERESIZE` directions as a core enum) instead of the atoms, and the
       client's `_NET_WM_MOVERESIZE` is `request_move_resize`. The pointer queries and warps (keyboard moves,

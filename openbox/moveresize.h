@@ -20,6 +20,7 @@
 #define __moveresize_h
 
 #include "misc.h"
+#include "backend.h"
 
 #include <glib.h>
 
@@ -44,6 +45,8 @@ void moveresize_end(gboolean cancel);
 /* the client answered the last sync request of a resize */
 void moveresize_synced(void);
 
-gboolean moveresize_event(XEvent *e);
+gboolean moveresize_event(const ObInputEvent *e);
+/*! Whether only the last of the queued pointer motions matters. */
+gboolean moveresize_latest_motion(void);
 
 #endif
