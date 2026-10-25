@@ -1515,7 +1515,7 @@ static gboolean event_handle_user_input(ObClient *client, XEvent *e)
             return mouse_event(client, e);
     } else
         return keyboard_event((focus_cycle_target ? focus_cycle_target :
-                               (client ? client : focus_client)), e);
+                               (client ? client : focus_client)), &input);
 
     return FALSE;
 }
