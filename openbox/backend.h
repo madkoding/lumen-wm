@@ -113,8 +113,17 @@ typedef enum {
     OB_SURFACE_INFO_HINTS    = 1 << 7, /*!< focus, urgency, group, iconic */
     OB_SURFACE_INFO_DECOR    = 1 << 8,
     OB_SURFACE_INFO_PROTOCOLS = 1 << 9,
-    OB_SURFACE_INFO_ALL      = (1 << 10) - 1
+    OB_SURFACE_INFO_ICON_AREA = 1 << 10, /*!< where a taskbar shows it */
+    OB_SURFACE_INFO_ALL      = (1 << 11) - 1
 } ObSurfaceInfoFields;
+
+/*! One size of a client's icon. */
+typedef struct _ObIcon {
+    gint width, height;
+    /*! width * height pixels, 0xAARRGGBB, not premultiplied (as in
+      _NET_WM_ICON) */
+    guint32 *argb;
+} ObIcon;
 
 /*! What a client says about itself. The backend reads it from WM_NORMAL_HINTS,
   _NET_WM_* and friends, or from xdg_toplevel requests. */
@@ -182,6 +191,11 @@ typedef struct _ObSurfaceInfo {
     gboolean can_ping;      /*!< _NET_WM_PING; always on Wayland */
     gboolean sync_resize;   /*!< _NET_WM_SYNC_REQUEST */
     gint pid;               /*!< 0 when not known; X11 needs machine too */
+
+    ObIcon *icons;          /*!< every size it offers; NULL for none */
+    guint n_icons;
+    /*! where its taskbar entry is, for iconify animations; zero for none */
+    Rect icon_area;
 } ObSurfaceInfo;
 
 /*! Where on screen a canvas lives; this is its stacking layer. */
@@ -309,6 +323,8 @@ struct _ObBackend {
     void (*publish_desktop_names)(const gchar *const *names);
     /*! desktop is DESKTOP_ALL for a surface on every desktop. */
     void (*publish_surface_desktop)(ObSurfaceId s, guint desktop);
+    /*! The icon the core gave it, when it has none of its own. */
+    void (*publish_surface_icon)(ObSurfaceId s, const ObIcon *icon);
     /*! The title the core shows for it, with any " (host)" or
       "Not Responding"; icon is NULL to leave that one as it is. */
     void (*publish_surface_titles)(ObSurfaceId s, const gchar *title,

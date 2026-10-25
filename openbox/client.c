@@ -2175,8 +2175,7 @@ void client_update_strut(ObClient *self)
 
 void client_update_icons(ObClient *self)
 {
-    guint num;
-    guint32 *data;
+    ObSurfaceInfo info = { 0 };
     guint w, h, i, j;
     RrImage *img;
 
@@ -2187,69 +2186,29 @@ void client_update_icons(ObClient *self)
        icon */
     grab_server(TRUE);
 
-    if (OBT_PROP_GETA32(self->window, NET_WM_ICON, CARDINAL, &data, &num)) {
-        /* figure out how many valid icons are in here */
-        i = 0;
-        while (i + 2 < num) { /* +2 is to make sure there is a w and h */
-            w = data[i++];
-            h = data[i++];
-            /* watch for the data being too small for the specified size,
-               or for zero sized icons. */
-            if (i + w*h > num || w == 0 || h == 0) {
-                i += w*h;
-                continue;
-            }
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_ICON, &info);
 
-            /* convert it to the right bit order for ObRender */
-            for (j = 0; j < w*h; ++j)
-                data[i+j] =
-                    (((data[i+j] >> 24) & 0xff) << RrDefaultAlphaOffset) +
-                    (((data[i+j] >> 16) & 0xff) << RrDefaultRedOffset)   +
-                    (((data[i+j] >>  8) & 0xff) << RrDefaultGreenOffset) +
-                    (((data[i+j] >>  0) & 0xff) << RrDefaultBlueOffset);
+    for (i = 0; i < info.n_icons; ++i) {
+        guint32 *data = info.icons[i].argb;
 
-            /* add it to the image cache as an original */
-            if (!img)
-                img = RrImageNewFromData(ob_rr_icons, &data[i], w, h);
-            else
-                RrImageAddFromData(img, &data[i], w, h);
+        w = info.icons[i].width;
+        h = info.icons[i].height;
 
-            i += w*h;
-        }
+        /* convert it to the right bit order for ObRender */
+        for (j = 0; j < w*h; ++j)
+            data[j] =
+                (((data[j] >> 24) & 0xff) << RrDefaultAlphaOffset) +
+                (((data[j] >> 16) & 0xff) << RrDefaultRedOffset)   +
+                (((data[j] >>  8) & 0xff) << RrDefaultGreenOffset) +
+                (((data[j] >>  0) & 0xff) << RrDefaultBlueOffset);
 
-        g_free(data);
+        /* add it to the image cache as an original */
+        if (!img)
+            img = RrImageNewFromData(ob_rr_icons, data, w, h);
+        else
+            RrImageAddFromData(img, data, w, h);
     }
-
-    /* if we didn't find an image from the NET_WM_ICON stuff, then try the
-       legacy X hints */
-    if (!img) {
-        XWMHints *hints;
-
-        if ((hints = XGetWMHints(obt_display, self->window))) {
-            if (hints->flags & IconPixmapHint) {
-                gboolean xicon;
-                obt_display_ignore_errors(TRUE);
-                xicon = RrPixmapToRGBA(ob_rr_inst,
-                                       hints->icon_pixmap,
-                                       (hints->flags & IconMaskHint ?
-                                        hints->icon_mask : None),
-                                       (gint*)&w, (gint*)&h, &data);
-                obt_display_ignore_errors(FALSE);
-
-                if (xicon) {
-                    if (w > 0 && h > 0) {
-                        if (!img)
-                            img = RrImageNewFromData(ob_rr_icons, data, w, h);
-                        else
-                            RrImageAddFromData(img, data, w, h);
-                    }
-
-                    g_free(data);
-                }
-            }
-            XFree(hints);
-        }
-    }
+    backend_surface_info_clear(&info);
 
     /* set the client's icons to be whatever we found */
     RrImageUnref(self->icon_set);
@@ -2260,20 +2219,18 @@ void client_update_icons(ObClient *self)
     */
     if (!self->icon_set && !self->parents) {
         RrPixel32 *icon = ob_rr_theme->def_win_icon;
-        gulong *ldata; /* use a long here to satisfy OBT_PROP_SETA32 */
+        ObIcon def;
 
-        w = ob_rr_theme->def_win_icon_w;
-        h = ob_rr_theme->def_win_icon_h;
-        ldata = g_new(gulong, w*h+2);
-        ldata[0] = w;
-        ldata[1] = h;
+        def.width = w = ob_rr_theme->def_win_icon_w;
+        def.height = h = ob_rr_theme->def_win_icon_h;
+        def.argb = g_new(guint32, w*h);
         for (i = 0; i < w*h; ++i)
-            ldata[i+2] = (((icon[i] >> RrDefaultAlphaOffset) & 0xff) << 24) +
+            def.argb[i] = (((icon[i] >> RrDefaultAlphaOffset) & 0xff) << 24) +
                 (((icon[i] >> RrDefaultRedOffset) & 0xff) << 16) +
                 (((icon[i] >> RrDefaultGreenOffset) & 0xff) << 8) +
                 (((icon[i] >> RrDefaultBlueOffset) & 0xff) << 0);
-        OBT_PROP_SETA32(self->window, NET_WM_ICON, CARDINAL, ldata, w*h+2);
-        g_free(ldata);
+        ob_backend->publish_surface_icon(self->window, &def);
+        g_free(def.argb);
     } else if (self->frame)
         /* don't draw the icon empty if we're just setting one now anyways,
            we'll get the property change any second */
@@ -2284,20 +2241,10 @@ void client_update_icons(ObClient *self)
 
 void client_update_icon_geometry(ObClient *self)
 {
-    guint num;
-    guint32 *data;
+    ObSurfaceInfo info = { 0 };
 
-    RECT_SET(self->icon_geometry, 0, 0, 0, 0);
-
-    if (OBT_PROP_GETA32(self->window, NET_WM_ICON_GEOMETRY, CARDINAL,
-                        &data, &num))
-    {
-        if (num == 4)
-            /* don't let them set it with an area < 0 */
-            RECT_SET(self->icon_geometry, data[0], data[1],
-                     MAX(data[2],0), MAX(data[3],0));
-        g_free(data);
-    }
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_ICON_AREA, &info);
+    self->icon_geometry = info.icon_area;
 }
 
 static void client_get_session_ids(ObClient *self)

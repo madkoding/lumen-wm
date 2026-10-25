@@ -47,6 +47,8 @@ void backend_listen(void)
 
 void backend_surface_info_clear(ObSurfaceInfo *info)
 {
+    guint i;
+
     g_free(info->title);
     g_free(info->icon_title);
     g_free(info->app_id);
@@ -57,5 +59,8 @@ void backend_surface_info_clear(ObSurfaceInfo *info)
     g_free(info->session_id);
     g_free(info->command);
     g_free(info->machine);
+    for (i = 0; i < info->n_icons; ++i)
+        g_free(info->icons[i].argb);
+    g_free(info->icons);
     memset(info, 0, sizeof(*info));
 }
