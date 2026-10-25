@@ -247,6 +247,31 @@ void ct_window_set_app_id(ct_win *w, const char *app_id)
     XSetClassHint(dpy, w->id, &hint);
 }
 
+void ct_window_set_initial_state(ct_win *w, ct_state s)
+{
+    Atom st[2];
+    int n = 0;
+
+    switch (s) {
+    case CT_STATE_MAXIMIZED:
+        st[n++] = atoms[NET_WM_STATE_MAXIMIZED_VERT];
+        st[n++] = atoms[NET_WM_STATE_MAXIMIZED_HORZ];
+        break;
+    case CT_STATE_FULLSCREEN: st[n++] = atoms[NET_WM_STATE_FULLSCREEN]; break;
+    case CT_STATE_ICONIC:     st[n++] = atoms[NET_WM_STATE_HIDDEN]; break;
+    case CT_STATE_ABOVE:      st[n++] = atoms[NET_WM_STATE_ABOVE]; break;
+    }
+    XChangeProperty(dpy, w->id, atoms[NET_WM_STATE], XA_ATOM, 32,
+                    PropModeAppend, (unsigned char *)st, n);
+}
+
+void ct_window_set_initial_desktop(ct_win *w, int d)
+{
+    long v = d;
+    XChangeProperty(dpy, w->id, atoms[NET_WM_DESKTOP], XA_CARDINAL, 32,
+                    PropModeReplace, (unsigned char *)&v, 1);
+}
+
 void ct_window_set_title(ct_win *w, const char *title)
 {
     XStoreName(dpy, w->id, title);
