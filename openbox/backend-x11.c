@@ -657,6 +657,13 @@ static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
             info->sync_counter = c;
 #endif
     }
+    if (fields & OB_SURFACE_INFO_OPACITY) {
+        guint32 o;
+        info->has_opacity =
+            OBT_PROP_GET32((Window)s, NET_WM_WINDOW_OPACITY, CARDINAL, &o);
+        if (info->has_opacity)
+            info->opacity = o;
+    }
 }
 
 /* --- events --- */
@@ -711,6 +718,8 @@ static ObSurfaceInfoFields property_fields(Atom a)
     if (a == OBT_PROP_ATOM(NET_WM_SYNC_REQUEST_COUNTER))
         return OB_SURFACE_INFO_SYNC;
 #endif
+    if (a == OBT_PROP_ATOM(NET_WM_WINDOW_OPACITY))
+        return OB_SURFACE_INFO_OPACITY;
     return 0;
 }
 
@@ -886,6 +895,16 @@ void backend_x11_configure_request(const XConfigureRequestEvent *e)
     req.gravity = 0;
 
     events->request_configure((ObSurfaceId)e->window, &req);
+}
+
+/* compositors read it off the frame */
+static void x11_canvas_set_opacity(ObCanvasId c, gboolean set,
+                                   guint32 opacity)
+{
+    if (set)
+        OBT_PROP_SET32((Window)c, NET_WM_WINDOW_OPACITY, CARDINAL, opacity);
+    else
+        OBT_PROP_ERASE((Window)c, NET_WM_WINDOW_OPACITY);
 }
 
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)
@@ -1277,6 +1296,8 @@ const ObBackend ob_backend_x11 = {
     .surface_info = x11_surface_info,
 
     .restack = x11_restack,
+
+    .canvas_set_opacity = x11_canvas_set_opacity,
 
     .grab_pointer = x11_grab_pointer,
     .grab_keyboard = x11_grab_keyboard,

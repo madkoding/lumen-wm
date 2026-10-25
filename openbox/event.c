@@ -937,7 +937,6 @@ static gboolean *context_to_button(ObFrame *f, ObFrameContext con, gboolean pres
 
 static void event_handle_client(ObClient *client, XEvent *e)
 {
-    Atom msgtype;
     ObFrameContext con;
     gboolean *but;
     static gint px = -1, py = -1;
@@ -1164,15 +1163,8 @@ static void event_handle_client(ObClient *client, XEvent *e)
         /* validate cuz we query stuff off the client here */
         if (!client_validate(client)) break;
 
-        msgtype = e->xproperty.atom;
-
         /* what the client says about itself goes through the backend */
-        if (backend_x11_property_notify(&e->xproperty))
-            break;
-
-        if (msgtype == OBT_PROP_ATOM(NET_WM_WINDOW_OPACITY)) {
-            client_update_opacity(client);
-        }
+        backend_x11_property_notify(&e->xproperty);
         break;
     case ColormapNotify:
         client_update_colormap(client, e->xcolormap.colormap);

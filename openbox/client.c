@@ -1680,12 +1680,11 @@ void client_update_colormap(ObClient *self, Colormap colormap)
 
 void client_update_opacity(ObClient *self)
 {
-    guint32 o;
+    ObSurfaceInfo info = { 0 };
 
-    if (OBT_PROP_GET32(self->window, NET_WM_WINDOW_OPACITY, CARDINAL, &o))
-        OBT_PROP_SET32(self->frame->window, NET_WM_WINDOW_OPACITY, CARDINAL, o);
-    else
-        OBT_PROP_ERASE(self->frame->window, NET_WM_WINDOW_OPACITY);
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_OPACITY, &info);
+    ob_backend->canvas_set_opacity(self->frame->window, info.has_opacity,
+                                   info.opacity);
 }
 
 void client_update_normal_hints(ObClient *self)

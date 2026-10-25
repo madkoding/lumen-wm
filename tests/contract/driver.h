@@ -26,6 +26,7 @@ typedef enum {
     CT_CAP_CLIENT_FOCUS    = 1 << 4, /* a client can take the focus itself */
     CT_CAP_INPUT           = 1 << 5, /* the driver can type and click */
     CT_CAP_SYNC_RESIZE     = 1 << 6, /* clients can sync resizes (XSync) */
+    CT_CAP_OPACITY         = 1 << 7, /* clients can ask to be see-through */
 } ct_caps;
 
 typedef enum {
@@ -135,6 +136,12 @@ void ct_input_click(ct_win *w, int x, int y);
 /* How many times the window manager asked a syncing client to tell it
    when it has drawn a new size. */
 int ct_window_sync_requests(ct_win *w);
+/* The client asks to be shown this opaque, from 0 to 1, or for nothing in
+   particular when opacity < 0 (_NET_WM_WINDOW_OPACITY, CT_CAP_OPACITY). */
+void ct_window_set_opacity(ct_win *w, double opacity);
+/* How opaque the window manager shows it, frame and all, from 0 to 1; < 0
+   when it leaves that to the compositor. */
+double ct_window_shown_opacity(ct_win *w);
 /* Whether the client saw a click since it was made. */
 bool ct_window_clicked(ct_win *w);
 

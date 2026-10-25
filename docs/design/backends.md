@@ -117,12 +117,13 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       and publishes the visible titles with `publish_surface_titles`, decides whether WM_CLIENT_MACHINE is another
       host, and builds the icon images from the ARGB sizes the backend hands over (`ObIcon`), publishing the
       theme's icon with `publish_surface_icon` for a window that has none. Still read in `client.c`: the geometry,
-      shape, colormap and opacity, which go with the frames.
+      shape and colormap, which go with the frames. The opacity a client asks for is `OB_SURFACE_INFO_OPACITY`,
+      and the core hands it to its frame with `canvas_set_opacity` (the frame's window until frames are canvases).
    7. Requests: `event.c` splits in two. The X11 half turns XEvents into `ObBackendEvents`, and the core half
       (`backend-events.c`) handles them. While `event.c` still reads the X queue, it hands each kind of event
       that has moved to a `backend_x11_*` function (`backend-x11.h`). Done for property changes on clients
-      (`surface_changed`, with the queue compression for titles and icons in the backend; opacity stays in
-      `event.c` until the frames move; the sync counter moved with move/resize, 9) and for the client messages
+      (`surface_changed`, with the queue compression for titles and icons in the backend; opacity and the
+      sync counter followed, the counter with move/resize, 9) and for the client messages
       about states, iconifying, activating, closing and desktops (`request_*`; `client_set_state()` now
       takes `ObSurfaceStates`). Configure requests, `_NET_MOVERESIZE_WINDOW` and
       `_NET_RESTACK_WINDOW` are `request_configure`, `request_geometry` and `request_restack`, with
