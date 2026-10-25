@@ -171,6 +171,92 @@ static void x11_surface_ping(ObSurfaceId s, guint32 serial)
                     NoEventMask);
 }
 
+static void get_titles(Window w, ObSurfaceInfo *info)
+{
+    g_free(info->title);
+    if (!OBT_PROP_GETS_UTF8(w, NET_WM_NAME, &info->title) &&
+        !OBT_PROP_GETS(w, WM_NAME, &info->title))
+        info->title = NULL;
+
+    g_free(info->icon_title);
+    if (!OBT_PROP_GETS_UTF8(w, NET_WM_ICON_NAME, &info->icon_title) &&
+        !OBT_PROP_GETS(w, WM_ICON_NAME, &info->icon_title))
+        info->icon_title = NULL;
+}
+
+static void get_protocols(Window w, ObSurfaceInfo *info)
+{
+    guint32 *proto;
+    guint num_ret, i;
+
+    info->takes_focus = FALSE;
+    info->can_close = FALSE;
+    info->can_ping = FALSE;
+    info->sync_resize = FALSE;
+
+    if (OBT_PROP_GETA32(w, WM_PROTOCOLS, ATOM, &proto, &num_ret)) {
+        for (i = 0; i < num_ret; ++i) {
+            if (proto[i] == OBT_PROP_ATOM(WM_DELETE_WINDOW))
+                info->can_close = TRUE;
+            else if (proto[i] == OBT_PROP_ATOM(WM_TAKE_FOCUS))
+                info->takes_focus = TRUE;
+            else if (proto[i] == OBT_PROP_ATOM(NET_WM_PING))
+                info->can_ping = TRUE;
+#ifdef SYNC
+            else if (proto[i] == OBT_PROP_ATOM(NET_WM_SYNC_REQUEST))
+                info->sync_resize = TRUE;
+#endif
+        }
+        g_free(proto);
+    }
+}
+
+static void get_strut(Window w, ObSurfaceInfo *info)
+{
+    guint num;
+    guint32 *data;
+    gboolean got = FALSE;
+
+    info->strut_whole_edges = FALSE;
+
+    if (OBT_PROP_GETA32(w, NET_WM_STRUT_PARTIAL, CARDINAL, &data, &num)) {
+        if (num == 12) {
+            got = TRUE;
+            STRUT_PARTIAL_SET(info->strut,
+                              data[0], data[2], data[1], data[3],
+                              data[4], data[5], data[8], data[9],
+                              data[6], data[7], data[10], data[11]);
+        }
+        g_free(data);
+    }
+
+    if (!got && OBT_PROP_GETA32(w, NET_WM_STRUT, CARDINAL, &data, &num)) {
+        if (num == 4) {
+            got = TRUE;
+            info->strut_whole_edges = TRUE;
+            STRUT_PARTIAL_SET(info->strut,
+                              data[0], data[2], data[1], data[3],
+                              0, 0, 0, 0, 0, 0, 0, 0);
+        }
+        g_free(data);
+    }
+
+    if (!got)
+        STRUT_PARTIAL_SET(info->strut, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0);
+}
+
+static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
+                             ObSurfaceInfo *info)
+{
+    if (fields & OB_SURFACE_INFO_TITLE)
+        get_titles((Window)s, info);
+    if (fields & OB_SURFACE_INFO_PROTOCOLS)
+        get_protocols((Window)s, info);
+    if (fields & OB_SURFACE_INFO_STRUT)
+        get_strut((Window)s, info);
+}
+
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)
 {
     Window *win = g_new(Window, n + 1);
@@ -245,6 +331,15 @@ static void x11_publish_surface_desktop(ObSurfaceId s, guint desktop)
     OBT_PROP_SET32((Window)s, NET_WM_DESKTOP, CARDINAL, desktop);
 }
 
+static void x11_publish_surface_titles(ObSurfaceId s, const gchar *title,
+                                       const gchar *icon)
+{
+    if (title)
+        OBT_PROP_SETS((Window)s, NET_WM_VISIBLE_NAME, title);
+    if (icon)
+        OBT_PROP_SETS((Window)s, NET_WM_VISIBLE_ICON_NAME, icon);
+}
+
 static void x11_publish_workareas(const Rect *areas, guint n)
 {
     gulong *dims = g_new(gulong, 4 * n);
@@ -280,6 +375,7 @@ const ObBackend ob_backend_x11 = {
     .surface_kill = x11_surface_kill,
     .surface_set_states = x11_surface_set_states,
     .surface_ping = x11_surface_ping,
+    .surface_info = x11_surface_info,
 
     .restack = x11_restack,
 
@@ -290,5 +386,6 @@ const ObBackend ob_backend_x11 = {
     .publish_current_desktop = x11_publish_current_desktop,
     .publish_desktop_names = x11_publish_desktop_names,
     .publish_surface_desktop = x11_publish_surface_desktop,
+    .publish_surface_titles = x11_publish_surface_titles,
     .publish_workareas = x11_publish_workareas,
 };

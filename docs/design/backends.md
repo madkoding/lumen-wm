@@ -109,7 +109,11 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       focus, close, kill, `_NET_WM_STATE` and ping). `surface_configure` and `surface_show` come with the frames,
       which still reparent and map the client themselves, and focusing nothing (`focus.c`'s fallback to the
       support window) comes with the support window.
-   6. Client info: property reading in `client.c` becomes `ObSurfaceInfo`, filled by the backend.
+   6. Client info: property reading in `client.c` becomes `ObSurfaceInfo`, filled by the backend's
+      `surface_info` for the fields asked for. Done for the titles, WM_PROTOCOLS and struts; the core keeps
+      the fallbacks (a title from WM_CLASS, a legacy strut spanning the screen) and publishes the visible
+      titles with `publish_surface_titles`. Next: the normal hints, WM_HINTS, the type and transient-for, then
+      the class, role and icons.
    7. Requests: `event.c` splits in two. The X11 half turns XEvents into `ObBackendEvents`, and the core half
       handles them.
    8. Input: `grab.c`, `keyboard.c`, `mouse.c`.

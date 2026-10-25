@@ -17,6 +17,8 @@
 
 #include "backend.h"
 
+#include <string.h>
+
 const ObBackend *ob_backend = NULL;
 
 /* the core still reads X events itself (event.c); these get filled in as
@@ -41,4 +43,14 @@ void backend_listen(void)
     GSource *source = ob_backend->event_source();
     g_source_attach(source, NULL);
     g_source_unref(source);
+}
+
+void backend_surface_info_clear(ObSurfaceInfo *info)
+{
+    g_free(info->title);
+    g_free(info->icon_title);
+    g_free(info->app_id);
+    g_free(info->instance);
+    g_free(info->role);
+    memset(info, 0, sizeof(*info));
 }
