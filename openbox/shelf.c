@@ -83,6 +83,7 @@ typedef struct {
     Rgb      hover;
     gdouble  divider_a;
     Rgb      divider;
+    Rgb      accent;     /* the running mark of the focused window */
 } Material;
 
 #define RGB(r, g, b) { (r) / 255.0, (g) / 255.0, (b) / 255.0 }
@@ -90,13 +91,91 @@ typedef struct {
 static const Material mat_dark = {
     FALSE, RGB(0x21, 0x25, 0x2b), RGB(0xe7, 0xe9, 0xe8),
     0.045, RGB(255, 255, 255), RGB(9, 11, 14), 0.38, 0.72,
-    0.10, RGB(255, 255, 255), 0.22, RGB(255, 255, 255)
+    0.10, RGB(255, 255, 255), 0.22, RGB(255, 255, 255),
+    RGB(0xe7, 0xe9, 0xe8)
 };
 static const Material mat_light = {
     TRUE, RGB(0xec, 0xee, 0xf1), RGB(0x2b, 0x30, 0x36),
     0.82, RGB(255, 255, 255), RGB(20, 22, 26), 0.14, 0.40,
-    0.07, RGB(25, 27, 31), 0.22, RGB(30, 34, 39)
+    0.07, RGB(25, 27, 31), 0.22, RGB(30, 34, 39),
+    RGB(0x2b, 0x30, 0x36)
 };
+
+/* The material taken from the Openbox theme in use, see theme_material(). */
+static Material mat_theme;
+
+static Rgb rr_rgb(const RrColor *c)
+{
+    Rgb o = { RrColorRed(c) / 255.0, RrColorGreen(c) / 255.0,
+              RrColorBlue(c) / 255.0 };
+    return o;
+}
+
+static gdouble linear(gdouble v)
+{
+    return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4);
+}
+
+/* WCAG relative luminance */
+static gdouble luminance(Rgb c)
+{
+    return 0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b);
+}
+
+static gdouble contrast(Rgb a, Rgb b)
+{
+    gdouble la = luminance(a), lb = luminance(b);
+    return la > lb ? (la + 0.05) / (lb + 0.05) : (lb + 0.05) / (la + 0.05);
+}
+
+/* the colour when it reads on the body, else black or white, whichever does */
+static Rgb readable(Rgb c, Rgb body, gdouble min)
+{
+    const Rgb white = RGB(255, 255, 255), black = RGB(0, 0, 0);
+    if (contrast(c, body) >= min) return c;
+    return contrast(white, body) > contrast(black, body) ? white : black;
+}
+
+/* Build the shelf's material from the colours of the Openbox theme: the
+   island is the menu's background, the text its text, the hover its selected
+   item and the running mark the title bar of the focused window. */
+static const Material *theme_material(void)
+{
+    const RrTheme *t = ob_rr_theme;
+    Material *m = &mat_theme;
+    Rgb body, hover, accent;
+
+    if (!t || !t->a_menu || !t->a_menu_selected || !t->a_focused_title ||
+        !t->menu_color || !t->menu_border_color || !t->menu_selected_color)
+        return &mat_dark;
+
+    body = rr_rgb(t->a_menu->surface.primary);
+    hover = rr_rgb(t->a_menu_selected->surface.primary);
+    accent = rr_rgb(t->a_focused_title->surface.primary);
+
+    m->body = body;
+    m->light = luminance(body) > 0.4;
+    m->ink = readable(rr_rgb(t->menu_color), body, 4.5);
+    m->stroke = rr_rgb(t->menu_border_color);
+    m->stroke_a = contrast(m->stroke, body) > 1.15 ? 0.85 : 0.0;
+    m->shadow = m->light ? mat_light.shadow : mat_dark.shadow;
+    m->shadow_near_a = m->light ? mat_light.shadow_near_a :
+                                  mat_dark.shadow_near_a;
+    m->shadow_mid_a = m->light ? mat_light.shadow_mid_a :
+                                 mat_dark.shadow_mid_a;
+    /* the selected item, but only when it stands out from the island */
+    if (contrast(hover, body) >= 1.12) {
+        m->hover = hover;
+        m->hover_a = 0.9;
+    } else {
+        m->hover = m->ink;
+        m->hover_a = 0.10;
+    }
+    m->divider = m->ink;
+    m->divider_a = 0.22;
+    m->accent = contrast(accent, body) >= 2.0 ? accent : m->ink;
+    return m;
+}
 
 typedef struct {
     ObShelfPin *pin;     /* the pinned application, or NULL */
@@ -947,7 +1026,8 @@ static void paint(void)
                       1.5 * G_PI, 2 * G_PI);
             cairo_line_to(cr, tx + TILE / 2.0 + 9, y + ISLAND_H);
             cairo_close_path(cr);
-            set_rgb(cr, m->ink, focused ? 1.0 : 0.45);
+            if (focused) set_rgb(cr, m->accent, 1.0);
+            else         set_rgb(cr, m->ink, 0.45);
             cairo_fill(cr);
         }
     }
@@ -1344,9 +1424,14 @@ void shelf_startup(gboolean reconfig)
     STRUT_PARTIAL_SET(shelf_strut, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     if (!config_shelf_enabled) { g_free(cm); return; }
 
-    S.m = config_shelf_material &&
-          !g_ascii_strcasecmp(config_shelf_material, "light") ?
-          &mat_light : &mat_dark;
+    if (config_shelf_material &&
+        !g_ascii_strcasecmp(config_shelf_material, "light"))
+        S.m = &mat_light;
+    else if (config_shelf_material &&
+             !g_ascii_strcasecmp(config_shelf_material, "dark"))
+        S.m = &mat_dark;
+    else
+        S.m = theme_material();
     S.argb = XGetSelectionOwner(d, XInternAtom(d, cm, False)) != None &&
              XMatchVisualInfo(d, ob_screen, 32, TrueColor, &vi);
     g_free(cm);

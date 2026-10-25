@@ -13,7 +13,7 @@ Enable it in `rc.xml`:
 ```xml
 <shelf>
   <enabled>yes</enabled>
-  <material>dark</material>  <!-- dark | light -->
+  <material>theme</material>  <!-- theme (the Openbox theme's colours) | dark | light -->
   <font></font>  <!-- empty = the system sans (fontconfig); or a family -->
 </shelf>
 ```
@@ -97,6 +97,6 @@ restart or reconfigure.
 ## Measurements
 
 40 px tiles, 8 px apart, 8 px island padding (56 px high), 16 px radius,
-material `#21252b` (dark) or `#eceef1` (light), 1 px stroke, shadows
+material `#21252b` (dark) or `#eceef1` (light), or the theme's menu colours (`theme`), 1 px stroke, shadows
 `0 3px 8px` and `0 22px 52px -15px`, 18x3 running mark, text in the font of
 your fontconfig default unless `<font>` names a family (21 px time, 11 px date).

@@ -1333,7 +1333,7 @@ void config_startup(ObtXmlInst *i)
     config_dock_hide_delay = 300;
     config_shelf_enabled = FALSE;
     g_free(config_shelf_material);
-    config_shelf_material = g_strdup("dark");
+    config_shelf_material = g_strdup("theme");
     g_free(config_shelf_font);
     config_shelf_font = g_strdup("");
     g_free(config_shelf_icon_theme);

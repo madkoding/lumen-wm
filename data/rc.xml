@@ -174,7 +174,7 @@
   <!-- Two floating islands at the bottom of the screen: a dock of the open
        windows, and a clock with status glyphs. Off by default. -->
   <enabled>no</enabled>
-  <material>dark</material><!-- dark | light -->
+  <material>theme</material><!-- theme | dark | light; theme follows the Openbox theme -->
   <!-- empty: the system default (fontconfig "Sans"); or a family, e.g. Sansation -->
   <font></font>
   <!-- where a pin's icon given as a bare name is looked up (a folder of

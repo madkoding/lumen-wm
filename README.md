@@ -31,6 +31,14 @@ Islands, left to right:
 The player and the weather hide themselves while their command prints nothing. More detail (measurements,
 the compositor-less mode) is in [`doc/shelf.md`](doc/shelf.md).
 
+### Themes
+
+With `<material>theme</material>` (the default) the shelf follows the Openbox theme in use:
+
+![The shelf under each bundled Openbox theme](docs/screenshots/shelf-themes.png)
+
+*Every bundled theme, in a test environment (Xvfb, no compositor).*
+
 ### Enable and configure it
 
 Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml)) and reconfigure
@@ -39,7 +47,7 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
 ```xml
 <shelf>
   <enabled>yes</enabled>              <!-- off by default -->
-  <material>dark</material>           <!-- dark | light -->
+  <material>theme</material>          <!-- theme | dark | light -->
   <font>Sansation</font>              <!-- empty = the fontconfig sans; or any family -->
   <iconTheme>Lucide</iconTheme>       <!-- where bare icon names are looked up -->
 
@@ -67,6 +75,10 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
 </shelf>
 ```
 
+- **Material**: `theme` (default) takes the shelf's colours from the Openbox theme in use: the island is the
+  menu background, the text the menu text, the hover the selected menu item and the running mark of the focused
+  window the active title bar. Colours that would not read on the island fall back to black or white. `dark` and
+  `light` are fixed. Change the theme and reconfigure to see it change.
 - **Pins**: a click starts the command, or focuses the window of that class (and minimises it if it
   already has focus). Bare icon names are searched in `$XDG_DATA_DIRS/icons/<iconTheme>/`.
 - **Pin and unpin**: right click a tile for *Pin to dock* or *Unpin from dock* (running apps also get their
