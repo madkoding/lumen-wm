@@ -89,6 +89,22 @@ static void x11_output_area(guint output, Rect *area)
     *area = outputs[output];
 }
 
+static void x11_restack(guintptr above, const guintptr *top_first, guint n)
+{
+    Window *win = g_new(Window, n + 1);
+    guint i;
+
+    for (i = 0; i < n; ++i) win[i + 1] = top_first[i];
+    if (above) {
+        win[0] = above;
+        XRestackWindows(obt_display, win, n + 1);
+    } else if (n) {
+        XRaiseWindow(obt_display, win[1]);
+        XRestackWindows(obt_display, win + 1, n);
+    }
+    g_free(win);
+}
+
 /* EWMH root properties, for pagers and taskbars */
 
 static Window root(void)
@@ -176,6 +192,8 @@ const ObBackend ob_backend_x11 = {
 
     .output_count = x11_output_count,
     .output_area = x11_output_area,
+
+    .restack = x11_restack,
 
     .publish_clients = x11_publish_clients,
     .publish_stacking = x11_publish_stacking,

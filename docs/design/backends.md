@@ -65,7 +65,7 @@ Rules:
 | `surface_kill` | XKillClient | `wl_client_destroy` |
 | `surface_set_states` | `_NET_WM_STATE` | xdg_toplevel states (maximized, fullscreen, activated, tiled) |
 | `surface_ping` | `_NET_WM_PING` | `xdg_wm_base.ping` |
-| `restack` | XRestackWindows | `wlr_scene_node_place_above` |
+| `restack` | XRestackWindows | `wlr_scene_node_place_below`, one node after the other |
 | `canvas_*` | an override-redirect or frame window, image put with XPutImage or cairo-xlib, Shape for input | a `wlr_scene_buffer`; panels and popups as layer-shell-like internal nodes |
 | `canvas_set_strut` | `_NET_WM_STRUT_PARTIAL` on the shelf window | the exclusive zone, which shrinks the usable area |
 | `bind_key` | XGrabKey on the root | nothing: the compositor sees every key first |
@@ -103,7 +103,8 @@ Every step is its own small PR, and the contract tests stay green on X11 through
    3. Publishing: the root properties move out of `screen.c`, `focus.c`, `stacking.c` and `client.c` (done).
       The client and stacking lists, the desktop count, current desktop and names, and the work areas are
       published separately, at the points where the core changes each.
-   4. Stacking: `restack` replaces XRestackWindows.
+   4. Stacking: `restack` replaces XRestackWindows (done). It keeps X's shape: a reference window and the
+      windows to put below it, top first, so the core still restacks one layer at a time.
    5. Surfaces: `surface_*` replaces the XSetInputFocus, WM_PROTOCOLS and kill calls in `client.c`.
    6. Client info: property reading in `client.c` becomes `ObSurfaceInfo`, filled by the backend.
    7. Requests: `event.c` splits in two. The X11 half turns XEvents into `ObBackendEvents`, and the core half
