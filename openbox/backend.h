@@ -30,6 +30,7 @@
 #define __backend_h
 
 #include "geom.h"
+#include "misc.h"
 
 #include <glib.h>
 
@@ -152,18 +153,10 @@ typedef struct _ObImage {
     gint stride;            /*!< in bytes */
 } ObImage;
 
-typedef enum {
-    OB_CURSOR_DEFAULT,
-    OB_CURSOR_BUSY,
-    OB_CURSOR_MOVE,
-    OB_CURSOR_NORTH, OB_CURSOR_NORTHEAST, OB_CURSOR_EAST,
-    OB_CURSOR_SOUTHEAST, OB_CURSOR_SOUTH, OB_CURSOR_SOUTHWEST,
-    OB_CURSOR_WEST, OB_CURSOR_NORTHWEST
-} ObCursor;
-
-/*! What the core asks of the display server. Every function must be set;
-  a backend that has nothing to do for one (key grabs on Wayland, where the
-  compositor sees every key) does nothing. */
+/*! What the core asks of the display server. A backend that has nothing to
+  do for one (key grabs on Wayland, where the compositor sees every key) does
+  nothing. While the core moves onto this interface, a function the core does
+  not call yet may be NULL; docs/design/backends.md says which. */
 struct _ObBackend {
     const gchar *name;
     ObBackendCaps caps;
@@ -293,5 +286,18 @@ struct _ObBackendEvents {
     void (*enter)(guintptr over, gboolean entered, guint32 time);
     void (*outputs_changed)(void);
 };
+
+/*! The backend in use, set by backend_startup(). */
+extern const ObBackend *ob_backend;
+/*! What the core does with backend events. */
+extern const ObBackendEvents ob_backend_events;
+
+extern const ObBackend ob_backend_x11;
+
+/*! Pick the backend and start it. */
+gboolean backend_startup(const gchar *display, gboolean replace);
+void backend_shutdown(void);
+/*! Start delivering the backend's events to the main loop. */
+void backend_listen(void);
 
 #endif

@@ -95,7 +95,9 @@ Every step is its own small PR, and the contract tests stay green on X11 through
 2. **This design** and `backend.h`, with no change in behaviour.
 3. **Move the core onto the interface**, one area at a time. Each PR adds the backend-x11 functions it needs
    (moving the Xlib code out of the core file, not rewriting it) and switches the callers:
-   1. `backend-x11.c` skeleton: `startup`, `event_source` and `time`, wrapping `obt_display` and `xqueue`.
+   1. `backend-x11.c` skeleton: `startup`, `shutdown` and `event_source`, wrapping `obt_display` and `xqueue`
+      (done). `openbox.c` starts the backend through `backend_startup()`. The other `ObBackend` functions stay
+      NULL until the step that moves their callers, and `time` comes with the event split (7).
    2. Outputs: `screen.c` stops calling Xinerama/RandR.
    3. Publishing: the root properties move out of `screen.c`, `focus.c`, `stacking.c` and `client.c`.
    4. Stacking: `restack` replaces XRestackWindows.

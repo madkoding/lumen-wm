@@ -19,6 +19,7 @@
 
 #include "debug.h"
 #include "openbox.h"
+#include "backend.h"
 #include "session.h"
 #include "dock.h"
 #include "shelf.h"
@@ -151,7 +152,7 @@ gint main(gint argc, gchar **argv)
     if (!remote_control)
         session_startup(argc, argv);
 
-    if (!obt_display_open(NULL))
+    if (!backend_startup(NULL, ob_replace_wm))
         ob_exit_with_error(_("Failed to open the display from the DISPLAY environment variable."));
 
     if (remote_control) {
@@ -160,7 +161,7 @@ gint main(gint argc, gchar **argv)
          * remote_control = 2 -> restart */
         OBT_PROP_MSG(ob_screen, obt_root(ob_screen),
                      OB_CONTROL, remote_control, 0, 0, 0, 0);
-        obt_display_close();
+        backend_shutdown();
         exit(EXIT_SUCCESS);
     }
 
@@ -337,7 +338,7 @@ gint main(gint argc, gchar **argv)
             if (!reconfigure) {
                 /* do this after everything is started so no events will get
                    missed */
-                xqueue_listen();
+                backend_listen();
 
                 guint32 xid;
                 ObWindow *w;
@@ -429,7 +430,7 @@ gint main(gint argc, gchar **argv)
 
     session_shutdown(being_replaced);
 
-    obt_display_close();
+    backend_shutdown();
 
     if (restart) {
         ob_debug_shutdown();
