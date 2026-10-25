@@ -56,7 +56,8 @@
 #define ART         40
 #define BTN         32
 #define BTN_GAP     6
-#define DAY_W       44
+#define DAY_W       46
+#define WPAD        16
 #define HIT_PREV    (-100)
 #define HIT_TOGGLE  (-101)
 #define HIT_NEXT    (-102)
@@ -537,7 +538,7 @@ static void layout_islands(void)
                       text_width(cr, sky, 12, PANGO_WEIGHT_NORMAL));
         gint n = weather_days(days);
         lw = MIN(lw, 130);
-        S.weather_w = 2 * PAD + lw +
+        S.weather_w = 2 * WPAD + lw +
                       (n ? DIVIDER_W + n * DAY_W + (n - 1) * 4 - 8 : 0);
         days_free(days, n);
         g_free(temp);
@@ -806,11 +807,11 @@ static void paint_media(cairo_t *cr, const Material *m, gint y)
 
 static void paint_weather(cairo_t *cr, const Material *m, gint y)
 {
-    gdouble x = S.weather_x + PAD, cy = y + ISLAND_H / 2.0;
+    gdouble x = S.weather_x + WPAD, cy = y + ISLAND_H / 2.0;
     gchar *temp = feed_line(&S.weather, 0), *sky = feed_line(&S.weather, 1);
     Day days[3];
     gint i, n = weather_days(days);
-    gint lw = S.weather_w - 2 * PAD -
+    gint lw = S.weather_w - 2 * WPAD -
               (n ? DIVIDER_W + n * DAY_W + (n - 1) * 4 - 8 : 0);
     PangoLayout *l;
     PangoRectangle ink, lg;
@@ -830,7 +831,7 @@ static void paint_weather(cairo_t *cr, const Material *m, gint y)
     g_object_unref(l);
 
     if (n) {
-        gdouble dx = x + lw + 8;
+        gdouble dx = x + lw + 12;
         cairo_rectangle(cr, dx, y + (ISLAND_H - DIVIDER_H) / 2.0, 1, DIVIDER_H);
         set_rgb(cr, m->divider, m->divider_a);
         cairo_fill(cr);
