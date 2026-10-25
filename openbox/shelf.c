@@ -71,8 +71,19 @@ typedef struct {
     gdouble r, g, b;
 } Rgb;
 
+typedef enum { G_SOLID, G_VERT, G_HORIZ, G_DIAG, G_CROSS, G_MIRROR } GradKind;
+
+/* A fill: one colour, or stops of the theme's gradient (0, 0.5 and 1; a
+   split gradient has a hard edge at 0.5 between c[1] and c[2]). */
+typedef struct {
+    GradKind kind;
+    gboolean split;
+    Rgb      c[4];
+} Fill;
+
 typedef struct {
     gboolean light;
+    Fill     fill;       /* the island's gradient; body is its mean */
     Rgb      body;       /* island material */
     Rgb      ink;
     gdouble  stroke_a;   /* white stroke alpha */
@@ -83,20 +94,233 @@ typedef struct {
     Rgb      hover;
     gdouble  divider_a;
     Rgb      divider;
+    Rgb      accent;     /* the running mark of the focused window */
+    Fill     hover_fill;
+    Fill     accent_fill;
 } Material;
 
 #define RGB(r, g, b) { (r) / 255.0, (g) / 255.0, (b) / 255.0 }
 
 static const Material mat_dark = {
-    FALSE, RGB(0x21, 0x25, 0x2b), RGB(0xe7, 0xe9, 0xe8),
+    FALSE, { G_SOLID }, RGB(0x21, 0x25, 0x2b), RGB(0xe7, 0xe9, 0xe8),
     0.045, RGB(255, 255, 255), RGB(9, 11, 14), 0.38, 0.72,
-    0.10, RGB(255, 255, 255), 0.22, RGB(255, 255, 255)
+    0.10, RGB(255, 255, 255), 0.22, RGB(255, 255, 255),
+    RGB(0xe7, 0xe9, 0xe8), { G_SOLID }, { G_SOLID }
 };
 static const Material mat_light = {
-    TRUE, RGB(0xec, 0xee, 0xf1), RGB(0x2b, 0x30, 0x36),
+    TRUE, { G_SOLID }, RGB(0xec, 0xee, 0xf1), RGB(0x2b, 0x30, 0x36),
     0.82, RGB(255, 255, 255), RGB(20, 22, 26), 0.14, 0.40,
-    0.07, RGB(25, 27, 31), 0.22, RGB(30, 34, 39)
+    0.07, RGB(25, 27, 31), 0.22, RGB(30, 34, 39),
+    RGB(0x2b, 0x30, 0x36), { G_SOLID }, { G_SOLID }
 };
+
+/* The material taken from the Openbox theme in use, see theme_material(). */
+static Material mat_theme;
+
+static void set_rgb(cairo_t *cr, Rgb c, gdouble a);
+
+static Rgb rr_rgb(const RrColor *c)
+{
+    Rgb o = { RrColorRed(c) / 255.0, RrColorGreen(c) / 255.0,
+              RrColorBlue(c) / 255.0 };
+    return o;
+}
+
+static gdouble linear(gdouble v)
+{
+    return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4);
+}
+
+/* WCAG relative luminance */
+static gdouble luminance(Rgb c)
+{
+    return 0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b);
+}
+
+static gdouble contrast(Rgb a, Rgb b)
+{
+    gdouble la = luminance(a), lb = luminance(b);
+    return la > lb ? (la + 0.05) / (lb + 0.05) : (lb + 0.05) / (la + 0.05);
+}
+
+/* the colour when it reads on the body, else black or white, whichever does */
+static Rgb readable(Rgb c, Rgb body, gdouble min)
+{
+    const Rgb white = RGB(255, 255, 255), black = RGB(0, 0, 0);
+    if (contrast(c, body) >= min) return c;
+    return contrast(white, body) > contrast(black, body) ? white : black;
+}
+
+static Rgb mix(Rgb a, Rgb b)
+{
+    Rgb o = { (a.r + b.r) / 2, (a.g + b.g) / 2, (a.b + b.b) / 2 };
+    return o;
+}
+
+/* the gradient of an Openbox appearance, as a Fill */
+static Fill rr_fill(const RrAppearance *a)
+{
+    const RrSurface *sf = &a->surface;
+    Fill f;
+
+    memset(&f, 0, sizeof f);
+    f.c[0] = f.c[1] = f.c[2] = f.c[3] = rr_rgb(sf->primary);
+    if (!sf->secondary) return f;
+    f.c[1] = f.c[2] = f.c[3] = rr_rgb(sf->secondary);
+    switch (sf->grad) {
+    case RR_SURFACE_SPLIT_VERTICAL:
+        f.kind = G_VERT;
+        f.split = TRUE;
+        if (sf->split_primary && sf->split_secondary) {
+            f.c[2] = rr_rgb(sf->split_primary);
+            f.c[3] = rr_rgb(sf->split_secondary);
+        }
+        break;
+    case RR_SURFACE_HORIZONTAL:        f.kind = G_HORIZ; break;
+    case RR_SURFACE_DIAGONAL:          f.kind = G_DIAG; break;
+    case RR_SURFACE_CROSS_DIAGONAL:    f.kind = G_CROSS; break;
+    case RR_SURFACE_MIRROR_HORIZONTAL:
+    case RR_SURFACE_PYRAMID:           f.kind = G_MIRROR; break;
+    case RR_SURFACE_VERTICAL:          f.kind = G_VERT; break;
+    default:                           break;
+    }
+    return f;
+}
+
+static Rgb fill_mean(const Fill *f)
+{
+    return f->kind == G_SOLID ? f->c[0] : mix(f->c[0], f->c[3]);
+}
+
+/* make the fill the source of cr for a box */
+static void fill_source(cairo_t *cr, const Fill *f, gdouble x, gdouble y,
+                        gdouble w, gdouble h, gdouble alpha)
+{
+    cairo_pattern_t *p;
+    gdouble x1 = x, y1 = y, x2 = x, y2 = y + h;
+
+    if (f->kind == G_SOLID) { set_rgb(cr, f->c[0], alpha); return; }
+    if (f->kind == G_HORIZ)      { x2 = x + w; y2 = y; }
+    else if (f->kind == G_DIAG)  { x2 = x + w; }
+    else if (f->kind == G_CROSS) { x1 = x + w; x2 = x; }
+    p = cairo_pattern_create_linear(x1, y1, x2, y2);
+    #define STOP(o, c) cairo_pattern_add_color_stop_rgba(p, o, c.r, c.g, c.b, alpha)
+    if (f->kind == G_MIRROR) {
+        STOP(0, f->c[0]); STOP(0.5, f->c[1]); STOP(1, f->c[0]);
+    } else if (f->split) {
+        STOP(0, f->c[0]); STOP(0.5, f->c[1]);
+        STOP(0.5, f->c[2]); STOP(1, f->c[3]);
+    } else {
+        STOP(0, f->c[0]); STOP(1, f->c[1]);
+    }
+    #undef STOP
+    cairo_set_source(cr, p);
+    cairo_pattern_destroy(p);
+}
+
+static void hover_source(cairo_t *cr, const Material *m, gdouble x,
+                         gdouble y)
+{
+    if (m->hover_fill.kind != G_SOLID)
+        fill_source(cr, &m->hover_fill, x, y, TILE, TILE, m->hover_a);
+    else
+        set_rgb(cr, m->hover, m->hover_a);
+}
+
+/* Build the shelf's material from the colours of the Openbox theme: the
+   island is the menu's background, the text its text, the hover its selected
+   item and the running mark the title bar of the focused window. */
+static const Material *theme_material(void)
+{
+    const RrTheme *t = ob_rr_theme;
+    Material *m = &mat_theme;
+    Rgb body, hover, accent;
+
+    if (!t || !t->a_menu || !t->a_menu_selected || !t->a_focused_title ||
+        !t->menu_color || !t->menu_border_color || !t->menu_selected_color)
+        return &mat_dark;
+
+    m->fill = rr_fill(t->a_menu);
+    m->hover_fill = rr_fill(t->a_menu_selected);
+    body = fill_mean(&m->fill);
+    hover = fill_mean(&m->hover_fill);
+    m->accent_fill = rr_fill(t->a_focused_title);
+    accent = fill_mean(&m->accent_fill);
+
+    m->body = body;
+    m->light = luminance(body) > 0.4;
+    m->ink = readable(rr_rgb(t->menu_color), body, 4.5);
+    m->stroke = rr_rgb(t->menu_border_color);
+    m->stroke_a = contrast(m->stroke, body) > 1.15 ? 0.85 : 0.0;
+    m->shadow = m->light ? mat_light.shadow : mat_dark.shadow;
+    m->shadow_near_a = m->light ? mat_light.shadow_near_a :
+                                  mat_dark.shadow_near_a;
+    m->shadow_mid_a = m->light ? mat_light.shadow_mid_a :
+                                 mat_dark.shadow_mid_a;
+    /* the selected item, but only when it stands out from the island */
+    if (contrast(hover, body) >= 1.12) {
+        m->hover = hover;
+        m->hover_a = 0.9;
+    } else {
+        m->hover_fill.kind = G_SOLID;
+        m->hover = m->ink;
+        m->hover_a = 0.10;
+    }
+    m->divider = m->ink;
+    m->divider_a = 0.22;
+    m->accent = contrast(accent, body) >= 2.0 ? accent : m->ink;
+    if (m->accent.r != accent.r || m->accent.g != accent.g ||
+        m->accent.b != accent.b)
+        m->accent_fill.kind = G_SOLID;
+    return m;
+}
+
+static gboolean parse_hex(const gchar *s, Rgb *out)
+{
+    guint r, g, b;
+    gchar tail;
+    if (!s || sscanf(s, " #%2x%2x%2x %c", &r, &g, &b, &tail) != 3)
+        return FALSE;
+    out->r = r / 255.0; out->g = g / 255.0; out->b = b / 255.0;
+    return TRUE;
+}
+
+/* the material with the colours of <colors> laid over it */
+static const Material *override_material(const Material *base)
+{
+    static Material m;
+    Rgb c;
+    gboolean any = FALSE;
+
+    m = *base;
+    if (parse_hex(config_shelf_color_body, &c)) {
+        m.body = c; m.fill.kind = G_SOLID; m.fill.c[0] = c;
+        m.light = luminance(c) > 0.4;
+        if (!parse_hex(config_shelf_color_text, &m.ink))
+            m.ink = readable(m.ink, c, 4.5);
+        any = TRUE;
+    }
+    if (parse_hex(config_shelf_color_text, &c)) { m.ink = c; any = TRUE; }
+    if (parse_hex(config_shelf_color_hover, &c)) {
+        m.hover = c; m.hover_a = 0.9; m.hover_fill.kind = G_SOLID; any = TRUE;
+    }
+    if (parse_hex(config_shelf_color_accent, &c)) {
+        m.accent = c; m.accent_fill.kind = G_SOLID; any = TRUE;
+    }
+    return any ? &m : base;
+}
+
+/* OB_SHELF_DEBUG=1: print the material, for tools/shelf-themes.sh */
+static void dump_material(const Material *m)
+{
+    g_printerr("shelf-material light=%d body=%.3f,%.3f,%.3f "
+               "ink=%.3f,%.3f,%.3f contrast=%.2f hover=%.2f accent=%.2f\n",
+               m->light, m->body.r, m->body.g, m->body.b,
+               m->ink.r, m->ink.g, m->ink.b, contrast(m->ink, m->body),
+               contrast(m->hover_fill.kind != G_SOLID ?
+                        fill_mean(&m->hover_fill) : m->hover, m->body),
+               contrast(m->accent, m->body));
+}
 
 typedef struct {
     ObShelfPin *pin;     /* the pinned application, or NULL */
@@ -896,7 +1120,8 @@ static void paint(void)
         for (i = 0; i < 4; ++i) {
             if (!ws[i]) continue;
             rrect(cr, xs[i], y, ws[i], ISLAND_H, ISLAND_R);
-            set_rgb(cr, m->body, 1);
+            if (m->fill.kind == G_SOLID) set_rgb(cr, m->body, 1);
+            else fill_source(cr, &m->fill, xs[i], y, ws[i], ISLAND_H, 1);
             cairo_fill(cr);
             rrect(cr, xs[i] + 0.5, y + 0.5, ws[i] - 1, ISLAND_H - 1,
                   ISLAND_R - 0.5);
@@ -911,7 +1136,7 @@ static void paint(void)
         gdouble ax = S.dock_x + PAD, ay = y + PAD;
         if (S.hover == 0) {
             rrect(cr, ax, ay, TILE, TILE, TILE_RADIUS);
-            set_rgb(cr, m->hover, m->hover_a);
+            hover_source(cr, m, ax, ay);
             cairo_fill(cr);
         }
         glyph_apps(cr, ax + TILE / 2.0, ay + TILE / 2.0, m->ink);
@@ -930,7 +1155,7 @@ static void paint(void)
 
             if (S.hover == i + 1) {
                 rrect(cr, tx, ty, TILE, TILE, TILE_RADIUS);
-                set_rgb(cr, m->hover, m->hover_a);
+                hover_source(cr, m, tx, ty);
                 cairo_fill(cr);
             }
             draw_tile(cr, t, tx, ty, m);
@@ -947,7 +1172,13 @@ static void paint(void)
                       1.5 * G_PI, 2 * G_PI);
             cairo_line_to(cr, tx + TILE / 2.0 + 9, y + ISLAND_H);
             cairo_close_path(cr);
-            set_rgb(cr, m->ink, focused ? 1.0 : 0.45);
+            if (!focused)
+                set_rgb(cr, m->ink, 0.45);
+            else if (m->accent_fill.kind != G_SOLID)
+                fill_source(cr, &m->accent_fill, tx + TILE / 2.0 - 9,
+                            y + ISLAND_H - 3, 18, 3, 1.0);
+            else
+                set_rgb(cr, m->accent, 1.0);
             cairo_fill(cr);
         }
     }
@@ -1344,9 +1575,16 @@ void shelf_startup(gboolean reconfig)
     STRUT_PARTIAL_SET(shelf_strut, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     if (!config_shelf_enabled) { g_free(cm); return; }
 
-    S.m = config_shelf_material &&
-          !g_ascii_strcasecmp(config_shelf_material, "light") ?
-          &mat_light : &mat_dark;
+    if (config_shelf_material &&
+        !g_ascii_strcasecmp(config_shelf_material, "light"))
+        S.m = &mat_light;
+    else if (config_shelf_material &&
+             !g_ascii_strcasecmp(config_shelf_material, "dark"))
+        S.m = &mat_dark;
+    else
+        S.m = theme_material();
+    S.m = override_material(S.m);
+    if (g_getenv("OB_SHELF_DEBUG")) dump_material(S.m);
     S.argb = XGetSelectionOwner(d, XInternAtom(d, cm, False)) != None &&
              XMatchVisualInfo(d, ob_screen, 32, TrueColor, &vi);
     g_free(cm);

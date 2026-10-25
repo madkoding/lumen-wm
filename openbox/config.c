@@ -83,6 +83,10 @@ gboolean        config_dock_hide;
 guint           config_dock_hide_delay;
 gboolean        config_shelf_enabled;
 gchar          *config_shelf_material;
+gchar          *config_shelf_color_body;
+gchar          *config_shelf_color_text;
+gchar          *config_shelf_color_hover;
+gchar          *config_shelf_color_accent;
 gchar          *config_shelf_font;
 gchar          *config_shelf_icon_theme;
 GSList         *config_shelf_pins;
@@ -1103,6 +1107,25 @@ static void parse_shelf(xmlNodePtr node, gpointer d)
         g_free(config_shelf_material);
         config_shelf_material = obt_xml_node_string(n);
     }
+    if ((n = obt_xml_find_node(node, "colors"))) {
+        xmlNodePtr c = n->children, k;
+        if ((k = obt_xml_find_node(c, "body"))) {
+            g_free(config_shelf_color_body);
+            config_shelf_color_body = obt_xml_node_string(k);
+        }
+        if ((k = obt_xml_find_node(c, "text"))) {
+            g_free(config_shelf_color_text);
+            config_shelf_color_text = obt_xml_node_string(k);
+        }
+        if ((k = obt_xml_find_node(c, "hover"))) {
+            g_free(config_shelf_color_hover);
+            config_shelf_color_hover = obt_xml_node_string(k);
+        }
+        if ((k = obt_xml_find_node(c, "accent"))) {
+            g_free(config_shelf_color_accent);
+            config_shelf_color_accent = obt_xml_node_string(k);
+        }
+    }
     if ((n = obt_xml_find_node(node, "font"))) {
         g_free(config_shelf_font);
         config_shelf_font = obt_xml_node_string(n);
@@ -1333,7 +1356,15 @@ void config_startup(ObtXmlInst *i)
     config_dock_hide_delay = 300;
     config_shelf_enabled = FALSE;
     g_free(config_shelf_material);
-    config_shelf_material = g_strdup("dark");
+    config_shelf_material = g_strdup("theme");
+    g_free(config_shelf_color_body);
+    config_shelf_color_body = g_strdup("");
+    g_free(config_shelf_color_text);
+    config_shelf_color_text = g_strdup("");
+    g_free(config_shelf_color_hover);
+    config_shelf_color_hover = g_strdup("");
+    g_free(config_shelf_color_accent);
+    config_shelf_color_accent = g_strdup("");
     g_free(config_shelf_font);
     config_shelf_font = g_strdup("");
     g_free(config_shelf_icon_theme);
