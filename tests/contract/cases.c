@@ -18,6 +18,12 @@ static ct_win *mapped(ct_win_type type, const char *title, ct_rect want)
     return w;
 }
 
+/* The window manager tells pagers and panels it runs. */
+static void wm_announced(void)
+{
+    CT_CHECK(ct_wm_announced());
+}
+
 /* A mapped window is managed and shown, and given its size. */
 static void map_manages(void)
 {
@@ -627,6 +633,7 @@ static void alt_drag_moves(void)
 }
 
 const ct_case ct_cases[] = {
+    { "wm_announced", wm_announced },
     { "map_manages", map_manages },
     { "title_shown", title_shown },
     { "untitled_shows_app_id", untitled_shows_app_id },

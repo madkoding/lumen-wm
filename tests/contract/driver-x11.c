@@ -16,6 +16,7 @@
 #include <X11/keysym.h>
 #include <X11/extensions/XTest.h>
 #endif
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -45,7 +46,7 @@ enum {
     NET_WM_WINDOW_TYPE_DIALOG, UTF8_STRING, NET_WM_VISIBLE_NAME,
     MOTIF_WM_HINTS, NET_RESTACK_WINDOW, NET_MOVERESIZE_WINDOW,
     NET_WM_MOVERESIZE, NET_WM_SYNC_REQUEST, NET_WM_SYNC_REQUEST_COUNTER,
-    NET_WM_WINDOW_OPACITY,
+    NET_WM_WINDOW_OPACITY, NET_SUPPORTED, NET_WM_STATE_MAX,
     NUM_ATOMS
 };
 
@@ -64,6 +65,7 @@ static char *atom_names[NUM_ATOMS] = {
     "_NET_WM_VISIBLE_NAME", "_MOTIF_WM_HINTS", "_NET_RESTACK_WINDOW",
     "_NET_MOVERESIZE_WINDOW", "_NET_WM_MOVERESIZE", "_NET_WM_SYNC_REQUEST",
     "_NET_WM_SYNC_REQUEST_COUNTER", "_NET_WM_WINDOW_OPACITY",
+    "_NET_SUPPORTED", "_NET_WM_STATE",
 };
 
 static Atom atoms[NUM_ATOMS];
@@ -449,6 +451,50 @@ bool ct_window_focused(ct_win *w)
 {
     return !w->destroyed &&
         (Window)get_card(root, NET_ACTIVE_WINDOW, 0) == w->id;
+}
+
+static bool ct_has_name(Window w)
+{
+    Atom ret_type;
+    int format;
+    unsigned long n = 0, after;
+    unsigned char *data = NULL;
+
+    XGetWindowProperty(dpy, w, atoms[NET_WM_NAME], 0, 64, False,
+                       atoms[UTF8_STRING], &ret_type, &format, &n, &after,
+                       &data);
+    if (data) XFree(data);
+    return n > 0;
+}
+
+bool ct_wm_announced(void)
+{
+    unsigned long *check = NULL, *self = NULL, *supported = NULL;
+    unsigned long n;
+    char sel[16];
+    Window owner;
+    bool r = false;
+
+    /* ICCCM: it holds WM_Sn with the window it names in
+       _NET_SUPPORTING_WM_CHECK, and that window names itself (EWMH) */
+    snprintf(sel, sizeof(sel), "WM_S%d", DefaultScreen(dpy));
+    owner = XGetSelectionOwner(dpy, XInternAtom(dpy, sel, False));
+    if (owner != None &&
+        get_prop(root, NET_SUPPORTING_WM_CHECK, XA_WINDOW, &check) >= 1 &&
+        check[0] == owner &&
+        get_prop(owner, NET_SUPPORTING_WM_CHECK, XA_WINDOW, &self) >= 1 &&
+        self[0] == owner &&
+        ct_has_name(owner))
+    {
+        /* and it says what it supports */
+        n = get_prop(root, NET_SUPPORTED, XA_ATOM, &supported);
+        for (unsigned long i = 0; i < n; ++i)
+            if (supported[i] == atoms[NET_WM_STATE_MAX]) r = true;
+    }
+    if (check) XFree(check);
+    if (self) XFree(self);
+    if (supported) XFree(supported);
+    return r;
 }
 
 bool ct_nothing_focused(void)
