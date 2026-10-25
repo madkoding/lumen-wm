@@ -27,6 +27,7 @@
 #include "resist.h"
 #include "popup.h"
 #include "moveresize.h"
+#include "backend.h"
 #include "config.h"
 #include "event.h"
 #include "debug.h"
@@ -602,7 +603,7 @@ static void edge_warp_move_ptr(void)
         g_assert_not_reached();
     }
 
-    XWarpPointer(obt_display, 0, obt_root(ob_screen), 0, 0, 0, 0, x, y);
+    ob_backend->pointer_warp(x, y, FALSE);
 }
 
 static gboolean edge_warp_delay_func(gpointer data)
@@ -718,14 +719,8 @@ static void move_with_keys(KeySym sym, guint state)
     }
 
     screen_pointer_pos(&opx, &opy);
-    XWarpPointer(obt_display, None, None, 0, 0, 0, 0, dx, dy);
-    /* steal the motion events this causes */
-    XSync(obt_display, FALSE);
-    {
-        XEvent ce;
-        while (xqueue_remove_local(&ce, xqueue_match_type,
-                                   GINT_TO_POINTER(MotionNotify)));
-    }
+    /* without the motion events this causes */
+    ob_backend->pointer_warp(opx + dx, opy + dy, TRUE);
     screen_pointer_pos(&px, &py);
 
     cur_x += dx;
@@ -910,14 +905,8 @@ static void resize_with_keys(KeySym sym, guint state)
         pdy = dh;
 
     screen_pointer_pos(&opx, &opy);
-    XWarpPointer(obt_display, None, None, 0, 0, 0, 0, pdx, pdy);
-    /* steal the motion events this causes */
-    XSync(obt_display, FALSE);
-    {
-        XEvent ce;
-        while (xqueue_remove_local(&ce, xqueue_match_type,
-                                   GINT_TO_POINTER(MotionNotify)));
-    }
+    /* without the motion events this causes */
+    ob_backend->pointer_warp(opx + pdx, opy + pdy, TRUE);
     screen_pointer_pos(&px, &py);
 
     do_resize();

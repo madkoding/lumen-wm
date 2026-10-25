@@ -1084,6 +1084,38 @@ static void x11_pass_click(guint32 time)
     XAllowEvents(obt_display, ReplayPointer, time);
 }
 
+static gboolean x11_pointer_position(gint *x, gint *y)
+{
+    /* we don't care about any of these return values, but we can't pass
+       NULL */
+    Window w;
+    guint u;
+    gint i, j;
+    gboolean ret;
+
+    ret = !!XQueryPointer(obt_display, root(), &w, &w, x, y, &j, &j, &u);
+    if (!ret) {
+        for (i = 0; i < ScreenCount(obt_display); ++i)
+            if (obt_root(i) != root())
+                if ((ret = XQueryPointer(obt_display, obt_root(i),
+                                         &w, &w, x, y, &j, &j, &u)))
+                    break;
+    }
+    return ret;
+}
+
+static void x11_pointer_warp(gint x, gint y, gboolean swallow)
+{
+    XWarpPointer(obt_display, None, root(), 0, 0, 0, 0, x, y);
+    if (swallow) {
+        XEvent ce;
+
+        XSync(obt_display, FALSE);
+        while (xqueue_remove_local(&ce, xqueue_match_type,
+                                   GINT_TO_POINTER(MotionNotify)));
+    }
+}
+
 static void x11_grab_server(gboolean grab)
 {
     if (grab) {
@@ -1127,6 +1159,8 @@ const ObBackend ob_backend_x11 = {
     .bind_button = x11_bind_button,
     .unbind_button = x11_unbind_button,
     .pass_click = x11_pass_click,
+    .pointer_position = x11_pointer_position,
+    .pointer_warp = x11_pointer_warp,
 
     .publish_clients = x11_publish_clients,
     .publish_stacking = x11_publish_stacking,

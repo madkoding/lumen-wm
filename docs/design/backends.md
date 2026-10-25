@@ -142,8 +142,9 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       let go over), and becomes the `button`, `motion` and `key` events when the backend reads the queue. Next: move/resize (9).
    9. Move/resize: XSync and pointer warps go behind the backend. Done: `moveresize_start()` takes an
       `ObMoveResize` (the `_NET_WM_MOVERESIZE` directions as a core enum) instead of the atoms, and the
-      client's `_NET_WM_MOVERESIZE` is `request_move_resize`. Next: the pointer warps of keyboard moves,
-      then the XSync counter of synced resizes.
+      client's `_NET_WM_MOVERESIZE` is `request_move_resize`. The pointer queries and warps (keyboard moves,
+      the edge warp between desktops) are `pointer_position` and `pointer_warp`, which can swallow the
+      motion it makes. Next: the XSync counter of synced resizes.
 4. **Render without Xlib**: obrender, frames, the shelf, menus and popups draw into cairo image surfaces and hand
    them to `canvas_present`. Themes are unchanged, and `tools/shelf-themes.sh` checks that they still read.
 5. **backend-wlroots**: a compositor on wlroots' scene graph with xdg-shell, xdg-decoration, layer-shell,

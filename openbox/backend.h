@@ -382,8 +382,12 @@ struct _ObBackend {
     /*! Let the press a hold binding held reach the client after all
       (X11 XAllowEvents ReplayPointer). time: the press's. */
     void (*pass_click)(guint32 time);
-    void (*pointer_position)(gint *x, gint *y);
-    void (*pointer_warp)(gint x, gint y);
+    /*! Where the pointer is, in layout coordinates. FALSE when it isn't
+      over any output of ours (X11: on another screen). */
+    gboolean (*pointer_position)(gint *x, gint *y);
+    /*! Move the pointer there. swallow: drop the motion this makes, so the
+      core doesn't take it for the user's. */
+    void (*pointer_warp)(gint x, gint y, gboolean swallow);
     void (*set_cursor)(ObCanvasId c, ObCursor cursor);
 
     /* --- state for pagers and taskbars --- */
