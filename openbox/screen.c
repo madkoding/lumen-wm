@@ -20,6 +20,7 @@
 #include "debug.h"
 #include "openbox.h"
 #include "dock.h"
+#include "shelf.h"
 #include "grab.h"
 #include "startupnotify.h"
 #include "moveresize.h"
@@ -1481,6 +1482,9 @@ void screen_update_areas(void)
         ADD_STRUT_TO_LIST(struts_right, DESKTOP_ALL, &dock_strut);
     if (dock_strut.bottom)
         ADD_STRUT_TO_LIST(struts_bottom, DESKTOP_ALL, &dock_strut);
+
+    if (shelf_strut.bottom)
+        ADD_STRUT_TO_LIST(struts_bottom, DESKTOP_ALL, &shelf_strut);
 
     if (config_margins.left)
         ADD_STRUT_TO_LIST(struts_left, DESKTOP_ALL, &config_margins);

@@ -31,6 +31,7 @@
                 <xsd:element name="resize" type="ob:resize"/>
                 <xsd:element minOccurs="0" name="margins" type="ob:margins"/>
                 <xsd:element name="dock" type="ob:dock"/>
+                <xsd:element minOccurs="0" name="shelf" type="ob:shelf"/>
                 <xsd:element name="keyboard" type="ob:keyboard"/>
                 <xsd:element name="mouse" type="ob:mouse"/>
                 <xsd:element name="menu" type="ob:menu"/>
@@ -149,6 +150,13 @@
             <xsd:element minOccurs="0" name="hideDelay" type="xsd:integer"/>
             <xsd:element minOccurs="0" name="showDelay" type="xsd:integer"/>
             <xsd:element minOccurs="0" name="moveButton" type="ob:button"/>
+        </xsd:all>
+    </xsd:complexType>
+    <xsd:complexType name="shelf">
+        <xsd:all>
+            <xsd:element minOccurs="0" name="enabled" type="ob:bool"/>
+            <xsd:element minOccurs="0" name="material" type="xsd:string"/>
+            <xsd:element minOccurs="0" name="font" type="xsd:string"/>
         </xsd:all>
     </xsd:complexType>
     <xsd:complexType name="action">
