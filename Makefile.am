@@ -242,6 +242,7 @@ openbox_lumen_wm_SOURCES = \
 	openbox/actions/unfocus.c \
 	openbox/actions.c \
 	openbox/actions.h \
+	openbox/backend.h \
 	openbox/client.c \
 	openbox/client.h \
 	openbox/client_list_menu.c \

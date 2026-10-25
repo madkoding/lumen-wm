@@ -9,6 +9,8 @@
   theme dirs (`openbox-3`), XML root nodes and X properties keep the Openbox names.
 - The look is based on LumaUI (https://hub.simplyluma.com/developer/agents/design-with-lumaui.md); keep that
   credit in the README when touching branding.
+- X11 and Wayland: the core is moving behind `openbox/backend.h` (plan and steps in `docs/design/backends.md`).
+  Don't add new Xlib calls to core files; put them in the X11 backend.
 - Commits and pull request titles are semantic (`feat(shelf): …`, `fix(menu): …`, `docs: …`).
 
 ## Checks

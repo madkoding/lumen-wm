@@ -15,12 +15,20 @@ ROOT=$(cd "$HERE/../.." && pwd)
 CONTRACT=${CONTRACT:-$HERE/contract-x11}
 DISP=${DISP:-:96}
 WORK=$(mktemp -d)
-trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$WORK"' EXIT
+xvfb=
+wm=
+# dash's jobs -p is empty inside a trap, so kill by pid
+trap 'kill $wm $xvfb 2>/dev/null; rm -rf "$WORK"' EXIT
 
 WM=$PREFIX/bin/lumen-wm
 [ -x "$WM" ] || WM=$PREFIX/bin/openbox
 
+if [ -e "/tmp/.X11-unix/X${DISP#:}" ]; then
+    echo "Bail out! display $DISP is in use; set DISP to another one"
+    exit 2
+fi
 Xvfb $DISP -screen 0 1280x800x24 -nolisten tcp >"$WORK/xvfb.log" 2>&1 &
+xvfb=$!
 i=0
 until [ -e "/tmp/.X11-unix/X${DISP#:}" ] || [ $i -ge 50 ]; do
     sleep 0.1; i=$((i + 1))
@@ -40,5 +48,4 @@ if [ $status -ne 0 ]; then
     echo "# window manager log:"
     sed 's/^/#   /' "$WORK/wm.log"
 fi
-kill $wm 2>/dev/null
 exit $status
