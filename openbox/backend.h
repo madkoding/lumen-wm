@@ -159,7 +159,8 @@ typedef enum {
     OB_SURFACE_INFO_STATES   = 1 << 13, /*!< the states it maps in */
     OB_SURFACE_INFO_USER_TIME = 1 << 14,
     OB_SURFACE_INFO_SYNC     = 1 << 15, /*!< its resize sync counter */
-    OB_SURFACE_INFO_ALL      = (1 << 16) - 1
+    OB_SURFACE_INFO_OPACITY  = 1 << 16, /*!< how opaque it asks to be */
+    OB_SURFACE_INFO_ALL      = (1 << 17) - 1
 } ObSurfaceInfoFields;
 
 /*! One size of a client's icon. */
@@ -249,6 +250,8 @@ typedef struct _ObSurfaceInfo {
     /*! what it syncs resizes with (an XSync counter on X11); 0 for
       nothing. Only with OB_BACKEND_CAP_SYNC_RESIZE. */
     guint32 sync_counter;
+    gboolean has_opacity;   /*!< FALSE: it leaves that to the compositor */
+    guint32 opacity;        /*!< 0 is clear, 0xffffffff opaque */
 
     ObIcon *icons;          /*!< every size it offers; NULL for none */
     guint n_icons;
@@ -362,6 +365,11 @@ struct _ObBackend {
     /*! Reserve an edge of the output, as a strut or a layer-shell
       exclusive zone. */
     void (*canvas_set_strut)(ObCanvasId c, const StrutPartial *strut);
+    /*! Show it, and the surface a decoration frames, this opaque (as
+      ObSurfaceInfo's opacity); set FALSE leaves that to the compositor.
+      Until the frames are canvases, the core passes a frame's window, as
+      it does to restack. */
+    void (*canvas_set_opacity)(ObCanvasId c, gboolean set, guint32 opacity);
 
     /* --- input --- */
 
