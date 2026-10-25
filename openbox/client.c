@@ -3660,7 +3660,8 @@ void client_set_wm_state(ObClient *self, glong state)
     }
 }
 
-void client_set_state(ObClient *self, Atom action, glong data1, glong data2)
+void client_set_state(ObClient *self, ObStateAction action,
+                      ObSurfaceStates first, ObSurfaceStates second)
 {
     gboolean shaded = self->shaded;
     gboolean fullscreen = self->fullscreen;
@@ -3675,80 +3676,73 @@ void client_set_state(ObClient *self, Atom action, glong data1, glong data2)
     gint i;
     gboolean value;
 
-    if (!(action == OBT_PROP_ATOM(NET_WM_STATE_ADD) ||
-          action == OBT_PROP_ATOM(NET_WM_STATE_REMOVE) ||
-          action == OBT_PROP_ATOM(NET_WM_STATE_TOGGLE)))
-        /* an invalid action was passed to the client message, ignore it */
-        return;
-
     for (i = 0; i < 2; ++i) {
-        Atom state = i == 0 ? data1 : data2;
+        ObSurfaceStates state = i == 0 ? first : second;
 
         if (!state) continue;
 
         /* if toggling, then pick whether we're adding or removing */
-        if (action == OBT_PROP_ATOM(NET_WM_STATE_TOGGLE)) {
-            if (state == OBT_PROP_ATOM(NET_WM_STATE_MODAL))
+        if (action == OB_STATE_ACTION_TOGGLE) {
+            if (state == OB_SURFACE_STATE_MODAL)
                 value = modal;
-            else if (state == OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_VERT))
+            else if (state == OB_SURFACE_STATE_MAXIMIZED_VERT)
                 value = self->max_vert;
-            else if (state == OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_HORZ))
+            else if (state == OB_SURFACE_STATE_MAXIMIZED_HORZ)
                 value = self->max_horz;
-            else if (state == OBT_PROP_ATOM(NET_WM_STATE_SHADED))
+            else if (state == OB_SURFACE_STATE_SHADED)
                 value = shaded;
-            else if (state == OBT_PROP_ATOM(NET_WM_STATE_SKIP_TASKBAR))
+            else if (state == OB_SURFACE_STATE_SKIP_TASKBAR)
                 value = self->skip_taskbar;
-            else if (state == OBT_PROP_ATOM(NET_WM_STATE_SKIP_PAGER))
+            else if (state == OB_SURFACE_STATE_SKIP_PAGER)
                 value = self->skip_pager;
-            else if (state == OBT_PROP_ATOM(NET_WM_STATE_HIDDEN))
+            else if (state == OB_SURFACE_STATE_ICONIC)
                 value = self->iconic;
-            else if (state == OBT_PROP_ATOM(NET_WM_STATE_FULLSCREEN))
+            else if (state == OB_SURFACE_STATE_FULLSCREEN)
                 value = fullscreen;
-            else if (state == OBT_PROP_ATOM(NET_WM_STATE_ABOVE))
+            else if (state == OB_SURFACE_STATE_ABOVE)
                 value = self->above;
-            else if (state == OBT_PROP_ATOM(NET_WM_STATE_BELOW))
+            else if (state == OB_SURFACE_STATE_BELOW)
                 value = self->below;
-            else if (state == OBT_PROP_ATOM(NET_WM_STATE_DEMANDS_ATTENTION))
+            else if (state == OB_SURFACE_STATE_URGENT)
                 value = self->demands_attention;
-            else if (state == OBT_PROP_ATOM(OB_WM_STATE_UNDECORATED))
+            else if (state == OB_SURFACE_STATE_UNDECORATED)
                 value = undecorated;
             else
-                g_assert_not_reached();
-            action = value ? OBT_PROP_ATOM(NET_WM_STATE_REMOVE) :
-                             OBT_PROP_ATOM(NET_WM_STATE_ADD);
+                continue; /* not one a client can ask for */
+            action = value ? OB_STATE_ACTION_REMOVE : OB_STATE_ACTION_ADD;
         }
 
-        value = action == OBT_PROP_ATOM(NET_WM_STATE_ADD);
-        if (state == OBT_PROP_ATOM(NET_WM_STATE_MODAL)) {
+        value = action == OB_STATE_ACTION_ADD;
+        if (state == OB_SURFACE_STATE_MODAL) {
             modal = value;
-        } else if (state == OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_VERT)) {
+        } else if (state == OB_SURFACE_STATE_MAXIMIZED_VERT) {
             max_vert = value;
-        } else if (state == OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_HORZ)) {
+        } else if (state == OB_SURFACE_STATE_MAXIMIZED_HORZ) {
             max_horz = value;
-        } else if (state == OBT_PROP_ATOM(NET_WM_STATE_SHADED)) {
+        } else if (state == OB_SURFACE_STATE_SHADED) {
             shaded = value;
-        } else if (state == OBT_PROP_ATOM(NET_WM_STATE_SKIP_TASKBAR)) {
+        } else if (state == OB_SURFACE_STATE_SKIP_TASKBAR) {
             self->skip_taskbar = value;
-        } else if (state == OBT_PROP_ATOM(NET_WM_STATE_SKIP_PAGER)) {
+        } else if (state == OB_SURFACE_STATE_SKIP_PAGER) {
             self->skip_pager = value;
-        } else if (state == OBT_PROP_ATOM(NET_WM_STATE_HIDDEN)) {
+        } else if (state == OB_SURFACE_STATE_ICONIC) {
             iconic = value;
-        } else if (state == OBT_PROP_ATOM(NET_WM_STATE_FULLSCREEN)) {
+        } else if (state == OB_SURFACE_STATE_FULLSCREEN) {
             fullscreen = value;
-        } else if (state == OBT_PROP_ATOM(NET_WM_STATE_ABOVE)) {
+        } else if (state == OB_SURFACE_STATE_ABOVE) {
             above = value;
             /* only unset below when setting above, otherwise you can't get to
                the normal layer */
             if (value)
                 below = FALSE;
-        } else if (state == OBT_PROP_ATOM(NET_WM_STATE_BELOW)) {
+        } else if (state == OB_SURFACE_STATE_BELOW) {
             /* and vice versa */
             if (value)
                 above = FALSE;
             below = value;
-        } else if (state == OBT_PROP_ATOM(NET_WM_STATE_DEMANDS_ATTENTION)){
+        } else if (state == OB_SURFACE_STATE_URGENT) {
             demands_attention = value;
-        } else if (state == OBT_PROP_ATOM(OB_WM_STATE_UNDECORATED)) {
+        } else if (state == OB_SURFACE_STATE_UNDECORATED) {
             undecorated = value;
         }
     }

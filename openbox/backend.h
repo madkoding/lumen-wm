@@ -97,9 +97,17 @@ typedef enum {
 
 /*! Who asked, so focus stealing prevention can weigh it. */
 typedef enum {
+    OB_REQUEST_FROM_UNKNOWN,
     OB_REQUEST_FROM_APPLICATION,
     OB_REQUEST_FROM_PAGER
 } ObRequestSource;
+
+/*! What to do with the states in a request. */
+typedef enum {
+    OB_STATE_ACTION_REMOVE,
+    OB_STATE_ACTION_ADD,
+    OB_STATE_ACTION_TOGGLE
+} ObStateAction;
 
 /*! Which parts of ObSurfaceInfo changed. */
 typedef enum {
@@ -365,8 +373,16 @@ struct _ObBackendEvents {
     /*! fields: which of want's x, y, width, height it asked for, as
       1 << 0 .. 1 << 3. */
     void (*request_configure)(ObSurfaceId s, const Rect *want, guint fields);
-    void (*request_states)(ObSurfaceId s, ObSurfaceStates on,
-                           ObSurfaceStates off, ObRequestSource from);
+    /*! first and second are one state each, or 0; they are applied in that
+      order, as _NET_WM_STATE does. */
+    void (*request_states)(ObSurfaceId s, ObStateAction action,
+                           ObSurfaceStates first, ObSurfaceStates second,
+                           ObRequestSource from);
+    /*! The client asks to be iconified, or shown again (ICCCM
+      WM_CHANGE_STATE, xdg_toplevel.set_minimized). */
+    void (*request_iconify)(ObSurfaceId s, gboolean iconic);
+    /*! time: when the requester says the user asked; 0 when it doesn't
+      say. */
     void (*request_activate)(ObSurfaceId s, ObRequestSource from,
                              guint32 time);
     void (*request_close)(ObSurfaceId s, ObRequestSource from);
@@ -375,6 +391,7 @@ struct _ObBackendEvents {
     void (*request_move_resize)(ObSurfaceId s, ObCursor cursor,
                                 guint32 time);
     void (*request_desktop)(guint desktop, guint32 time);
+    /*! desktop is DESKTOP_ALL for every desktop; it may be out of range. */
     void (*request_surface_desktop)(ObSurfaceId s, guint desktop);
 
     /*! Another surface took the focus by itself (X11 only). */

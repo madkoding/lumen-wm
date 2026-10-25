@@ -121,8 +121,10 @@ Every step is its own small PR, and the contract tests stay green on X11 through
    7. Requests: `event.c` splits in two. The X11 half turns XEvents into `ObBackendEvents`, and the core half
       (`backend-events.c`) handles them. While `event.c` still reads the X queue, it hands each kind of event
       that has moved to a `backend_x11_*` function (`backend-x11.h`). Done for property changes on clients
-      (`surface_changed`, with the queue compression for titles and icons in the backend); opacity and the
-      sync counter stay in `event.c` until the frames and move/resize move.
+      (`surface_changed`, with the queue compression for titles and icons in the backend; opacity and the
+      sync counter stay in `event.c` until the frames and move/resize move) and for the client messages
+      about states, iconifying, activating, closing and desktops (`request_*`; `client_set_state()` now
+      takes `ObSurfaceStates`). Moving, resizing and restacking requests come with configure requests.
    8. Input: `grab.c`, `keyboard.c`, `mouse.c`.
    9. Move/resize: XSync and pointer warps go behind the backend.
 4. **Render without Xlib**: obrender, frames, the shelf, menus and popups draw into cairo image surfaces and hand

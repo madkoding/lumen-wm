@@ -78,6 +78,9 @@ void event_reset_time(void);
   Returns CurrentTime if there was no source time provided.
 */
 Time event_source_time(void);
+/*! The time a request says the user asked for it, for focus stealing
+  prevention; only for the event being handled. */
+void event_set_source_time(Time t);
 
 /*! Update the timestamp for when the user has last used the focused window.
   This updates the timestamp to the time of the last event, given by

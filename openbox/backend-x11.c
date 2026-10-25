@@ -711,6 +711,95 @@ gboolean backend_x11_property_notify(const XPropertyEvent *e)
     return TRUE;
 }
 
+static ObSurfaceStates atom_state(Atom a)
+{
+    if (a == OBT_PROP_ATOM(NET_WM_STATE_MODAL))
+        return OB_SURFACE_STATE_MODAL;
+    if (a == OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_VERT))
+        return OB_SURFACE_STATE_MAXIMIZED_VERT;
+    if (a == OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_HORZ))
+        return OB_SURFACE_STATE_MAXIMIZED_HORZ;
+    if (a == OBT_PROP_ATOM(NET_WM_STATE_SHADED))
+        return OB_SURFACE_STATE_SHADED;
+    if (a == OBT_PROP_ATOM(NET_WM_STATE_SKIP_TASKBAR))
+        return OB_SURFACE_STATE_SKIP_TASKBAR;
+    if (a == OBT_PROP_ATOM(NET_WM_STATE_SKIP_PAGER))
+        return OB_SURFACE_STATE_SKIP_PAGER;
+    if (a == OBT_PROP_ATOM(NET_WM_STATE_HIDDEN))
+        return OB_SURFACE_STATE_ICONIC;
+    if (a == OBT_PROP_ATOM(NET_WM_STATE_FULLSCREEN))
+        return OB_SURFACE_STATE_FULLSCREEN;
+    if (a == OBT_PROP_ATOM(NET_WM_STATE_ABOVE))
+        return OB_SURFACE_STATE_ABOVE;
+    if (a == OBT_PROP_ATOM(NET_WM_STATE_BELOW))
+        return OB_SURFACE_STATE_BELOW;
+    if (a == OBT_PROP_ATOM(NET_WM_STATE_DEMANDS_ATTENTION))
+        return OB_SURFACE_STATE_URGENT;
+    if (a == OBT_PROP_ATOM(OB_WM_STATE_UNDECORATED))
+        return OB_SURFACE_STATE_UNDECORATED;
+    return 0;
+}
+
+static ObRequestSource request_source(glong l)
+{
+    return l == 1 ? OB_REQUEST_FROM_APPLICATION :
+        l == 2 ? OB_REQUEST_FROM_PAGER : OB_REQUEST_FROM_UNKNOWN;
+}
+
+/* another message of the same kind for the same window is already queued */
+static gboolean more_client_message_event(Window window, Atom msgtype)
+{
+    ObtXQueueWindowMessage wm;
+    wm.window = window;
+    wm.message = msgtype;
+    return xqueue_exists_local(xqueue_match_window_message, &wm);
+}
+
+gboolean backend_x11_client_message(const XClientMessageEvent *e)
+{
+    const ObSurfaceId s = (ObSurfaceId)e->window;
+    const Atom msgtype = e->message_type;
+
+    if (msgtype == OBT_PROP_ATOM(WM_CHANGE_STATE)) {
+        if (!more_client_message_event(e->window, msgtype)) {
+            if (e->data.l[0] == IconicState)
+                events->request_iconify(s, TRUE);
+            else if (e->data.l[0] == NormalState)
+                events->request_iconify(s, FALSE);
+        }
+    } else if (msgtype == OBT_PROP_ATOM(NET_WM_DESKTOP)) {
+        if (!more_client_message_event(e->window, msgtype))
+            events->request_surface_desktop(s, (guint)e->data.l[0]);
+    } else if (msgtype == OBT_PROP_ATOM(NET_WM_STATE)) {
+        const Atom action = e->data.l[0];
+        ObStateAction a;
+
+        /* can't compress these */
+        if (action == OBT_PROP_ATOM(NET_WM_STATE_ADD))
+            a = OB_STATE_ACTION_ADD;
+        else if (action == OBT_PROP_ATOM(NET_WM_STATE_REMOVE))
+            a = OB_STATE_ACTION_REMOVE;
+        else if (action == OBT_PROP_ATOM(NET_WM_STATE_TOGGLE))
+            a = OB_STATE_ACTION_TOGGLE;
+        else
+            /* an invalid action was passed to the client message, ignore
+               it */
+            return TRUE;
+        events->request_states(s, a, atom_state(e->data.l[1]),
+                               atom_state(e->data.l[2]),
+                               request_source(e->data.l[3]));
+    } else if (msgtype == OBT_PROP_ATOM(NET_CLOSE_WINDOW)) {
+        events->request_close(s, request_source(e->data.l[1]));
+    } else if (msgtype == OBT_PROP_ATOM(NET_ACTIVE_WINDOW)) {
+        const ObRequestSource from = request_source(e->data.l[0]);
+        events->request_activate(s, from,
+                                 from == OB_REQUEST_FROM_UNKNOWN ?
+                                 0 : (guint32)e->data.l[1]);
+    } else
+        return FALSE;
+    return TRUE;
+}
+
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)
 {
     Window *win = g_new(Window, n + 1);
