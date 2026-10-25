@@ -1512,7 +1512,7 @@ static gboolean event_handle_user_input(ObClient *client, XEvent *e)
         /* the frame may not be "visible" but they can still click on it
            in the case where it is animating before disappearing */
         if (!client || !frame_iconify_animating(client->frame))
-            return mouse_event(client, e);
+            return mouse_event(client, &input);
     } else
         return keyboard_event((focus_cycle_target ? focus_cycle_target :
                                (client ? client : focus_client)), &input);

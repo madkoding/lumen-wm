@@ -291,6 +291,12 @@ typedef struct _ObInputEvent {
     guint button;           /*!< buttons */
     /*! where the pointer is, in layout coordinates */
     gint root_x, root_y;
+    /*! buttons and motion: the canvas or surface it happened over (X11:
+      the event's window), and where in it */
+    guintptr over;
+    gint x, y;
+    /*! buttons: x, y lie inside over, borders included */
+    gboolean inside;
 } ObInputEvent;
 
 /*! A picture the core drew, in premultiplied ARGB32 (cairo's

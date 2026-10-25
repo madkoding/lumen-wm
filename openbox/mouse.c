@@ -205,11 +205,11 @@ void mouse_replay_pointer(void)
     }
 }
 
-gboolean mouse_event(ObClient *client, XEvent *e)
+gboolean mouse_event(ObClient *client, const ObInputEvent *e)
 {
-    static Time ltime;
+    static guint32 ltime;
     static guint state = 0, lbutton = 0;
-    static Window lwindow = None;
+    static guintptr lwindow = 0;
     static gint px, py, pwx = -1, pwy = -1, lx = -10, ly = -10;
     gboolean used = FALSE;
 
@@ -218,18 +218,18 @@ gboolean mouse_event(ObClient *client, XEvent *e)
     gboolean dclick = FALSE;
 
     switch (e->type) {
-    case ButtonPress:
-        context = frame_context(client, e->xbutton.window,
-                                e->xbutton.x, e->xbutton.y);
-        context = mouse_button_frame_context(context, e->xbutton.button,
-                                             e->xbutton.state);
+    case OB_INPUT_BUTTON_PRESS:
+        context = frame_context(client, (Window)e->over,
+                                e->x, e->y);
+        context = mouse_button_frame_context(context, e->button,
+                                             e->mods);
 
-        px = e->xbutton.x_root;
-        py = e->xbutton.y_root;
-        if (!button) pwx = e->xbutton.x;
-        if (!button) pwy = e->xbutton.y;
-        button = e->xbutton.button;
-        state = e->xbutton.state;
+        px = e->root_x;
+        py = e->root_y;
+        if (!button) pwx = e->x;
+        if (!button) pwy = e->y;
+        button = e->button;
+        state = e->mods;
 
         /* if the binding was in a client context, then we need to call
            XAllowEvents with ReplayPointer at some point, to send the event
@@ -248,9 +248,9 @@ gboolean mouse_event(ObClient *client, XEvent *e)
             replay_pointer_needed = TRUE;
 
         used = fire_binding(OB_MOUSE_ACTION_PRESS, context,
-                            client, e->xbutton.state,
-                            e->xbutton.button,
-                            e->xbutton.x_root, e->xbutton.y_root) || used;
+                            client, e->mods,
+                            e->button,
+                            e->root_x, e->root_y) || used;
 
         /* if the bindings grab the pointer, there won't be a ButtonRelease
            event for us */
@@ -266,84 +266,70 @@ gboolean mouse_event(ObClient *client, XEvent *e)
         if (!CLIENT_CONTEXT(context, client))
             break;
 
-    case ButtonRelease:
+    case OB_INPUT_BUTTON_RELEASE:
         /* use where the press occured in the window */
-        context = frame_context(client, e->xbutton.window, pwx, pwy);
-        context = mouse_button_frame_context(context, e->xbutton.button,
-                                             e->xbutton.state);
+        context = frame_context(client, (Window)e->over, pwx, pwy);
+        context = mouse_button_frame_context(context, e->button,
+                                             e->mods);
 
-        if (e->xbutton.button == button)
+        if (e->button == button)
             pwx = pwy = -1;
 
-        if (e->xbutton.button == button) {
+        if (e->button == button) {
             /* clicks are only valid if its released over the window */
-            gint junk1, junk2;
-            Window wjunk;
-            guint ujunk, b, w, h;
-            /* this can cause errors to occur when the window closes */
-            obt_display_ignore_errors(TRUE);
-            junk1 = XGetGeometry(obt_display, e->xbutton.window,
-                                 &wjunk, &junk1, &junk2, &w, &h, &b, &ujunk);
-            obt_display_ignore_errors(FALSE);
-            if (junk1) {
-                if (e->xbutton.x >= (signed)-b &&
-                    e->xbutton.y >= (signed)-b &&
-                    e->xbutton.x < (signed)(w+b) &&
-                    e->xbutton.y < (signed)(h+b))
+            if (e->inside) {
+                click = TRUE;
+                /* double clicks happen if there were 2 in a row! */
+                if (lbutton == button &&
+                    lwindow == e->over &&
+                    e->time - config_mouse_dclicktime <=
+                    ltime &&
+                    ABS(e->x - lx) < 8 &&
+                    ABS(e->y - ly) < 8)
                 {
-                    click = TRUE;
-                    /* double clicks happen if there were 2 in a row! */
-                    if (lbutton == button &&
-                        lwindow == e->xbutton.window &&
-                        e->xbutton.time - config_mouse_dclicktime <=
-                        ltime &&
-                        ABS(e->xbutton.x - lx) < 8 &&
-                        ABS(e->xbutton.y - ly) < 8)
-                    {
-                        dclick = TRUE;
-                        lbutton = 0;
-                    } else {
-                        lbutton = button;
-                        lwindow = e->xbutton.window;
-                        lx = e->xbutton.x;
-                        ly = e->xbutton.y;
-                    }
-                } else {
+                    dclick = TRUE;
                     lbutton = 0;
-                    lwindow = None;
+                } else {
+                    lbutton = button;
+                    lwindow = e->over;
+                    lx = e->x;
+                    ly = e->y;
                 }
+            } else {
+                lbutton = 0;
+                lwindow = 0;
             }
 
             button = 0;
             state = 0;
-            ltime = e->xbutton.time;
+            ltime = e->time;
         }
         used = fire_binding(OB_MOUSE_ACTION_RELEASE, context,
-                            client, e->xbutton.state,
-                            e->xbutton.button,
-                            e->xbutton.x_root,
-                            e->xbutton.y_root) || used;
+                            client, e->mods,
+                            e->button,
+                            e->root_x,
+                            e->root_y) || used;
         if (click)
             used = fire_binding(OB_MOUSE_ACTION_CLICK, context,
-                                client, e->xbutton.state,
-                                e->xbutton.button,
-                                e->xbutton.x_root,
-                                e->xbutton.y_root) || used;
+                                client, e->mods,
+                                e->button,
+                                e->root_x,
+                                e->root_y) || used;
         if (dclick)
             used = fire_binding(OB_MOUSE_ACTION_DOUBLE_CLICK, context,
-                                client, e->xbutton.state,
-                                e->xbutton.button,
-                                e->xbutton.x_root,
-                                e->xbutton.y_root) || used;
+                                client, e->mods,
+                                e->button,
+                                e->root_x,
+                                e->root_y) || used;
         break;
 
-    case MotionNotify:
+    case OB_INPUT_MOTION:
         if (button) {
-            context = frame_context(client, e->xmotion.window, pwx, pwy);
+            context = frame_context(client, (Window)e->over, pwx, pwy);
             context = mouse_button_frame_context(context, button, state);
 
-            if (ABS(e->xmotion.x_root - px) >= config_mouse_threshold ||
-                ABS(e->xmotion.y_root - py) >= config_mouse_threshold) {
+            if (ABS(e->root_x - px) >= config_mouse_threshold ||
+                ABS(e->root_y - py) >= config_mouse_threshold) {
 
                 /* You can't drag on buttons */
                 if (context == OB_FRAME_CONTEXT_MAXIMIZE ||
