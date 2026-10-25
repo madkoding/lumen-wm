@@ -34,7 +34,7 @@ enum {
     NET_WM_STATE_FULLSCREEN, NET_WM_STATE_HIDDEN, NET_WM_STATE_ABOVE,
     NET_WM_WINDOW_TYPE, NET_WM_WINDOW_TYPE_NORMAL, NET_WM_WINDOW_TYPE_DOCK,
     NET_WM_WINDOW_TYPE_DIALOG, UTF8_STRING, NET_WM_VISIBLE_NAME,
-    MOTIF_WM_HINTS, NUM_ATOMS
+    MOTIF_WM_HINTS, NET_RESTACK_WINDOW, NET_MOVERESIZE_WINDOW, NUM_ATOMS
 };
 
 static char *atom_names[NUM_ATOMS] = {
@@ -49,7 +49,8 @@ static char *atom_names[NUM_ATOMS] = {
     "_NET_WM_STATE_HIDDEN", "_NET_WM_STATE_ABOVE",
     "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NORMAL",
     "_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_WINDOW_TYPE_DIALOG", "UTF8_STRING",
-    "_NET_WM_VISIBLE_NAME", "_MOTIF_WM_HINTS",
+    "_NET_WM_VISIBLE_NAME", "_MOTIF_WM_HINTS", "_NET_RESTACK_WINDOW",
+    "_NET_MOVERESIZE_WINDOW",
 };
 
 static Atom atoms[NUM_ATOMS];
@@ -465,6 +466,38 @@ void ct_request_move_resize(ct_win *w, ct_rect r)
 {
     /* the client configures itself; the window manager decides */
     XMoveResizeWindow(dpy, w->id, r.x, r.y, (unsigned)r.w, (unsigned)r.h);
+    XFlush(dpy);
+}
+
+void ct_request_lower(ct_win *w)
+{
+    XWindowChanges ch = { .stack_mode = Below };
+    XConfigureWindow(dpy, w->id, CWStackMode, &ch);
+    XFlush(dpy);
+}
+
+void ct_pager_raise(ct_win *w)
+{
+    /* source 2: a pager; no sibling */
+    send_root(w->id, NET_RESTACK_WINDOW, 2, 0, Above, 0);
+}
+
+void ct_pager_move_resize(ct_win *w, ct_rect r)
+{
+    XEvent e;
+    memset(&e, 0, sizeof(e));
+    e.xclient.type = ClientMessage;
+    e.xclient.window = w->id;
+    e.xclient.message_type = atoms[NET_MOVERESIZE_WINDOW];
+    e.xclient.format = 32;
+    /* x, y, width and height given, from a pager, NorthWest gravity */
+    e.xclient.data.l[0] = NorthWestGravity | 0xf << 8 | 2 << 12;
+    e.xclient.data.l[1] = r.x;
+    e.xclient.data.l[2] = r.y;
+    e.xclient.data.l[3] = r.w;
+    e.xclient.data.l[4] = r.h;
+    XSendEvent(dpy, root, False,
+               SubstructureNotifyMask | SubstructureRedirectMask, &e);
     XFlush(dpy);
 }
 
