@@ -1,188 +1,325 @@
-# Openbox (fork with a shelf)
+# Openbox with a shelf
 
-A fork of [Openbox](http://openbox.org), the highly configurable window manager, licensed under the
-**GNU GPL v2 or later**. This fork adds an optional **shelf**: a floating dock with pinned apps, a media
-player, the weather and a clock/status island, drawn by the window manager itself. Everything else is
-upstream Openbox, and the shelf is **off by default**, so without it the fork behaves like Openbox.
+**Openbox, the light and fast window manager, plus a modern floating shelf at the bottom of the screen.**
+It gives you a dock with your favourite apps, a music player, the weather, and a clock with wifi, volume and
+power controls. It looks like a modern desktop and keeps Openbox's speed.
 
-It is built for the desktop of [Kitties](https://github.com/madkoding/kitties) (see
-[Use in Kitties](#use-in-kitties)) but works on any X11 setup. The shelf's design is inspired by the shelf
-of Luma; this project does not use Luma's name or logo.
+![The shelf: dock with pinned apps, music player, weather and clock](docs/screenshots/shelf-desktop.png)
 
-![The shelf on the Kitties desktop: dock with pinned apps, player, weather and clock](docs/screenshots/shelf-desktop.png)
+The shelf is **off by default**. Until you turn it on, this is plain [Openbox](http://openbox.org).
 
-*Screenshot taken in a test environment (Xvfb, 1280×800) with sample data in the player and the weather.*
+## What you get
 
-## The shelf
+- 🚀 **A dock**: open your pinned apps with one click, switch between open windows, and drag tiles to reorder them.
+- 🎵 **A music player**: shows the song and cover, with previous, play/pause and next buttons.
+- ⛅ **The weather**: the temperature now and a three-day forecast.
+- 🕒 **A status area**: clock and date, plus wifi, volume, power and battery menus.
+- 🎨 **Follows your theme**: the shelf and the menus take the colours of the Openbox theme you pick.
+- ✨ **Nicer menus**: rounded corners, more space and a soft shadow when a compositor is running.
 
-The code lives in [`openbox/shelf.c`](openbox/shelf.c) (with `shelf.h`), and the configuration is parsed in
-`openbox/config.c`. It is drawn with cairo and pango, takes a bottom strut from the work area, and is hidden
-while a fullscreen window has focus. Without a compositor it paints over a copy of the wallpaper; with one,
-it uses a 32-bit window with real alpha.
+The player and the weather are optional. Each one only shows up while it has something to show.
 
-Islands, left to right:
+## Quick start
 
-- **Dock**: an applications tile (opens the `root-menu`), your **pinned apps**, then the open windows.
-  Left click focuses or minimises, right click opens the client menu, and a mark shows running apps.
-- **Player** (optional): cover, title, artist and previous / play-pause / next buttons.
-- **Weather** (optional): temperature, sky and a three-day forecast.
-- **Status**: time, date, and wifi, volume and power glyphs.
+### 1. Install it
 
-The player and the weather hide themselves while their command prints nothing. More detail (measurements,
-the compositor-less mode) is in [`doc/shelf.md`](doc/shelf.md).
-
-### Themes
-
-With `<material>theme</material>` (the default) the shelf follows the Openbox theme in use:
-
-![The shelf under each bundled Openbox theme](docs/screenshots/shelf-themes.png)
-
-*Regenerate it with [`tools/shelf-themes.sh`](tools/shelf-themes.sh), which also checks, for every theme, that the text reads on
-the islands (4.5:1) and on the hovered tile (3:1) and that the running mark shows (3:1). CI runs it
-([`shelf-themes.yml`](.github/workflows/shelf-themes.yml)). Every bundled theme with all the islands and the hover on the second tile, in a test environment (Xvfb, no compositor, sample data in the player and the weather).*
-
-Menus (a tile's and its window submenu, then the network's, the volume's and the power's) are Openbox's own,
-so they take the theme too; their info lines are menu titles, never selectable. With a compositor and a
-`<menuRadius>`, every menu is drawn with cairo: anti-aliased rounded corners, a rounded highlight, quiet titles
-and thin separators, with `<menuPadding>` of air and a soft shadow (without a compositor the corners are cut with a shape mask and the highlight is square).
-With the shelf on, both default to 12 and 8; with it off, menus stay as upstream draws them:
-
-![The shelf menus under each bundled Openbox theme](docs/screenshots/shelf-themes-menus.png)
-
-### Enable and configure it
-
-Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml)) and reconfigure
-(`openbox --reconfigure`):
-
-```xml
-<shelf>
-  <enabled>yes</enabled>              <!-- off by default -->
-  <material>theme</material>          <!-- theme | dark | light -->
-  <font>Sansation</font>              <!-- empty = the fontconfig sans; or any family -->
-  <iconTheme>Lucide</iconTheme>       <!-- where bare icon names are looked up -->
-
-  <pins>                              <!-- pinned apps, in order -->
-    <pin>
-      <name>Files</name>
-      <icon>system-file-manager</icon>  <!-- a bare icon name, or a file path -->
-      <command>pcmanfm</command>        <!-- started on click when not running -->
-      <class>Pcmanfm</class>            <!-- WM_CLASS; default: the command's first word -->
-    </pin>
-  </pins>
-  <pinsFile>~/.config/kitties/pins</pinsFile> <!-- optional: pins saved from the dock; replaces <pins> once it exists -->
-
-  <!-- the status island's glyphs; each is optional and does nothing without its section -->
-  <network>
-    <list>nmcli -t -f IN-USE,SIGNAL,SSID dev wifi</list>  <!-- "in-use:signal:name" lines -->
-    <connect>nmcli dev wifi connect %s</connect>   <!-- %s: the quoted name -->
-    <!-- optional: networks with a password. The list then prints "in-use:signal:security:name"
-         (nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID dev wifi); %p is what <password> prints.
-         Note: the password is an argument of the command, visible to `ps` while it runs. -->
-    <secured>nmcli dev wifi connect %s password %p</secured>
-    <password>zenity --entry --hide-text --text=Password</password>
-  </network>
-  <volume>                            <!-- click: menu, middle click: toggle, wheel: up and down -->
-    <level>pamixer --get-volume-human</level>  <!-- optional: shown at the top of the menu -->
-    <up>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+</up>
-    <down>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-</down>
-    <toggle>wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle</toggle>
-  </volume>
-  <power>
-    <item><name>Log out</name><command>openbox --exit</command></item>
-    <item><name>Shut down</name><command>systemctl poweroff</command></item>
-  </power>
-  <battery>yes</battery>              <!-- shown only when the machine has one -->
-  <menuRadius>12</menuRadius>         <!-- rounded corners of every menu; 0 = square; 12 with the shelf on -->
-  <menuPadding>8</menuPadding>        <!-- air around and inside every menu, in pixels; 8 with the shelf on -->
-
-  <media>
-    <command>my-media-script</command>  <!-- prints what the island shows -->
-    <previous>playerctl previous</previous>
-    <toggle>playerctl play-pause</toggle>
-    <next>playerctl next</next>
-    <interval>3</interval>              <!-- seconds, default 3 -->
-  </media>
-  <weather>
-    <command>my-weather-script</command>
-    <interval>900</interval>            <!-- seconds, default 900 -->
-  </weather>
-</shelf>
-```
-
-- **Material**: `theme` (default) takes the shelf's colours from the Openbox theme in use: the island is the
-  menu background, the text the menu text, the hover the selected menu item (both keep the theme's gradient: vertical, horizontal, diagonal, split or mirror) and the running mark of the focused
-  window the active title bar (with its gradient). Colours that would not read on the island fall back to black or white. `dark` and
-  `light` are fixed. Change the theme and reconfigure to see it change.
-- **Colours**: `<colors>` with `<body>`, `<text>`, `<hover>` and `<accent>` (`#rrggbb`) replace the colours of
-  any material, for a theme that does not suit the shelf. Empty keeps the material's own.
-- **Pins**: a click starts the command, or focuses the window of that class (and minimises it if it
-  already has focus). Bare icon names are searched in `$XDG_DATA_DIRS/icons/<iconTheme>/`.
-- **Reorder**: drag a pinned tile onto another to put it in that place (saved with `<pinsFile>`).
-- **Pin and unpin**: right click a tile for *Pin to dock* or *Unpin from dock* (running apps also get their
-  window menu). With `<pinsFile>` set, each change is saved there as `name|icon|command|class` lines, and the
-  file replaces the `<pins>` of rc.xml from then on. The window's command line, with its arguments, is the command.
-- **Status glyphs**: the network glyph opens a menu of the networks `<list>` prints, and picking one runs
-  `<connect>`. The volume glyph opens a menu (level, louder, quieter, mute), steps with the wheel and mutes on middle click. The power glyph opens the `<power>`
-  items. With `<battery>` and a battery in `/sys/class/power_supply` (or `<batteryDir>`), its glyph joins them and a
-  click tells the state. The charge, the active network's signal and the volume (`<level>`) show under their glyphs. Without these sections the glyphs only show.
-- **Font**: `Sansation` is the font Kitties uses. Install it and name it in `<font>`.
-- **Media command**: prints four lines: `Playing` or `Paused`, the title, the artist and a path to the cover
-  (may be empty). The `previous`, `toggle` and `next` commands run on the buttons.
-- **Weather command**: prints the temperature, the sky, then up to three `day|temperature|glyph` lines, with
-  glyph one of `sun`, `cloud`, `cloud-sun`, `rain`, `snow`, `storm`, `fog`:
-
-  ```
-  59°
-  Light rain
-  Fri|74°|cloud-sun
-  Sat|69°|sun
-  Sun|67°|cloud
-  ```
-
-Commands run asynchronously, one at a time per island, so a slow one never stalls the window manager.
-
-## Build and install
-
-Besides the usual Openbox dependencies, the shelf needs **cairo** (with the xlib backend) and
-**pangocairo**; `configure` fails without them. On Debian/Ubuntu:
+On Debian or Ubuntu:
 
 ```sh
 sudo apt-get install build-essential autoconf automake libtool pkg-config gettext autopoint \
   libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev libx11-dev libxft-dev \
   libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev libimlib2-dev
 
+git clone https://github.com/madkoding/openbox
+cd openbox
 ./bootstrap
 ./configure --prefix=/usr --sysconfdir=/etc
 make
 sudo make install
 ```
 
-`libstartup-notification`, `xcursor`, `imlib2` and `librsvg` are optional upstream dependencies that
-`configure` detects. See `README.GIT` for notes on building from git.
+### 2. Turn the shelf on
+
+Open `~/.config/openbox/rc.xml`. If you don't have it, copy the default from `/etc/xdg/openbox/rc.xml`. Find
+the `<shelf>` section and set:
+
+```xml
+<shelf>
+  <enabled>yes</enabled>
+</shelf>
+```
+
+### 3. Apply it
+
+```sh
+openbox --reconfigure
+```
+
+The shelf appears at the bottom of the screen. Every time you change `rc.xml`, run this command again.
+
+## Make it yours
+
+### Pick a look
+
+The shelf takes the colours of your Openbox theme. Change the theme (for example with `obconf`) and the shelf
+changes with it. These are the themes that come with Openbox:
+
+![The shelf under each bundled theme](docs/screenshots/shelf-themes.png)
+
+If you prefer fixed colours, choose a material:
+
+```xml
+<material>dark</material>    <!-- theme (default) | dark | light -->
+```
+
+Or use your own colours. Fill in any of them and leave the rest empty:
+
+```xml
+<colors>
+  <body>#21252b</body>      <!-- the background of the islands -->
+  <text>#e7e9e8</text>      <!-- the text and icons -->
+  <hover>#3a3f47</hover>    <!-- the tile under the mouse -->
+  <accent>#7aa2f7</accent>  <!-- the mark under the focused app -->
+</colors>
+```
+
+If a theme's colour would be hard to read, the shelf picks black or white instead.
+
+### Pin your apps
+
+Right click any open app in the dock and choose **Pin to dock**. Choose **Unpin from dock** to remove it.
+Drag a pinned app onto another to change the order.
+
+To keep your pins after a restart, tell the shelf where to save them:
+
+```xml
+<pinsFile>~/.config/openbox/pins</pinsFile>
+```
+
+You can also list them by hand:
+
+```xml
+<pins>
+  <pin>
+    <name>Files</name>
+    <icon>system-file-manager</icon>  <!-- an icon name, or the path to an image -->
+    <command>pcmanfm</command>        <!-- what runs when you click it -->
+  </pin>
+</pins>
+```
+
+Clicking a pin opens the app. If it is already open, the click brings it to the front, and a second click
+minimises it.
+
+### Fonts and icons
+
+```xml
+<font>Sansation</font>        <!-- any font installed on your system; empty = the default -->
+<iconTheme>Papirus</iconTheme> <!-- the icon theme to look up pin icons in -->
+```
+
+### Menus
+
+When the shelf is on, every menu gets rounded corners and more space. With a compositor running (picom,
+xcompmgr…), the corners are smooth and there is a soft shadow. Without one, the corners still round but less
+smoothly.
+
+![The shelf menus under each bundled theme](docs/screenshots/shelf-themes-menus.png)
+
+```xml
+<menuRadius>12</menuRadius>    <!-- how round the corners are; 0 = square -->
+<menuPadding>8</menuPadding>   <!-- space around and inside the menus -->
+```
+
+## Optional extras
+
+Each extra is a small section inside `<shelf>`. Copy the ones you want. They use common tools (`nmcli`,
+`wpctl`, `playerctl`), so install those first.
+
+### Wifi
+
+Click the wifi icon to see nearby networks and connect to one.
+
+```xml
+<network>
+  <list>nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID dev wifi</list>
+  <connect>nmcli dev wifi connect %s</connect>
+  <secured>nmcli dev wifi connect %s password %p</secured>
+  <password>zenity --entry --hide-text --text=Password</password>
+</network>
+```
+
+For networks with a password, it asks you for it in a small window. The password is passed to `nmcli` on its
+command line, so other users of the machine could see it while it connects.
+
+### Volume
+
+Click for a menu, scroll to change the volume, middle click to mute.
+
+```xml
+<volume>
+  <level>pamixer --get-volume-human</level>
+  <up>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+</up>
+  <down>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-</down>
+  <toggle>wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle</toggle>
+</volume>
+```
+
+### Power and battery
+
+```xml
+<power>
+  <item><name>Log out</name><command>openbox --exit</command></item>
+  <item><name>Restart</name><command>systemctl reboot</command></item>
+  <item><name>Shut down</name><command>systemctl poweroff</command></item>
+</power>
+<battery>yes</battery>   <!-- only appears on machines with a battery -->
+```
+
+### Music player
+
+The player shows what your music app is playing. Save this script as `~/.local/bin/shelf-media` and make it
+executable (`chmod +x`):
+
+```sh
+#!/bin/bash
+# prints: status, title, artist, cover
+status=$(playerctl status 2>/dev/null) || exit 0
+echo "$status"
+playerctl metadata --format $'{{title}}\n{{artist}}\n{{mpris:artUrl}}' | sed 's|^file://||'
+```
+
+Then add:
+
+```xml
+<media>
+  <command>~/.local/bin/shelf-media</command>
+  <previous>playerctl previous</previous>
+  <toggle>playerctl play-pause</toggle>
+  <next>playerctl next</next>
+</media>
+```
+
+### Weather
+
+The weather area shows whatever a script of yours prints: the temperature, the sky, then up to three
+`day|temperature|icon` lines. The icon is one of `sun`, `cloud`, `cloud-sun`, `rain`, `snow`, `storm` or
+`fog`.
+
+```
+59°
+Light rain
+Fri|74°|cloud-sun
+Sat|69°|sun
+Sun|67°|cloud
+```
+
+```xml
+<weather>
+  <command>~/.local/bin/shelf-weather</command>
+  <interval>900</interval>   <!-- refresh every 15 minutes -->
+</weather>
+```
+
+## Troubleshooting
+
+- **The shelf doesn't show up.** Check that `<enabled>yes</enabled>` is inside `<shelf>` and run
+  `openbox --reconfigure`. It also hides itself while a window is fullscreen.
+- **The menus have rough corners and no shadow.** Start a compositor, such as `picom`.
+- **A pin shows a letter instead of an icon.** That icon name doesn't exist in your `<iconTheme>`. Try another
+  name, or give the path to an image.
+- **The player or weather is missing.** Run its command in a terminal. If it prints nothing, the shelf hides
+  that area.
+- **The colours are hard to read with my theme.** Use `<material>dark</material>` or set your own `<colors>`.
+
+## Full configuration
+
+<details>
+<summary>Every shelf option in one place</summary>
+
+```xml
+<shelf>
+  <enabled>yes</enabled>              <!-- off by default -->
+  <material>theme</material>          <!-- theme | dark | light -->
+  <colors>                            <!-- optional #rrggbb; empty keeps the material's -->
+    <body></body><text></text><hover></hover><accent></accent>
+  </colors>
+  <font></font>                       <!-- empty = the system's sans font -->
+  <iconTheme></iconTheme>             <!-- where bare icon names are looked up -->
+
+  <pins>
+    <pin>
+      <name>Files</name>
+      <icon>system-file-manager</icon>
+      <command>pcmanfm</command>
+      <class>Pcmanfm</class>          <!-- the window's class; default: the command's first word -->
+    </pin>
+  </pins>
+  <pinsFile>~/.config/openbox/pins</pinsFile>  <!-- pins saved from the dock; replaces <pins> once it exists -->
+
+  <network>
+    <list>nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID dev wifi</list>
+    <connect>nmcli dev wifi connect %s</connect>          <!-- %s: the network's name -->
+    <secured>nmcli dev wifi connect %s password %p</secured> <!-- %p: what <password> prints -->
+    <password>zenity --entry --hide-text --text=Password</password>
+  </network>
+  <volume>
+    <level>pamixer --get-volume-human</level>
+    <up>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+</up>
+    <down>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-</down>
+    <toggle>wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle</toggle>
+  </volume>
+  <power>
+    <item><name>Log out</name><command>openbox --exit</command></item>
+  </power>
+  <battery>yes</battery>
+  <batteryDir></batteryDir>           <!-- default: found in /sys/class/power_supply -->
+
+  <menuRadius>12</menuRadius>         <!-- 12 with the shelf on, 0 with it off -->
+  <menuPadding>8</menuPadding>        <!-- 8 with the shelf on, 0 with it off -->
+
+  <media>
+    <command>~/.local/bin/shelf-media</command>
+    <previous>playerctl previous</previous>
+    <toggle>playerctl play-pause</toggle>
+    <next>playerctl next</next>
+    <interval>3</interval>            <!-- seconds -->
+  </media>
+  <weather>
+    <command>~/.local/bin/shelf-weather</command>
+    <interval>900</interval>          <!-- seconds -->
+  </weather>
+</shelf>
+```
+
+Commands run in the background, so a slow one never freezes the desktop.
+
+</details>
 
 ## Use in Kitties
 
-[Kitties](https://github.com/madkoding/kitties) runs each kitty's desktop on a headless X display (Xvfb) with
-this Openbox. Its `docker/kitty-desktop` image builds the fork at a pinned commit and ships an `rc.xml` with the
-shelf enabled, `Sansation` as the font, the Lucide icon theme, pins for the browser, files, terminal and
-office apps, and media (MPRIS via `playerctl`) and weather (Open-Meteo) scripts. See its
+This fork is the window manager of [Kitties](https://github.com/madkoding/kitties). Its desktop image comes with
+the shelf already set up: the Sansation font, Lucide icons, pinned apps, and music and weather scripts. See its
 [desktop docs](https://github.com/madkoding/kitties/blob/main/docs/DESKTOP.md).
+
+## For developers
+
+- The shelf lives in [`openbox/shelf.c`](openbox/shelf.c), and its options are read in `openbox/config.c`.
+  Design details are in [`doc/shelf.md`](doc/shelf.md).
+- [`tools/shelf-themes.sh`](tools/shelf-themes.sh) takes the screenshots above and checks that the text is
+  readable in every theme. Add `COMPOSITOR=1` to try the cairo menus. CI runs it on every pull request.
+- Building from git: see [`README.GIT`](README.GIT).
 
 ## License and credits
 
 Openbox is free software under the GNU General Public License, version 2 or (at your option) any later
-version. See [`COPYING`](COPYING). This fork keeps the original copyright notices and `AUTHORS`; the
-shelf is released under the same licence.
+version. See [`COPYING`](COPYING). This fork keeps the original copyright notices and [`AUTHORS`](AUTHORS),
+and the shelf is released under the same licence.
 
 - Openbox: Copyright (C) 2004 Mikael Magnusson, Copyright (C) 2002 Dana Jansens, and all the contributors in
-  [`AUTHORS`](AUTHORS). Upstream: <http://openbox.org>.
-- The shelf design is inspired by the shelf of Luma. This project is not affiliated with Luma and does not use its
-  name or logo.
+  `AUTHORS`. Upstream: <http://openbox.org>.
+- The shelf's design is inspired by the shelf of Luma. This project is not affiliated with Luma and does not
+  use its name or logo.
 
-This software is OSI Certified Open Source Software. OSI Certified is a certification mark of the Open
-Source Initiative.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-    See the COPYING file for a copy of the GNU General Public License.
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
