@@ -1494,11 +1494,10 @@ static gboolean event_handle_user_input(ObClient *client, XEvent *e)
 
     /* if the keyboard interactive action uses the event then dont
        use it for bindings. likewise is moveresize uses the event. */
-    if (actions_interactive_input_event(e))
-        return TRUE;
-    if (moveresize_in_progress &&
-        backend_x11_input_event(e, moveresize_latest_motion(), &input) &&
-        moveresize_event(&input))
+    /* skipping motions only matters to a move, which ends any interactive
+       action */
+    backend_x11_input_event(e, moveresize_latest_motion(), &input);
+    if (actions_interactive_input_event(&input) || moveresize_event(&input))
         return TRUE;
 
     if (moveresize_in_progress)

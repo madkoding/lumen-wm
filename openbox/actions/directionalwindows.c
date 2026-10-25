@@ -31,7 +31,7 @@ static gpointer setup_target_func(xmlNodePtr node);
 static void     free_func(gpointer options);
 static gboolean run_func(ObActionsData *data, gpointer options);
 static gboolean i_input_func(guint initial_state,
-                             XEvent *e,
+                             const ObInputEvent *e,
                              ObtIC *ic,
                              gpointer options,
                              gboolean *used);
@@ -254,7 +254,7 @@ static gboolean run_func(ObActionsData *data, gpointer options)
 }
 
 static gboolean i_input_func(guint initial_state,
-                             XEvent *e,
+                             const ObInputEvent *e,
                              ObtIC *ic,
                              gpointer options,
                              gboolean *used)
@@ -262,31 +262,31 @@ static gboolean i_input_func(guint initial_state,
     guint mods, initial_mods;
 
     initial_mods = obt_keyboard_only_modmasks(initial_state);
-    mods = obt_keyboard_only_modmasks(e->xkey.state);
-    if (e->type == KeyRelease) {
+    mods = obt_keyboard_only_modmasks(e->mods);
+    if (e->type == OB_INPUT_KEY_RELEASE) {
         /* remove from the state the mask of the modifier key being
            released, if it is a modifier key being released that is */
-        mods &= ~obt_keyboard_keyevent_to_modmask(e);
+        mods &= ~e->key_mod;
     }
 
-    if (e->type == KeyPress) {
-        KeySym sym = obt_keyboard_keypress_to_keysym(e);
+    if (e->type == OB_INPUT_KEY_PRESS) {
+        KeySym sym = e->keysym;
 
         /* Escape cancels no matter what */
         if (sym == XK_Escape) {
-            end_cycle(TRUE, e->xkey.state, options);
+            end_cycle(TRUE, e->mods, options);
             return FALSE;
         }
 
         /* There were no modifiers and they pressed enter */
         else if ((sym == XK_Return || sym == XK_KP_Enter) && !initial_mods) {
-            end_cycle(FALSE, e->xkey.state, options);
+            end_cycle(FALSE, e->mods, options);
             return FALSE;
         }
     }
     /* They released the modifiers */
-    else if (e->type == KeyRelease && initial_mods && !(mods & initial_mods)) {
-        end_cycle(FALSE, e->xkey.state, options);
+    else if (e->type == OB_INPUT_KEY_RELEASE && initial_mods && !(mods & initial_mods)) {
+        end_cycle(FALSE, e->mods, options);
         return FALSE;
     }
 

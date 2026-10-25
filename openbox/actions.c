@@ -447,7 +447,7 @@ static void actions_interactive_end_act(void)
     }
 }
 
-gboolean actions_interactive_input_event(XEvent *e)
+gboolean actions_interactive_input_event(const ObInputEvent *e)
 {
     gboolean used = FALSE;
     if (interactive_act) {

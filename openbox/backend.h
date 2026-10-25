@@ -285,6 +285,9 @@ typedef struct _ObInputEvent {
     guint mods;
     guint keycode;          /*!< keys: xkb's (X11: the server's) */
     guint32 keysym;         /*!< keys: what it types, an xkb keysym */
+    /*! keys: the modifier mask the key itself is (Alt for an Alt key), 0
+      for any other key */
+    guint key_mod;
     guint button;           /*!< buttons */
     /*! where the pointer is, in layout coordinates */
     gint root_x, root_y;
