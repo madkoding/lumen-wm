@@ -15,6 +15,7 @@ Enable it in `rc.xml`:
   <enabled>yes</enabled>
   <material>theme</material>  <!-- theme (the Openbox theme's colours) | dark | light -->
   <font></font>  <!-- empty = the system sans (fontconfig); or a family -->
+  <colors><!-- optional #rrggbb overrides: body, text, hover, accent --></colors>
 </shelf>
 ```
 

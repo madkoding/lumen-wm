@@ -141,8 +141,14 @@ extern guint config_dock_hide_delay;
 
 /*! The floating shelf (dock island and status island) drawn by the WM */
 extern gboolean config_shelf_enabled;
-/*! "dark" or "light" */
+/*! "theme", "dark" or "light" */
 extern gchar   *config_shelf_material;
+/*! Colours ("#rrggbb", or empty for the material's own) that replace the
+  material's: island, text, hover, running mark */
+extern gchar   *config_shelf_color_body;
+extern gchar   *config_shelf_color_text;
+extern gchar   *config_shelf_color_hover;
+extern gchar   *config_shelf_color_accent;
 extern gchar   *config_shelf_font;
 /*! The icon theme (a folder of icon directories) that pin icons given as a
   bare name are looked up in */

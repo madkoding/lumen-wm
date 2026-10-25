@@ -37,7 +37,8 @@ With `<material>theme</material>` (the default) the shelf follows the Openbox th
 
 ![The shelf under each bundled Openbox theme](docs/screenshots/shelf-themes.png)
 
-*Every bundled theme with all the islands and the hover on the second tile, in a test environment (Xvfb, no compositor, sample data in the player and the weather).*
+*Regenerate it with [`tools/shelf-themes.sh`](tools/shelf-themes.sh), which also checks that the text reads on
+the islands in every theme. Every bundled theme with all the islands and the hover on the second tile, in a test environment (Xvfb, no compositor, sample data in the player and the weather).*
 
 ### Enable and configure it
 
@@ -77,8 +78,10 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
 
 - **Material**: `theme` (default) takes the shelf's colours from the Openbox theme in use: the island is the
   menu background, the text the menu text, the hover the selected menu item (both keep the theme's gradient: vertical, horizontal, diagonal, split or mirror) and the running mark of the focused
-  window the active title bar. Colours that would not read on the island fall back to black or white. `dark` and
+  window the active title bar (with its gradient). Colours that would not read on the island fall back to black or white. `dark` and
   `light` are fixed. Change the theme and reconfigure to see it change.
+- **Colours**: `<colors>` with `<body>`, `<text>`, `<hover>` and `<accent>` (`#rrggbb`) replace the colours of
+  any material, for a theme that does not suit the shelf. Empty keeps the material's own.
 - **Pins**: a click starts the command, or focuses the window of that class (and minimises it if it
   already has focus). Bare icon names are searched in `$XDG_DATA_DIRS/icons/<iconTheme>/`.
 - **Pin and unpin**: right click a tile for *Pin to dock* or *Unpin from dock* (running apps also get their

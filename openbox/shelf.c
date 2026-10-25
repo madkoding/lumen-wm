@@ -96,6 +96,7 @@ typedef struct {
     Rgb      divider;
     Rgb      accent;     /* the running mark of the focused window */
     Fill     hover_fill;
+    Fill     accent_fill;
 } Material;
 
 #define RGB(r, g, b) { (r) / 255.0, (g) / 255.0, (b) / 255.0 }
@@ -104,13 +105,13 @@ static const Material mat_dark = {
     FALSE, { G_SOLID }, RGB(0x21, 0x25, 0x2b), RGB(0xe7, 0xe9, 0xe8),
     0.045, RGB(255, 255, 255), RGB(9, 11, 14), 0.38, 0.72,
     0.10, RGB(255, 255, 255), 0.22, RGB(255, 255, 255),
-    RGB(0xe7, 0xe9, 0xe8), { G_SOLID }
+    RGB(0xe7, 0xe9, 0xe8), { G_SOLID }, { G_SOLID }
 };
 static const Material mat_light = {
     TRUE, { G_SOLID }, RGB(0xec, 0xee, 0xf1), RGB(0x2b, 0x30, 0x36),
     0.82, RGB(255, 255, 255), RGB(20, 22, 26), 0.14, 0.40,
     0.07, RGB(25, 27, 31), 0.22, RGB(30, 34, 39),
-    RGB(0x2b, 0x30, 0x36), { G_SOLID }
+    RGB(0x2b, 0x30, 0x36), { G_SOLID }, { G_SOLID }
 };
 
 /* The material taken from the Openbox theme in use, see theme_material(). */
@@ -243,7 +244,8 @@ static const Material *theme_material(void)
     m->hover_fill = rr_fill(t->a_menu_selected);
     body = fill_mean(&m->fill);
     hover = fill_mean(&m->hover_fill);
-    accent = rr_rgb(t->a_focused_title->surface.primary);
+    m->accent_fill = rr_fill(t->a_focused_title);
+    accent = fill_mean(&m->accent_fill);
 
     m->body = body;
     m->light = luminance(body) > 0.4;
@@ -267,7 +269,57 @@ static const Material *theme_material(void)
     m->divider = m->ink;
     m->divider_a = 0.22;
     m->accent = contrast(accent, body) >= 2.0 ? accent : m->ink;
+    if (m->accent.r != accent.r || m->accent.g != accent.g ||
+        m->accent.b != accent.b)
+        m->accent_fill.kind = G_SOLID;
     return m;
+}
+
+static gboolean parse_hex(const gchar *s, Rgb *out)
+{
+    guint r, g, b;
+    gchar tail;
+    if (!s || sscanf(s, " #%2x%2x%2x %c", &r, &g, &b, &tail) != 3)
+        return FALSE;
+    out->r = r / 255.0; out->g = g / 255.0; out->b = b / 255.0;
+    return TRUE;
+}
+
+/* the material with the colours of <colors> laid over it */
+static const Material *override_material(const Material *base)
+{
+    static Material m;
+    Rgb c;
+    gboolean any = FALSE;
+
+    m = *base;
+    if (parse_hex(config_shelf_color_body, &c)) {
+        m.body = c; m.fill.kind = G_SOLID; m.fill.c[0] = c;
+        m.light = luminance(c) > 0.4;
+        if (!parse_hex(config_shelf_color_text, &m.ink))
+            m.ink = readable(m.ink, c, 4.5);
+        any = TRUE;
+    }
+    if (parse_hex(config_shelf_color_text, &c)) { m.ink = c; any = TRUE; }
+    if (parse_hex(config_shelf_color_hover, &c)) {
+        m.hover = c; m.hover_a = 0.9; m.hover_fill.kind = G_SOLID; any = TRUE;
+    }
+    if (parse_hex(config_shelf_color_accent, &c)) {
+        m.accent = c; m.accent_fill.kind = G_SOLID; any = TRUE;
+    }
+    return any ? &m : base;
+}
+
+/* OB_SHELF_DEBUG=1: print the material, for tools/shelf-themes.sh */
+static void dump_material(const Material *m)
+{
+    g_printerr("shelf-material light=%d body=%.3f,%.3f,%.3f "
+               "ink=%.3f,%.3f,%.3f contrast=%.2f hover=%.2f accent=%.2f\n",
+               m->light, m->body.r, m->body.g, m->body.b,
+               m->ink.r, m->ink.g, m->ink.b, contrast(m->ink, m->body),
+               contrast(m->hover_fill.kind != G_SOLID ?
+                        fill_mean(&m->hover_fill) : m->hover, m->body),
+               contrast(m->accent, m->body));
 }
 
 typedef struct {
@@ -1120,8 +1172,13 @@ static void paint(void)
                       1.5 * G_PI, 2 * G_PI);
             cairo_line_to(cr, tx + TILE / 2.0 + 9, y + ISLAND_H);
             cairo_close_path(cr);
-            if (focused) set_rgb(cr, m->accent, 1.0);
-            else         set_rgb(cr, m->ink, 0.45);
+            if (!focused)
+                set_rgb(cr, m->ink, 0.45);
+            else if (m->accent_fill.kind != G_SOLID)
+                fill_source(cr, &m->accent_fill, tx + TILE / 2.0 - 9,
+                            y + ISLAND_H - 3, 18, 3, 1.0);
+            else
+                set_rgb(cr, m->accent, 1.0);
             cairo_fill(cr);
         }
     }
@@ -1526,6 +1583,8 @@ void shelf_startup(gboolean reconfig)
         S.m = &mat_dark;
     else
         S.m = theme_material();
+    S.m = override_material(S.m);
+    if (g_getenv("OB_SHELF_DEBUG")) dump_material(S.m);
     S.argb = XGetSelectionOwner(d, XInternAtom(d, cm, False)) != None &&
              XMatchVisualInfo(d, ob_screen, 32, TrueColor, &vi);
     g_free(cm);
