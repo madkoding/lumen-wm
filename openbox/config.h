@@ -148,6 +148,11 @@ extern gchar   *config_shelf_font;
   bare name are looked up in */
 extern gchar   *config_shelf_icon_theme;
 
+/*! A file of pins (name|icon|command|class per line) that replaces the ones
+  in rc.xml once it exists, and that pinning and unpinning from the dock
+  writes. Empty: the dock's pins are not saved. */
+extern gchar   *config_shelf_pins_file;
+
 /*! An application pinned to the shelf's dock */
 typedef struct _ObShelfPin {
     gchar *name;     /*!< the tooltip-less label, used for the initial */

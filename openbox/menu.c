@@ -31,6 +31,7 @@
 #include "geom.h"
 #include "misc.h"
 #include "client_menu.h"
+#include "shelf.h"
 #include "client_list_menu.h"
 #include "client_list_combined_menu.h"
 #include "gettext.h"
@@ -70,6 +71,7 @@ void menu_startup(gboolean reconfig)
     client_list_menu_startup(reconfig);
     client_list_combined_menu_startup(reconfig);
     client_menu_startup();
+    shelf_menu_startup();
 
     menu_parse_inst = obt_xml_instance_new();
 

@@ -21,6 +21,7 @@
 #include "client.h"
 #include "focus.h"
 #include "menu.h"
+#include "menuframe.h"
 #include "screen.h"
 #include "obt/display.h"
 #include "obrender/render.h"
@@ -31,6 +32,8 @@
 #include <pango/pangocairo.h>
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
+#include <glib/gstdio.h>
 #include <time.h>
 
 /* The measurements of the "Studio" desktop: 40px tiles 8px apart in islands
@@ -133,6 +136,7 @@ static struct {
     GHashTable      *pin_icons;  /* ObShelfPin* -> RrImage* (or NULL) */
     gint             hover;      /* -1 nothing, 0 the apps tile, n the nth app */
     gchar           *sig;
+    guint            pins_rev;   /* bumped when the pins change */
     guint            tick_id;
     guint            snap_id;
     cairo_surface_t *bg;         /* what the wallpaper looks like under us */
@@ -1063,7 +1067,8 @@ static gchar *signature(void)
     localtime_r(&now, &tm);
     strftime(buf, sizeof buf, "%H:%M", &tm);
     g_string_append(g, buf);
-    g_string_append_printf(g, "|%d|%d", covered_by_fullscreen(), S.hover);
+    g_string_append_printf(g, "|%d|%d|%u", covered_by_fullscreen(), S.hover,
+                           S.pins_rev);
     g_string_append_printf(g, "|m:%s|w:%s", S.media.out ? S.media.out : "",
                            S.weather.out ? S.weather.out : "");
     for (it = client_list; it; it = g_list_next(it)) {
@@ -1416,13 +1421,183 @@ static gint hit(gint x, gint y)
     return -1;
 }
 
+/* The menu is not "user positioned": Openbox then keeps it on screen, which
+   from the bottom edge means opening upwards. */
 static void show_menu(const gchar *name, gint rx, gint ry, ObClient *c)
 {
     GravityPoint pos = { { 0, }, };
     pos.x.pos = rx;
     pos.y.pos = ry;
-    menu_show((gchar*)name, &pos, screen_monitor_primary(FALSE), FALSE, TRUE,
+    menu_show((gchar*)name, &pos, screen_monitor_primary(FALSE), FALSE, FALSE,
               c);
+}
+
+/* ---- pinning from the dock ------------------------------------------------ */
+
+#define SHELF_MENU_NAME "shelf-menu"
+enum { SM_PIN = 1, SM_UNPIN, SM_WINDOW };
+
+static ObMenu *shelf_menu;
+static ObShelfPin *menu_pin;     /* the tile the menu was opened on */
+static ObClient   *menu_client;
+
+/* One pin per line: name|icon|command|class. '|' and newlines can not be
+   part of a field. */
+static void clean_field(GString *g, const gchar *f)
+{
+    for (; f && *f; ++f)
+        g_string_append_c(g, *f == '|' || *f == '\n' ? ' ' : *f);
+}
+
+static void save_pins(void)
+{
+    GString *g;
+    GSList *it;
+    gchar *dir;
+
+    if (!config_shelf_pins_file || !*config_shelf_pins_file) return;
+    g = g_string_new("# name|icon|command|class, written by the shelf\n");
+    for (it = config_shelf_pins; it; it = g_slist_next(it)) {
+        ObShelfPin *p = it->data;
+        clean_field(g, p->name);    g_string_append_c(g, '|');
+        clean_field(g, p->icon);    g_string_append_c(g, '|');
+        clean_field(g, p->command); g_string_append_c(g, '|');
+        clean_field(g, p->wmclass); g_string_append_c(g, '\n');
+    }
+    dir = g_path_get_dirname(config_shelf_pins_file);
+    g_mkdir_with_parents(dir, 0755);
+    g_free(dir);
+    if (!g_file_set_contents(config_shelf_pins_file, g->str, g->len, NULL))
+        g_message("Failed to write the shelf pins to %s",
+                  config_shelf_pins_file);
+    g_string_free(g, TRUE);
+}
+
+static void pins_changed(void)
+{
+    save_pins();
+    S.pins_rev++;
+    g_free(S.sig);
+    S.sig = NULL;   /* repaint on the next tick */
+}
+
+/* The first word of the window's command line, to start it again */
+static gchar *client_command(const ObClient *c, gchar **exe)
+{
+    gchar *path = g_strdup_printf("/proc/%d/cmdline", (gint)c->pid);
+    gchar *data = NULL;
+    gsize len = 0;
+    gchar *cmd = NULL;
+
+    if (c->pid > 0 && g_file_get_contents(path, &data, &len, NULL) && len &&
+        *data)
+        *exe = g_strdup(data), cmd = g_shell_quote(data); /* argv[0] */
+    g_free(data);
+    g_free(path);
+    if (!cmd) {
+        cmd = g_ascii_strdown(c->class ? c->class : c->name, -1);
+        *exe = g_strdup(cmd);
+    }
+    return cmd;
+}
+
+static void pin_client(ObClient *c)
+{
+    ObShelfPin *p;
+    gchar *low, *base, *file, *exe = NULL;
+
+    if (!c || pinned(c)) return;
+    p = g_slice_new0(ObShelfPin);
+    p->command = client_command(c, &exe);
+    p->wmclass = g_strdup(c->class ? c->class : c->name);
+    p->name = g_strdup(p->wmclass);
+    low = g_ascii_strdown(p->wmclass, -1);
+    base = g_path_get_basename(exe);
+    g_free(exe);
+    /* the icon is the first of the class and the command that the theme has */
+    file = find_icon_file(low);
+    if (file) p->icon = g_strdup(low);
+    else {
+        g_free(file);
+        file = find_icon_file(base);
+        p->icon = g_strdup(file ? base : low);
+    }
+    g_free(file);
+    g_free(low);
+    g_free(base);
+    config_shelf_pins = g_slist_append(config_shelf_pins, p);
+    {
+        gchar *f = find_icon_file(p->icon);
+        RrImage *im = f ? RrImageNewFromName(ob_rr_icons, f) : NULL;
+        g_free(f);
+        g_hash_table_insert(S.pin_icons, p, im);
+    }
+    pins_changed();
+}
+
+static void unpin(ObShelfPin *p)
+{
+    RrImage *im;
+
+    if (!p || !g_slist_find(config_shelf_pins, p)) return;
+    config_shelf_pins = g_slist_remove(config_shelf_pins, p);
+    if ((im = g_hash_table_lookup(S.pin_icons, p))) RrImageUnref(im);
+    g_hash_table_remove(S.pin_icons, p);
+    g_free(p->name);
+    g_free(p->icon);
+    g_free(p->command);
+    g_free(p->wmclass);
+    g_slice_free(ObShelfPin, p);
+    pins_changed();
+}
+
+static void shelf_menu_execute(ObMenuEntry *e, ObMenuFrame *f, ObClient *c,
+                               guint state, gpointer data)
+{
+    if (!S.win) return;
+    switch (e->id) {
+    case SM_PIN:   pin_client(menu_client); break;
+    case SM_UNPIN: unpin(menu_pin); break;
+    }
+    menu_pin = NULL;
+    menu_client = NULL;
+    menu_frame_hide_all();
+}
+
+/* Above the tile that was clicked: below it would be under the shelf */
+static void shelf_menu_place(ObMenuFrame *frame, gint *x, gint *y,
+                             gboolean mouse, gpointer data)
+{
+    gint dx, dy;
+
+    *y -= frame->area.height;
+    menu_frame_move_on_screen(frame, *x, *y, &dx, &dy);
+    *x += dx;
+    *y += dy;
+}
+
+void shelf_menu_startup(void)
+{
+    shelf_menu = menu_new(SHELF_MENU_NAME, "Dock", FALSE, NULL);
+    menu_set_execute_func(shelf_menu, shelf_menu_execute);
+    menu_set_place_func(shelf_menu, shelf_menu_place);
+}
+
+static void show_tile_menu(Tile *t, gint rx, gint ry)
+{
+    if (!shelf_menu) return;
+    menu_clear_entries(shelf_menu);
+    menu_pin = t->pin;
+    menu_client = t->client;
+    if (t->pin)
+        menu_add_normal(shelf_menu, SM_UNPIN, "Unpin from dock", NULL, FALSE);
+    else
+        menu_add_normal(shelf_menu, SM_PIN, "Pin to dock", NULL, FALSE);
+    if (t->client) {
+        menu_add_separator(shelf_menu, -1, NULL);
+        menu_add_submenu(shelf_menu, SM_WINDOW, "client-menu");
+    }
+    show_menu(SHELF_MENU_NAME, rx, ry, t->client);
 }
 
 gboolean shelf_event(const XEvent *e)
@@ -1459,6 +1634,10 @@ gboolean shelf_event(const XEvent *e)
         } else if (h > 0) {
             Tile *t = &g_array_index(S.tiles, Tile, h - 1);
             ObClient *c = t->client;
+            if (e->xbutton.button == 3) {
+                show_tile_menu(t, e->xbutton.x_root, S.wy + S.island_y - 4);
+                break;
+            }
             if (!c) {
                 /* a pin that is not running: left click starts it */
                 if (t->pin && e->xbutton.button == 1)
@@ -1471,9 +1650,6 @@ gboolean shelf_event(const XEvent *e)
                     client_iconify(c, TRUE, TRUE, TRUE);
                 else
                     client_activate(c, TRUE, TRUE, TRUE, TRUE, TRUE);
-            } else if (e->xbutton.button == 3) {
-                show_menu("client-menu", e->xbutton.x_root,
-                          S.wy + S.island_y - 4, c);
             }
         }
         break;

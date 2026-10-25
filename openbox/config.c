@@ -86,6 +86,7 @@ gchar          *config_shelf_material;
 gchar          *config_shelf_font;
 gchar          *config_shelf_icon_theme;
 GSList         *config_shelf_pins;
+gchar          *config_shelf_pins_file;
 ObShelfMedia   *config_shelf_media;
 ObShelfWeather *config_shelf_weather;
 guint           config_dock_show_delay;
@@ -1059,6 +1060,37 @@ static void parse_shelf_pin(xmlNodePtr node, gpointer d)
     config_shelf_pins = g_slist_append(config_shelf_pins, p);
 }
 
+/* The user's pins, when their file exists, take the place of rc.xml's */
+static void load_shelf_pins_file(void)
+{
+    gchar *data, **lines;
+    gint i;
+
+    if (!config_shelf_pins_file || !*config_shelf_pins_file ||
+        !g_file_get_contents(config_shelf_pins_file, &data, NULL, NULL))
+        return;
+    free_shelf_pins();
+    lines = g_strsplit(data, "\n", -1);
+    for (i = 0; lines[i]; ++i) {
+        gchar **f;
+        ObShelfPin *p;
+
+        if (!*lines[i] || lines[i][0] == '#') continue;
+        f = g_strsplit(lines[i], "|", 4);
+        if (g_strv_length(f) == 4 && *f[2]) {
+            p = g_slice_new0(ObShelfPin);
+            p->name = g_strdup(f[0]);
+            p->icon = g_strdup(f[1]);
+            p->command = g_strdup(f[2]);
+            p->wmclass = g_strdup(f[3]);
+            config_shelf_pins = g_slist_append(config_shelf_pins, p);
+        }
+        g_strfreev(f);
+    }
+    g_strfreev(lines);
+    g_free(data);
+}
+
 static void parse_shelf(xmlNodePtr node, gpointer d)
 {
     xmlNodePtr n;
@@ -1085,6 +1117,13 @@ static void parse_shelf(xmlNodePtr node, gpointer d)
              n = obt_xml_find_node(n->next, "pin"))
             parse_shelf_pin(n, d);
     }
+    if ((n = obt_xml_find_node(node, "pinsFile"))) {
+        gchar *f = obt_xml_node_string(n);
+        g_free(config_shelf_pins_file);
+        config_shelf_pins_file = obt_paths_expand_tilde(f);
+        g_free(f);
+    }
+    load_shelf_pins_file();
     if ((n = obt_xml_find_node(node, "media")))
         parse_shelf_media(n);
     if ((n = obt_xml_find_node(node, "weather")))
@@ -1300,6 +1339,8 @@ void config_startup(ObtXmlInst *i)
     g_free(config_shelf_icon_theme);
     config_shelf_icon_theme = g_strdup("");
     free_shelf_pins();
+    g_free(config_shelf_pins_file);
+    config_shelf_pins_file = NULL;
     free_shelf_media();
     free_shelf_weather();
     config_dock_show_delay = 300;
