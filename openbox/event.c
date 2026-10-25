@@ -941,15 +941,6 @@ static gboolean *context_to_button(ObFrame *f, ObFrameContext con, gboolean pres
     }
 }
 
-static gboolean more_client_message_event(Window window, Atom msgtype)
-{
-    ObtXQueueWindowMessage wm;
-    wm.window = window;
-    wm.message = msgtype;
-    return xqueue_exists_local(xqueue_match_window_message, &wm);
-}
-
-
 static void event_handle_client(ObClient *client, XEvent *e)
 {
     Atom msgtype;
@@ -1387,76 +1378,12 @@ static void event_handle_client(ObClient *client, XEvent *e)
 
         if (e->xclient.format != 32) return;
 
+        /* requests pagers and clients make go through the backend */
+        if (backend_x11_client_message(&e->xclient))
+            break;
+
         msgtype = e->xclient.message_type;
-        if (msgtype == OBT_PROP_ATOM(WM_CHANGE_STATE)) {
-            if (!more_client_message_event(client->window, msgtype))
-                client_set_wm_state(client, e->xclient.data.l[0]);
-        } else if (msgtype == OBT_PROP_ATOM(NET_WM_DESKTOP)) {
-            if (!more_client_message_event(client->window, msgtype) &&
-                ((unsigned)e->xclient.data.l[0] < screen_num_desktops ||
-                 (unsigned)e->xclient.data.l[0] == DESKTOP_ALL))
-            {
-                client_set_desktop(client, (unsigned)e->xclient.data.l[0],
-                                   FALSE, FALSE);
-            }
-        } else if (msgtype == OBT_PROP_ATOM(NET_WM_STATE)) {
-            gulong ignore_start;
-
-            /* can't compress these */
-            ob_debug("net_wm_state %s %ld %ld for 0x%lx",
-                     (e->xclient.data.l[0] == 0 ? "Remove" :
-                      e->xclient.data.l[0] == 1 ? "Add" :
-                      e->xclient.data.l[0] == 2 ? "Toggle" : "INVALID"),
-                     e->xclient.data.l[1], e->xclient.data.l[2],
-                     client->window);
-
-            /* ignore enter events caused by these like ob actions do */
-            if (!config_focus_under_mouse)
-                ignore_start = event_start_ignore_all_enters();
-            client_set_state(client, e->xclient.data.l[0],
-                             e->xclient.data.l[1], e->xclient.data.l[2]);
-            if (!config_focus_under_mouse)
-                event_end_ignore_all_enters(ignore_start);
-        } else if (msgtype == OBT_PROP_ATOM(NET_CLOSE_WINDOW)) {
-            ob_debug("net_close_window for 0x%lx", client->window);
-            client_close(client);
-        } else if (msgtype == OBT_PROP_ATOM(NET_ACTIVE_WINDOW)) {
-            ob_debug("net_active_window for 0x%lx source=%s",
-                     client->window,
-                     (e->xclient.data.l[0] == 0 ? "unknown" :
-                      (e->xclient.data.l[0] == 1 ? "application" :
-                       (e->xclient.data.l[0] == 2 ? "user" : "INVALID"))));
-            /* XXX make use of data.l[2] !? */
-            if (e->xclient.data.l[0] == 1 || e->xclient.data.l[0] == 2) {
-                /* we can not trust the timestamp from applications.
-                   e.g. chromium passes a very old timestamp.  openbox thinks
-                   the window will get focus and calls XSetInputFocus with the
-                   (old) timestamp, which doesn't end up moving focus at all.
-                   but the window is raised, not hilited, etc, as if it was
-                   really going to get focus.
-
-                   so do not use this timestamp in event_curtime, as this would
-                   be used in XSetInputFocus.
-                */
-                event_sourcetime = e->xclient.data.l[1];
-                if (e->xclient.data.l[1] == 0)
-                    ob_debug_type(OB_DEBUG_APP_BUGS,
-                                  "_NET_ACTIVE_WINDOW message for window %s is"
-                                  " missing a timestamp", client->title);
-            } else
-                ob_debug_type(OB_DEBUG_APP_BUGS,
-                              "_NET_ACTIVE_WINDOW message for window %s is "
-                              "missing source indication", client->title);
-            /* TODO(danakj) This should use
-               (e->xclient.data.l[0] == 0 ||
-                e->xclient.data.l[0] == 2)
-               to determine if a user requested the activation, however GTK+
-               applications seem unable to make this distinction ever
-               (including panels such as xfce4-panel and gnome-panel).
-               So we are left just assuming all activations are from the user.
-            */
-            client_activate(client, FALSE, FALSE, TRUE, TRUE, TRUE);
-        } else if (msgtype == OBT_PROP_ATOM(NET_WM_MOVERESIZE)) {
+        if (msgtype == OBT_PROP_ATOM(NET_WM_MOVERESIZE)) {
             ob_debug("net_wm_moveresize for 0x%lx direction %d",
                      client->window, e->xclient.data.l[2]);
             if ((Atom)e->xclient.data.l[2] ==
@@ -2212,6 +2139,11 @@ Time event_time(void)
 Time event_source_time(void)
 {
     return event_sourcetime;
+}
+
+void event_set_source_time(Time t)
+{
+    event_sourcetime = t;
 }
 
 void event_reset_time(void)

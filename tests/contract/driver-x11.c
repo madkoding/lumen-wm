@@ -414,19 +414,12 @@ bool ct_window_closed(ct_win *w)
     return w->closed;
 }
 
-void ct_request_state(ct_win *w, ct_state s, bool on)
+static void request_state(ct_win *w, ct_state s, long action)
 {
     int a = 0, b = 0;
 
     switch (s) {
-    case CT_STATE_ICONIC:
-        /* ICCCM: iconify through WM_CHANGE_STATE; deiconify by activating */
-        if (on) {
-            XIconifyWindow(dpy, w->id, DefaultScreen(dpy));
-            XFlush(dpy);
-        } else
-            ct_request_activate(w);
-        return;
+    case CT_STATE_ICONIC:     a = NET_WM_STATE_HIDDEN; break;
     case CT_STATE_MAXIMIZED:
         a = NET_WM_STATE_MAXIMIZED_VERT;
         b = NET_WM_STATE_MAXIMIZED_HORZ;
@@ -435,8 +428,27 @@ void ct_request_state(ct_win *w, ct_state s, bool on)
     case CT_STATE_ABOVE:      a = NET_WM_STATE_ABOVE; break;
     }
     /* source 2: a pager, so no focus stealing prevention gets in the way */
-    send_root(w->id, NET_WM_STATE, on ? 1 : 0, (long)atoms[a],
+    send_root(w->id, NET_WM_STATE, action, (long)atoms[a],
               b ? (long)atoms[b] : 0, 2);
+}
+
+void ct_request_state(ct_win *w, ct_state s, bool on)
+{
+    if (s == CT_STATE_ICONIC) {
+        /* ICCCM: iconify through WM_CHANGE_STATE; deiconify by activating */
+        if (on) {
+            XIconifyWindow(dpy, w->id, DefaultScreen(dpy));
+            XFlush(dpy);
+        } else
+            ct_request_activate(w);
+        return;
+    }
+    request_state(w, s, on ? 1 : 0); /* _NET_WM_STATE_ADD or _REMOVE */
+}
+
+void ct_request_toggle_state(ct_win *w, ct_state s)
+{
+    request_state(w, s, 2); /* _NET_WM_STATE_TOGGLE */
 }
 
 void ct_request_activate(ct_win *w)

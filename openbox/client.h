@@ -25,6 +25,7 @@
 #include "geom.h"
 #include "stacking.h"
 #include "window.h"
+#include "backend.h"
 #include "obrender/color.h"
 
 #include <glib.h>
@@ -584,7 +585,8 @@ void client_set_wm_state(ObClient *self, glong state);
   client_apply_startup_state is used to do the same things during the mapping
   process.
 */
-void client_set_state(ObClient *self, Atom action, glong data1, glong data2);
+void client_set_state(ObClient *self, ObStateAction action,
+                      ObSurfaceStates first, ObSurfaceStates second);
 
 /* Given a ObClient, find the client that focus would actually be sent to if
    you wanted to give focus to the specified ObClient. Will return the same
