@@ -144,6 +144,19 @@ extern gboolean config_shelf_enabled;
 /*! "dark" or "light" */
 extern gchar   *config_shelf_material;
 extern gchar   *config_shelf_font;
+/*! The icon theme (a folder of icon directories) that pin icons given as a
+  bare name are looked up in */
+extern gchar   *config_shelf_icon_theme;
+
+/*! An application pinned to the shelf's dock */
+typedef struct _ObShelfPin {
+    gchar *name;     /*!< the tooltip-less label, used for the initial */
+    gchar *icon;     /*!< a file path, or a name looked up in the icon theme */
+    gchar *command;  /*!< run by /bin/sh -c when the pin is clicked */
+    gchar *wmclass;  /*!< WM_CLASS (or name) of its windows; defaults to the command's first word */
+} ObShelfPin;
+/*! The pinned applications, in order (ObShelfPin*) */
+extern GSList  *config_shelf_pins;
 /*! The number of milliseconds to wait before showing the dock */
 extern guint config_dock_show_delay;
 /*! The mouse button to be used to move dock apps */

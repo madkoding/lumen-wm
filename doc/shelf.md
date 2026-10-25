@@ -18,6 +18,31 @@ Enable it in `rc.xml`:
 </shelf>
 ```
 
+### Pinned applications
+
+`<pins>` lists applications that stay in the dock whether or not they are
+running, in order, before the windows nobody pinned:
+
+```xml
+<shelf>
+  <iconTheme>Lucide</iconTheme>
+  <pins>
+    <pin>
+      <name>Files</name>
+      <icon>system-file-manager</icon>  <!-- a bare name, or a file path -->
+      <command>pcmanfm</command>
+      <class>Pcmanfm</class>            <!-- WM_CLASS or name; default: the command's first word -->
+    </pin>
+  </pins>
+</shelf>
+```
+
+A bare icon name is searched in `$XDG_DATA_DIRS/icons/<iconTheme>/{scalable,
+48x48, 64x64, 32x32, small}/*/<name>.{svg,png}`. A click on a pin that is not
+running starts its command; on a running one it focuses its window (or
+minimises it when it has the focus). The running mark is drawn only while a
+window of the pin's class is open.
+
 The shelf takes its height from the work area (a bottom strut), is hidden
 while a fullscreen window has focus, and needs cairo and pangocairo to build.
 
