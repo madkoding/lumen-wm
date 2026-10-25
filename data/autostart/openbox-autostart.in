@@ -12,7 +12,9 @@ fi
 test -z $BG || $BG -solid "#303030"
 
 GLOBALAUTOSTART="@rcdir@/autostart"
-AUTOSTART="${XDG_CONFIG_HOME:-"$HOME/.config"}/openbox/autostart"
+AUTOSTART="${XDG_CONFIG_HOME:-"$HOME/.config"}/lumen/autostart"
+test -f $AUTOSTART || test -f $AUTOSTART.sh || \
+    AUTOSTART="${XDG_CONFIG_HOME:-"$HOME/.config"}/openbox/autostart"
 
 # Run the global openbox autostart script
 if test -f $GLOBALAUTOSTART; then

@@ -1,12 +1,23 @@
-# Openbox with a shelf
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo/lumen-dark.svg">
+    <img src="docs/logo/lumen-light.svg" alt="Lumen Window Manager" width="440">
+  </picture>
+</p>
 
-**Openbox, the light and fast window manager, plus a modern floating shelf at the bottom of the screen.**
-It gives you a dock with your favourite apps, a music player, the weather, and a clock with wifi, volume and
-power controls. It looks like a modern desktop and keeps Openbox's speed.
+# Lumen Window Manager
+
+**Lumen is a light and fast X11 window manager with colour themes and a modern floating shelf at the bottom of the
+screen.** It gives you a dock with your favourite apps, a music player, the weather, and a clock with wifi,
+volume and power controls. It looks like a modern desktop and keeps the speed of Openbox, which it is based on.
+
+> Lumen is a heavily modified fork of [Openbox](http://openbox.org). It installs as `lumen-wm`, and keeps an
+> `openbox` command and reads `~/.config/openbox` when `~/.config/lumen` is missing, so your Openbox setup keeps
+> working.
 
 ![The shelf: dock with pinned apps, music player, weather and clock](docs/screenshots/shelf-desktop.png)
 
-The shelf is **off by default**. Until you turn it on, this is plain [Openbox](http://openbox.org).
+The shelf is **off by default**. Until you turn it on, Lumen behaves like plain [Openbox](http://openbox.org).
 
 ## What you get
 
@@ -30,8 +41,8 @@ sudo apt-get install build-essential autoconf automake libtool pkg-config gettex
   libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev libx11-dev libxft-dev \
   libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev libimlib2-dev
 
-git clone https://github.com/madkoding/openbox
-cd openbox
+git clone https://github.com/madkoding/openbox lumen
+cd lumen
 ./bootstrap
 ./configure --prefix=/usr --sysconfdir=/etc
 make
@@ -40,7 +51,7 @@ sudo make install
 
 ### 2. Turn the shelf on
 
-Open `~/.config/openbox/rc.xml`. If you don't have it, copy the default from `/etc/xdg/openbox/rc.xml`. Find
+Open `~/.config/lumen/rc.xml`. If you don't have it, copy the default from `/etc/xdg/openbox/rc.xml`. Find
 the `<shelf>` section and set:
 
 ```xml
@@ -52,7 +63,7 @@ the `<shelf>` section and set:
 ### 3. Apply it
 
 ```sh
-openbox --reconfigure
+lumen-wm --reconfigure
 ```
 
 The shelf appears at the bottom of the screen. Every time you change `rc.xml`, run this command again.
@@ -61,8 +72,8 @@ The shelf appears at the bottom of the screen. Every time you change `rc.xml`, r
 
 ### Pick a look
 
-The shelf takes the colours of your Openbox theme. Change the theme (for example with `obconf`) and the shelf
-changes with it. These are the themes that come with Openbox:
+The shelf takes the colours of your window theme. Change the theme (for example with `obconf`) and the shelf
+changes with it. These are the themes that come with Lumen:
 
 ![The shelf under each bundled theme](docs/screenshots/shelf-themes.png)
 
@@ -93,7 +104,7 @@ Drag a pinned app onto another to change the order.
 To keep your pins after a restart, tell the shelf where to save them:
 
 ```xml
-<pinsFile>~/.config/openbox/pins</pinsFile>
+<pinsFile>~/.config/lumen/pins</pinsFile>
 ```
 
 You can also list them by hand:
@@ -169,7 +180,7 @@ Click for a menu, scroll to change the volume, middle click to mute.
 
 ```xml
 <power>
-  <item><name>Log out</name><command>openbox --exit</command></item>
+  <item><name>Log out</name><command>lumen-wm --exit</command></item>
   <item><name>Restart</name><command>systemctl reboot</command></item>
   <item><name>Shut down</name><command>systemctl poweroff</command></item>
 </power>
@@ -224,7 +235,7 @@ Sun|67°|cloud
 ## Troubleshooting
 
 - **The shelf doesn't show up.** Check that `<enabled>yes</enabled>` is inside `<shelf>` and run
-  `openbox --reconfigure`. It also hides itself while a window is fullscreen.
+  `lumen-wm --reconfigure`. It also hides itself while a window is fullscreen.
 - **The menus have rough corners and no shadow.** Start a compositor, such as `picom`.
 - **A pin shows a letter instead of an icon.** That icon name doesn't exist in your `<iconTheme>`. Try another
   name, or give the path to an image.
@@ -255,7 +266,7 @@ Sun|67°|cloud
       <class>Pcmanfm</class>          <!-- the window's class; default: the command's first word -->
     </pin>
   </pins>
-  <pinsFile>~/.config/openbox/pins</pinsFile>  <!-- pins saved from the dock; replaces <pins> once it exists -->
+  <pinsFile>~/.config/lumen/pins</pinsFile>  <!-- pins saved from the dock; replaces <pins> once it exists -->
 
   <network>
     <list>nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID dev wifi</list>
@@ -270,7 +281,7 @@ Sun|67°|cloud
     <toggle>wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle</toggle>
   </volume>
   <power>
-    <item><name>Log out</name><command>openbox --exit</command></item>
+    <item><name>Log out</name><command>lumen-wm --exit</command></item>
   </power>
   <battery>yes</battery>
   <batteryDir></batteryDir>           <!-- default: found in /sys/class/power_supply -->
@@ -298,7 +309,7 @@ Commands run in the background, so a slow one never freezes the desktop.
 
 ## Use in Kitties
 
-This fork is the window manager of [Kitties](https://github.com/madkoding/kitties). Its desktop image comes with
+Lumen is the window manager of [Kitties](https://github.com/madkoding/kitties). Its desktop image comes with
 the shelf already set up: the Sansation font, Lucide icons, pinned apps, and music and weather scripts. See its
 [desktop docs](https://github.com/madkoding/kitties/blob/main/docs/DESKTOP.md).
 
@@ -312,14 +323,14 @@ the shelf already set up: the Sansation font, Lucide icons, pinned apps, and mus
 
 ## License and credits
 
-Openbox is free software under the GNU General Public License, version 2 or (at your option) any later
-version. See [`COPYING`](COPYING). This fork keeps the original copyright notices and [`AUTHORS`](AUTHORS),
-and the shelf is released under the same licence.
+Lumen is based on Openbox and, like it, is free software under the GNU General Public License, version 2 or
+(at your option) any later version. See [`COPYING`](COPYING). Lumen keeps the original copyright notices and
+[`AUTHORS`](AUTHORS), and its own changes, the shelf included, are released under the same licence.
 
 - Openbox: Copyright (C) 2004 Mikael Magnusson, Copyright (C) 2002 Dana Jansens, and all the contributors in
   `AUTHORS`. Upstream: <http://openbox.org>.
-- The shelf's design is inspired by the shelf of Luma. This project is not affiliated with Luma and does not
-  use its name or logo.
+- The shelf's design is inspired by the shelf of LumaUI. Lumen is not affiliated with LumaUI or Openbox and
+  does not use their logos.
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
 implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.

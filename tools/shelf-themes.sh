@@ -88,7 +88,7 @@ PY
     else
         display -window root -size 1000x420 gradient:'#6d8fb5-#3b5173' &
     fi
-    HOME=$home OB_SHELF_DEBUG=1 "$PREFIX/bin/openbox" \
+    HOME=$home OB_SHELF_DEBUG=1 "$PREFIX/bin/lumen-wm" \
         --config-file "$home/.config/openbox/rc.xml" 2>"$WORK/$t.log" &
     op=$!
     sleep 1

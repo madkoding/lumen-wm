@@ -1,6 +1,6 @@
-?package(openbox):\
+?package(lumen-wm):\
   needs="wm"\
   section="WindowManagers"\
-  title="Openbox"\
-  command="/usr/bin/openbox"\
+  title="Lumen"\
+  command="/usr/bin/lumen-wm"\
   icon="/usr/share/pixmaps/openbox.png"

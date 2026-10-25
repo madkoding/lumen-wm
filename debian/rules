@@ -64,8 +64,8 @@ install: build
 	dh_clean -k 
 	dh_installdirs
 
-	# Add here commands to install the package into debian/openbox.
-	$(MAKE) DESTDIR=$(CURDIR)/debian/openbox install
+	# Add here commands to install the package into debian/lumen-wm.
+	$(MAKE) DESTDIR=$(CURDIR)/debian/lumen-wm install
 
 
 # Build architecture-independent files here.

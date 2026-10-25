@@ -31,7 +31,7 @@ lib_LTLIBRARIES = \
 	obrender/libobrender.la
 
 bin_PROGRAMS = \
-	openbox/openbox \
+	openbox/lumen-wm \
 	tools/gdm-control/gdm-control \
 	tools/gnome-panel-control/gnome-panel-control \
 	tools/obxprop/obxprop
@@ -166,7 +166,7 @@ obt_libobt_la_SOURCES = \
 
 ## openbox ##
 
-openbox_openbox_CPPFLAGS = \
+openbox_lumen_wm_CPPFLAGS = \
 	$(SHELF_CFLAGS) \
 	$(SM_CFLAGS) \
 	$(X_CFLAGS) \
@@ -180,7 +180,7 @@ openbox_openbox_CPPFLAGS = \
 	-DDATADIR=\"$(datadir)\" \
 	-DCONFIGDIR=\"$(configdir)\" \
 	-DG_LOG_DOMAIN=\"Openbox\"
-openbox_openbox_LDADD = \
+openbox_lumen_wm_LDADD = \
 	$(SHELF_LIBS) \
 	-lm \
 	$(XINERAMA_LIBS) \
@@ -195,8 +195,8 @@ openbox_openbox_LDADD = \
 	$(LIBINTL) \
 	obrender/libobrender.la \
 	obt/libobt.la
-openbox_openbox_LDFLAGS = -export-dynamic
-openbox_openbox_SOURCES = \
+openbox_lumen_wm_LDFLAGS = -export-dynamic
+openbox_lumen_wm_SOURCES = \
 	gettext.h \
 	openbox/actions/all.c \
 	openbox/actions/all.h \
@@ -624,6 +624,14 @@ CLEANFILES = \
 
 #doc:
 #       $(MAKE) -$(MAKEFLAGS) -C doc/doxygen doc
+
+# Lumen used to be Openbox: keep "openbox" working for existing sessions,
+# scripts and configs.
+install-exec-hook:
+	cd $(DESTDIR)$(bindir) && rm -f openbox && $(LN_S) lumen-wm openbox
+
+uninstall-hook:
+	rm -f $(DESTDIR)$(bindir)/openbox
 
 distclean-local:
 	for d in . m4 po obrender parser obt openbox; do \

@@ -84,10 +84,10 @@ void menu_startup(gboolean reconfig)
                        parse_menu_separator, &menu_parse_state);
 
     for (it = config_menu_files; it; it = g_slist_next(it)) {
-        if (obt_xml_load_config_file(menu_parse_inst,
-                                     "openbox",
-                                     it->data,
-                                     "openbox_menu"))
+        if (obt_xml_load_config_file_domains(menu_parse_inst,
+                                             ob_config_domains,
+                                             it->data,
+                                             "openbox_menu"))
         {
             loaded = TRUE;
             obt_xml_tree_from_root(menu_parse_inst);
@@ -106,10 +106,10 @@ void menu_startup(gboolean reconfig)
                       (const gchar*)it->data);
     }
     if (!loaded) {
-        if (obt_xml_load_config_file(menu_parse_inst,
-                                     "openbox",
-                                     "menu.xml",
-                                     "openbox_menu"))
+        if (obt_xml_load_config_file_domains(menu_parse_inst,
+                                             ob_config_domains,
+                                             "menu.xml",
+                                             "openbox_menu"))
         {
             obt_xml_tree_from_root(menu_parse_inst);
             obt_xml_close(menu_parse_inst);

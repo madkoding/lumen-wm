@@ -45,6 +45,10 @@ extern gboolean ob_sm_restore;
 extern gboolean ob_replace_wm;
 extern gboolean ob_debug_xinerama;
 
+/*! The config directories looked up under each XDG config dir, in order:
+  Lumen's own, then Openbox's for backwards compatibility. */
+extern const gchar *const ob_config_domains[];
+
 /*! The current locale for the LC_MESSAGES category */
 extern const gchar *ob_locale_msg;
 

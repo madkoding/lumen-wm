@@ -101,6 +101,8 @@ static gboolean  xsync = FALSE;
 static gboolean  reconfigure = FALSE;
 static gboolean  restart = FALSE;
 static gchar    *restart_path = NULL;
+
+const gchar *const ob_config_domains[] = { "lumen", "openbox", NULL };
 static Cursor    cursors[OB_NUM_CURSORS];
 static gint      exitcode = 0;
 static guint     remote_control = 0;
@@ -245,8 +247,9 @@ gint main(gint argc, gchar **argv)
                 /* parse/load user options */
                 if ((config_file &&
                      obt_xml_load_file(i, config_file, "openbox_config")) ||
-                    obt_xml_load_config_file(i, "openbox", "rc.xml",
-                                             "openbox_config"))
+                    obt_xml_load_config_file_domains(i, ob_config_domains,
+                                                     "rc.xml",
+                                                     "openbox_config"))
                 {
                     obt_xml_tree_from_root(i);
                     obt_xml_close(i);
