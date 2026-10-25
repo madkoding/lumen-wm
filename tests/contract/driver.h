@@ -87,6 +87,8 @@ bool ct_window_closed(ct_win *w);
 
 /* Requests, as a pager or a taskbar would send them. */
 void ct_request_state(ct_win *w, ct_state s, bool on);
+/* Turn the state off when it is on, on when it is off. */
+void ct_request_toggle_state(ct_win *w, ct_state s);
 void ct_request_activate(ct_win *w);
 void ct_request_close(ct_win *w);
 void ct_request_move_resize(ct_win *w, ct_rect r);

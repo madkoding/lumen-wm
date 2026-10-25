@@ -129,6 +129,22 @@ static void maximize_fills_workarea(void)
     ct_window_destroy(w);
 }
 
+/* Toggling a state flips it, both ways. */
+static void maximize_toggles(void)
+{
+    ct_win *w = mapped(CT_WIN_NORMAL, "toggle", SMALL);
+    ct_rect before = ct_window_frame(w);
+
+    ct_request_toggle_state(w, CT_STATE_MAXIMIZED);
+    CT_EVENTUALLY(ct_window_has_state(w, CT_STATE_MAXIMIZED));
+    CT_EVENTUALLY(ct_rect_eq(ct_window_frame(w), ct_workarea()));
+
+    ct_request_toggle_state(w, CT_STATE_MAXIMIZED);
+    CT_EVENTUALLY(!ct_window_has_state(w, CT_STATE_MAXIMIZED));
+    CT_EVENTUALLY(ct_rect_eq(ct_window_frame(w), before));
+    ct_window_destroy(w);
+}
+
 /* A fullscreen window covers the screen with no decorations. */
 static void fullscreen_covers_screen(void)
 {
@@ -338,6 +354,7 @@ const ct_case ct_cases[] = {
     { "activate_focuses_and_raises", activate_focuses_and_raises },
     { "close_falls_back", close_falls_back },
     { "maximize_fills_workarea", maximize_fills_workarea },
+    { "maximize_toggles", maximize_toggles },
     { "fullscreen_covers_screen", fullscreen_covers_screen },
     { "starts_fullscreen", starts_fullscreen },
     { "iconify_hides", iconify_hides },
