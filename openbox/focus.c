@@ -50,10 +50,8 @@ void focus_startup(gboolean reconfig)
 
 void focus_shutdown(gboolean reconfig)
 {
-    if (reconfig) return;
-
-    /* reset focus to root */
-    XSetInputFocus(obt_display, PointerRoot, RevertToNone, CurrentTime);
+    /* the backend hands the focus back with the screen */
+    (void)reconfig;
 }
 
 static void push_to_top(ObClient *client)
@@ -194,8 +192,7 @@ void focus_nothing(void)
     focus_set_client(NULL);
 
     /* when nothing will be focused, send focus to the backup target */
-    XSetInputFocus(obt_display, screen_support_win, RevertToPointerRoot,
-                   event_time());
+    ob_backend->surface_focus(OB_SURFACE_NONE, event_time(), TRUE, FALSE);
 }
 
 void focus_order_add_new(ObClient *c)
