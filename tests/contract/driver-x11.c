@@ -843,8 +843,23 @@ void ct_input_click(ct_win *w, int x, int y)
     XTestFakeButtonEvent(dpy, 1, False, 0);
     XFlush(dpy);
 }
+void ct_input_title_click(ct_win *w, int count)
+{
+    ct_rect f = ct_window_frame(w), c = ct_window_client(w);
+
+    /* the middle of the decorations above the client */
+    XTestFakeMotionEvent(dpy, -1, f.x + f.w / 2, f.y + (c.y - f.y) / 2, 0);
+    for (int i = 0; i < count; ++i) {
+        fake_sync();
+        XTestFakeButtonEvent(dpy, 1, True, 0);
+        fake_sync();
+        XTestFakeButtonEvent(dpy, 1, False, 0);
+    }
+    XFlush(dpy);
+}
 #else
 void ct_input_keys(const char *keys) { (void)keys; }
+void ct_input_title_click(ct_win *w, int count) { (void)w; (void)count; }
 void ct_input_click(ct_win *w, int x, int y) { (void)w; (void)x; (void)y; }
 void ct_input_client_drag(ct_win *w, ct_edge edge, int dx, int dy)
 {

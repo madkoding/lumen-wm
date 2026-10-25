@@ -139,6 +139,9 @@ void ct_input_client_drag(ct_win *w, ct_edge edge, int dx, int dy);
 void ct_request_keyboard_move(ct_win *w);
 /* Click the first button at x, y in the window. */
 void ct_input_click(ct_win *w, int x, int y);
+/* Click the first button on the window's title bar, count times in a
+   row. */
+void ct_input_title_click(ct_win *w, int count);
 /* How many times the window manager asked a syncing client to tell it
    when it has drawn a new size. */
 int ct_window_sync_requests(ct_win *w);

@@ -617,6 +617,25 @@ static void keyboard_move_steps(void)
     ct_window_destroy(w);
 }
 
+/* Double-clicking the title bar maximizes (the default binding); a single
+   click doesn't. */
+static void title_double_click_maximizes(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT);
+    ct_win *w = mapped(CT_WIN_NORMAL, "double click", SMALL);
+    ct_settle();
+
+    ct_input_title_click(w, 1);
+    ct_settle();
+    CT_CHECK(!ct_window_has_state(w, CT_STATE_MAXIMIZED));
+
+    /* wait out the double-click time (500 ms), so this is a new pair */
+    for (int i = 0; i < 4; ++i) ct_settle();
+    ct_input_title_click(w, 2);
+    CT_EVENTUALLY(ct_window_has_state(w, CT_STATE_MAXIMIZED));
+    ct_window_destroy(w);
+}
+
 /* Dragging a window with Alt held moves it by as much. */
 static void alt_drag_moves(void)
 {
@@ -666,6 +685,7 @@ const ct_case ct_cases[] = {
     { "key_binding_ignores_num_lock", key_binding_ignores_num_lock },
     { "alt_tab_switches", alt_tab_switches },
     { "click_focuses_and_passes", click_focuses_and_passes },
+    { "title_double_click_maximizes", title_double_click_maximizes },
     { "alt_drag_moves", alt_drag_moves },
     { "client_move_follows_pointer", client_move_follows_pointer },
     { "client_resize_follows_pointer", client_resize_follows_pointer },
