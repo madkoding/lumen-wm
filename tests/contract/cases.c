@@ -550,6 +550,26 @@ static void synced_resize_follows_pointer(void)
     ct_window_destroy(w);
 }
 
+/* How opaque a client asks to be reaches its frame, while it is mapped. */
+static void opacity_follows_client(void)
+{
+    CT_REQUIRE(CT_CAP_OPACITY);
+    ct_win *w = ct_window_new(CT_WIN_NORMAL, "opacity", SMALL);
+    ct_window_set_opacity(w, 0.5);
+    ct_window_map(w);
+    CT_EVENTUALLY(ct_window_managed(w) && ct_window_viewable(w));
+    CT_EVENTUALLY(ct_window_shown_opacity(w) > 0.49 &&
+                  ct_window_shown_opacity(w) < 0.51);
+
+    ct_window_set_opacity(w, 0.8);
+    CT_EVENTUALLY(ct_window_shown_opacity(w) > 0.79 &&
+                  ct_window_shown_opacity(w) < 0.81);
+
+    ct_window_set_opacity(w, -1);
+    CT_EVENTUALLY(ct_window_shown_opacity(w) < 0);
+    ct_window_destroy(w);
+}
+
 /* A keyboard move goes a step for each arrow key, and Return ends it. */
 static void keyboard_move_steps(void)
 {
@@ -630,5 +650,6 @@ const ct_case ct_cases[] = {
     { "client_resize_follows_pointer", client_resize_follows_pointer },
     { "synced_resize_follows_pointer", synced_resize_follows_pointer },
     { "keyboard_move_steps", keyboard_move_steps },
+    { "opacity_follows_client", opacity_follows_client },
     { NULL, NULL }
 };

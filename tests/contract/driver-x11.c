@@ -45,6 +45,7 @@ enum {
     NET_WM_WINDOW_TYPE_DIALOG, UTF8_STRING, NET_WM_VISIBLE_NAME,
     MOTIF_WM_HINTS, NET_RESTACK_WINDOW, NET_MOVERESIZE_WINDOW,
     NET_WM_MOVERESIZE, NET_WM_SYNC_REQUEST, NET_WM_SYNC_REQUEST_COUNTER,
+    NET_WM_WINDOW_OPACITY,
     NUM_ATOMS
 };
 
@@ -62,7 +63,7 @@ static char *atom_names[NUM_ATOMS] = {
     "_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_WINDOW_TYPE_DIALOG", "UTF8_STRING",
     "_NET_WM_VISIBLE_NAME", "_MOTIF_WM_HINTS", "_NET_RESTACK_WINDOW",
     "_NET_MOVERESIZE_WINDOW", "_NET_WM_MOVERESIZE", "_NET_WM_SYNC_REQUEST",
-    "_NET_WM_SYNC_REQUEST_COUNTER",
+    "_NET_WM_SYNC_REQUEST_COUNTER", "_NET_WM_WINDOW_OPACITY",
 };
 
 static Atom atoms[NUM_ATOMS];
@@ -172,7 +173,7 @@ const char *ct_driver_name(void)
 ct_caps ct_driver_caps(void)
 {
     return CT_CAP_CLIENT_POSITION | CT_CAP_DESKTOPS | CT_CAP_STRUTS |
-        CT_CAP_STACKING | CT_CAP_CLIENT_FOCUS
+        CT_CAP_STACKING | CT_CAP_CLIENT_FOCUS | CT_CAP_OPACITY
 #ifdef CT_HAVE_XTEST
         | CT_CAP_INPUT
 #endif
@@ -293,6 +294,46 @@ void ct_window_set_sync(ct_win *w)
 #else
     (void)w;
 #endif
+}
+
+void ct_window_set_opacity(ct_win *w, double opacity)
+{
+    unsigned long v = (unsigned long)(opacity * 0xffffffffu);
+
+    if (opacity < 0)
+        XDeleteProperty(dpy, w->id, atoms[NET_WM_WINDOW_OPACITY]);
+    else
+        XChangeProperty(dpy, w->id, atoms[NET_WM_WINDOW_OPACITY],
+                        XA_CARDINAL, 32, PropModeReplace,
+                        (unsigned char *)&v, 1);
+    XFlush(dpy);
+}
+
+/* The window's frame: its ancestor right below the root. */
+static Window top_level(Window win)
+{
+    Window rt, parent, *children;
+    unsigned int n;
+
+    while (XQueryTree(dpy, win, &rt, &parent, &children, &n)) {
+        if (children) XFree(children);
+        if (parent == root || parent == None) break;
+        win = parent;
+    }
+    return win;
+}
+
+double ct_window_shown_opacity(ct_win *w)
+{
+    unsigned long *v;
+    double r = -1;
+
+    /* compositors read it off the frame, so the window manager copies it
+       there */
+    if (get_prop(top_level(w->id), NET_WM_WINDOW_OPACITY, XA_CARDINAL, &v))
+        r = (double)(v[0] & 0xffffffffu) / 0xffffffffu;
+    if (v) XFree(v);
+    return r;
 }
 
 int ct_window_sync_requests(ct_win *w)
