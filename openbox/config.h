@@ -212,6 +212,8 @@ extern gchar   *config_shelf_battery_dir;
 
 /*! Radius, in pixels, of the corners of menus; 0 keeps them square */
 extern gint config_shelf_menu_radius;
+/*! Extra room, in pixels, around and inside the entries of menus */
+extern gint config_shelf_menu_padding;
 
 /*! The number of milliseconds to wait before showing the dock */
 extern guint config_dock_show_delay;

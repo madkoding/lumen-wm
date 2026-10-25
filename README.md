@@ -70,6 +70,7 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
   </power>
   <battery>yes</battery>              <!-- shown only when the machine has one -->
   <menuRadius>10</menuRadius>         <!-- rounded corners of every menu; 0 = square -->
+  <menuPadding>8</menuPadding>        <!-- air around and inside every menu, in pixels -->
 
   <media>
     <command>my-media-script</command>  <!-- prints what the island shows -->
@@ -92,8 +93,8 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
   file replaces the `<pins>` of rc.xml from then on. The window's command line, with its arguments, is the command.
 - **Status glyphs**: the network glyph opens a menu of the networks `<list>` prints, and picking one runs
   `<connect>`. The volume glyph opens a menu (level, louder, quieter, mute), steps with the wheel and mutes on middle click. The power glyph opens the `<power>`
-  items. With `<battery>` and a battery in `/sys/class/power_supply` (or `<batteryDir>`), its charge shows next
-  to the glyphs, and a click tells the state. Without these sections the glyphs only show.
+  items. With `<battery>` and a battery in `/sys/class/power_supply` (or `<batteryDir>`), its glyph joins them and a
+  click tells the state. The charge, the active network's signal and the volume (`<level>`) show under their glyphs. Without these sections the glyphs only show.
 - **Font**: `Sansation` is the font Kitties uses. Install it and name it in `<font>`.
 - **Media command**: prints four lines: `Playing` or `Paused`, the title, the artist and a path to the cover
   (may be empty). The `previous`, `toggle` and `next` commands run on the buttons.

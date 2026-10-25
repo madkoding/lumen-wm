@@ -51,7 +51,6 @@
 #define CLOCK_W     78
 #define GLYPH       15
 #define GLYPH_GAP   10
-#define CONTROLS_W  (3 * GLYPH + 2 * GLYPH_GAP)
 /* Room the shadow needs left and right of the islands, and above them */
 #define SIDE        24
 #define LIP         2
@@ -61,7 +60,6 @@
 #define BTN_GAP     6
 #define DAY_W       46
 #define WPAD        16
-#define BATT_W      62
 #define MENU_GAP    10    /* between a menu and the island it opens from */
 #define HIT_NET     (-90)
 #define HIT_VOL     (-91)
@@ -129,7 +127,7 @@ typedef struct {
 
 static struct {
     Window           win;
-    Feed             media, weather;
+    Feed             media, weather, net, vol;
     gboolean         has_media, has_weather;
     gchar           *art_file;   /* the picture the media island shows */
     RrImage         *art;
@@ -268,6 +266,7 @@ static void centred_text(cairo_t *cr, const gchar *str, gdouble px,
 /* Lucide-style glyphs, 24 unit grid drawn with a 2 unit round stroke. */
 static void glyph_begin(cairo_t *cr, gdouble x, gdouble y, Rgb ink)
 {
+    cairo_new_path(cr);   /* text leaves a current point behind */
     cairo_save(cr);
     cairo_translate(cr, x, y);
     cairo_scale(cr, GLYPH / 24.0, GLYPH / 24.0);
@@ -618,9 +617,55 @@ static void battery_poll(void)
     if (dir) g_dir_close(dir);
 }
 
+/* A column of the status island: the glyph, and under it a value when the
+   config can tell one. Wider when there are values to show. */
+static gint col_w(void)
+{
+    return config_shelf_battery ||
+           (config_shelf_network && config_shelf_network->list) ||
+           (config_shelf_volume && config_shelf_volume->level) ?
+           34 : GLYPH + GLYPH_GAP;
+}
+
 static gint battery_w(void)
 {
-    return S.batt_pct >= 0 ? BATT_W : 0;
+    return S.batt_pct >= 0 ? col_w() : 0;
+}
+
+/* The active network's signal, from the "in-use:signal:name" lines */
+static gchar *net_text(void)
+{
+    gchar **lines, *res = NULL;
+    gint i;
+
+    if (!S.net.out) return NULL;
+    lines = g_strsplit(S.net.out, "\n", -1);
+    for (i = 0; lines[i] && !res; ++i) {
+        gchar *c = lines[i], *e;
+        if (*c != '*' || !(c = strchr(c, ':'))) continue;
+        for (e = ++c; g_ascii_isdigit(*e); ++e);
+        if (e > c && *e == ':') res = g_strdup_printf("%.*s%%", (gint)(e - c), c);
+    }
+    g_strfreev(lines);
+    return res;
+}
+
+/* The volume as the command prints it: a number gets a percent sign */
+static gchar *vol_text(void)
+{
+    gchar *t, *e;
+
+    if (!S.vol.out || !*S.vol.out) return NULL;
+    t = g_strdup(S.vol.out);
+    t[strcspn(t, "\n \t")] = 0;
+    for (e = t; g_ascii_isdigit(*e); ++e);
+    if (e > t && !*e) {
+        gchar *p = g_strdup_printf("%s%%", t);
+        g_free(t);
+        return p;
+    }
+    if (strlen(t) > 5) t[5] = 0;
+    return t;
 }
 
 static void layout(void)
@@ -658,7 +703,7 @@ static void layout(void)
     if (n) S.dock_w += DIVIDER_W + n * TILE + (n - 1) * TILE_GAP;
     layout_islands();
     battery_poll();
-    S.status_w = 2 * PAD + CLOCK_W + DIVIDER_W + battery_w() + CONTROLS_W;
+    S.status_w = 2 * PAD + CLOCK_W + DIVIDER_W + battery_w() + 3 * col_w();
     row_w = S.dock_w + ISLAND_GAP + S.status_w;
     if (S.media_w) row_w += ISLAND_GAP + S.media_w;
     if (S.weather_w) row_w += ISLAND_GAP + S.weather_w;
@@ -1037,22 +1082,37 @@ static void paint(void)
                  m->ink, 0.62);
     {
         gdouble dx = S.status_x + PAD + CLOCK_W + 8;
+        gint cw = col_w();
         gdouble gx = S.status_x + PAD + CLOCK_W + DIVIDER_W;
-        gdouble gy = y + (ISLAND_H - GLYPH) / 2.0;
-        if (S.batt_pct >= 0) {
-            gchar *pc = g_strdup_printf("%d%%", S.batt_pct);
-            glyph_battery(cr, gx, gy, m->ink, S.batt_pct, S.batt_charging);
-            centred_text(cr, pc, 12, PANGO_WEIGHT_MEDIUM,
-                         gx + GLYPH + 6 + 15, y + ISLAND_H / 2.0, m->ink, 0.85);
-            g_free(pc);
-            gx += BATT_W;
-        }
+        gchar *bt = S.batt_pct >= 0 ?
+                    g_strdup_printf("%d%%", S.batt_pct) : NULL;
+        gchar *nt = net_text(), *vt = vol_text();
+        gdouble gy_text = y + 13, gy_bare = y + (ISLAND_H - GLYPH) / 2.0;
+
         cairo_rectangle(cr, dx, y + (ISLAND_H - DIVIDER_H) / 2.0, 1, DIVIDER_H);
         set_rgb(cr, m->divider, m->divider_a);
         cairo_fill(cr);
-        glyph_wifi(cr, gx, gy, m->ink);
-        glyph_volume(cr, gx + GLYPH + GLYPH_GAP, gy, m->ink);
-        glyph_power(cr, gx + 2 * (GLYPH + GLYPH_GAP), gy, m->ink);
+        if (bt) {
+            gdouble cx0 = gx + cw / 2.0;
+            glyph_battery(cr, cx0 - GLYPH / 2.0, gy_text, m->ink,
+                          S.batt_pct, S.batt_charging);
+            centred_text(cr, bt, 10, PANGO_WEIGHT_MEDIUM, cx0, y + 38, m->ink,
+                         0.7);
+            gx += cw;
+        }
+        glyph_wifi(cr, gx + (cw - GLYPH) / 2.0, nt ? gy_text : gy_bare, m->ink);
+        if (nt)
+            centred_text(cr, nt, 10, PANGO_WEIGHT_MEDIUM, gx + cw / 2.0, y + 38,
+                         m->ink, 0.7);
+        gx += cw;
+        glyph_volume(cr, gx + (cw - GLYPH) / 2.0, vt ? gy_text : gy_bare,
+                     m->ink);
+        if (vt)
+            centred_text(cr, vt, 10, PANGO_WEIGHT_MEDIUM, gx + cw / 2.0, y + 38,
+                         m->ink, 0.7);
+        gx += cw;
+        glyph_power(cr, gx + (cw - GLYPH) / 2.0, gy_bare, m->ink);
+        g_free(bt); g_free(nt); g_free(vt);
     }
     cairo_destroy(cr);
 
@@ -1150,8 +1210,11 @@ static gchar *signature(void)
     battery_poll();
     g_string_append_printf(g, "|%d|%d|%u|b:%d%d", covered_by_fullscreen(),
                            S.hover, S.pins_rev, S.batt_pct, S.batt_charging);
-    g_string_append_printf(g, "|m:%s|w:%s", S.media.out ? S.media.out : "",
-                           S.weather.out ? S.weather.out : "");
+    g_string_append_printf(g, "|m:%s|w:%s|n:%s|v:%s",
+                           S.media.out ? S.media.out : "",
+                           S.weather.out ? S.weather.out : "",
+                           S.net.out ? S.net.out : "",
+                           S.vol.out ? S.vol.out : "");
     for (it = client_list; it; it = g_list_next(it)) {
         ObClient *c = it->data;
         if (!listed(c)) continue;
@@ -1305,7 +1368,8 @@ static gboolean run_read(GIOChannel *ch, GIOCondition cond, gpointer data)
     if (!eof) return TRUE;
 
     /* S is zeroed when the shelf shuts down: the feed is then not ours */
-    if (S.win && (r->feed == &S.media || r->feed == &S.weather))
+    if (S.win && (r->feed == &S.media || r->feed == &S.weather ||
+                  r->feed == &S.net || r->feed == &S.vol))
         feed_done(r->feed, r->buf);
     g_string_free(r->buf, TRUE);
     g_io_channel_shutdown(ch, FALSE, NULL);
@@ -1354,6 +1418,18 @@ static void start_feeds(void)
         S.media.timer = g_timeout_add_seconds(S.media.interval, feed_timer,
                                               &S.media);
     }
+    if (config_shelf_network && config_shelf_network->list) {
+        S.net.command = config_shelf_network->list;
+        S.net.interval = 10;
+        refresh_feed(&S.net);
+        S.net.timer = g_timeout_add_seconds(S.net.interval, feed_timer, &S.net);
+    }
+    if (config_shelf_volume && config_shelf_volume->level) {
+        S.vol.command = config_shelf_volume->level;
+        S.vol.interval = 3;
+        refresh_feed(&S.vol);
+        S.vol.timer = g_timeout_add_seconds(S.vol.interval, feed_timer, &S.vol);
+    }
     if (config_shelf_weather) {
         S.has_weather = TRUE;
         S.weather.command = config_shelf_weather->command;
@@ -1368,6 +1444,10 @@ static void stop_feeds(void)
 {
     if (S.media.timer) g_source_remove(S.media.timer);
     if (S.weather.timer) g_source_remove(S.weather.timer);
+    if (S.net.timer) g_source_remove(S.net.timer);
+    if (S.vol.timer) g_source_remove(S.vol.timer);
+    g_free(S.net.out);
+    g_free(S.vol.out);
     g_free(S.media.out);
     g_free(S.weather.out);
     if (S.art) RrImageUnref(S.art);
@@ -1391,6 +1471,13 @@ static void update_art(void)
 }
 
 static void launch(const gchar *command);
+
+static gboolean refresh_status_later(gpointer data)
+{
+    if (S.net.command) refresh_feed(&S.net);
+    if (S.vol.command) refresh_feed(&S.vol);
+    return FALSE;
+}
 
 static gboolean refresh_media_later(gpointer data)
 {
@@ -1495,15 +1582,14 @@ static gint hit(gint x, gint y)
                 return HIT_PREV - i;
     }
     if (y >= S.island_y + PAD && y < S.island_y + PAD + TILE) {
+        gint cw = col_w();
         gint gx = S.status_x + PAD + CLOCK_W + DIVIDER_W;
         if (S.batt_pct >= 0) {
-            if (x >= gx - GLYPH_GAP / 2 && x < gx + BATT_W - GLYPH_GAP / 2)
-                return HIT_BATT;
-            gx += BATT_W;
+            if (x >= gx && x < gx + cw) return HIT_BATT;
+            gx += cw;
         }
         for (i = 0; i < 3; ++i)
-            if (x >= gx + i * (GLYPH + GLYPH_GAP) - GLYPH_GAP / 2 &&
-                x < gx + i * (GLYPH + GLYPH_GAP) + GLYPH + GLYPH_GAP / 2)
+            if (x >= gx + i * cw && x < gx + (i + 1) * cw)
                 return HIT_NET - i;
     }
     if (y < S.island_y + PAD || y >= S.island_y + PAD + TILE) return -1;
@@ -1669,7 +1755,10 @@ static void shelf_menu_execute(ObMenuEntry *e, ObMenuFrame *f, ObClient *c,
     default:
         if (e->id >= SM_COMMAND && sys_cmds &&
             (guint)(e->id - SM_COMMAND) < sys_cmds->len)
+        {
             launch(g_ptr_array_index(sys_cmds, e->id - SM_COMMAND));
+            g_timeout_add(700, refresh_status_later, NULL);
+        }
     }
     menu_pin = NULL;
     menu_client = NULL;
@@ -1879,8 +1968,10 @@ gboolean shelf_event(const XEvent *e)
                 const gchar *cmd = b == 2 ? config_shelf_volume->toggle :
                                    b == 4 ? config_shelf_volume->up :
                                    b == 5 ? config_shelf_volume->down : NULL;
-                if (cmd) launch(cmd);
-                else if (b == 1)
+                if (cmd) {
+                    launch(cmd);
+                    g_timeout_add(500, refresh_status_later, NULL);
+                } else if (b == 1)
                     show_status_menu(h, e->xbutton.x_root,
                                      S.wy + S.island_y - MENU_GAP);
             } else if (b == 1) {

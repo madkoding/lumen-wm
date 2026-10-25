@@ -92,6 +92,7 @@ ObShelfVolume  *config_shelf_volume;
 GSList         *config_shelf_power;
 gboolean        config_shelf_battery;
 gint            config_shelf_menu_radius;
+gint            config_shelf_menu_padding;
 gchar          *config_shelf_battery_dir;
 ObShelfMedia   *config_shelf_media;
 ObShelfWeather *config_shelf_weather;
@@ -1018,6 +1019,7 @@ static void free_shelf_system(void)
     config_shelf_power = NULL;
     config_shelf_battery = FALSE;
     config_shelf_menu_radius = 0;
+    config_shelf_menu_padding = 0;
     g_free(config_shelf_battery_dir);
     config_shelf_battery_dir = NULL;
 }
@@ -1122,6 +1124,8 @@ static void parse_shelf_system(xmlNodePtr node)
         config_shelf_battery = obt_xml_node_bool(n);
     if ((n = obt_xml_find_node(node, "menuRadius")))
         config_shelf_menu_radius = CLAMP(obt_xml_node_int(n), 0, 32);
+    if ((n = obt_xml_find_node(node, "menuPadding")))
+        config_shelf_menu_padding = CLAMP(obt_xml_node_int(n), 0, 24);
     if ((n = obt_xml_find_node(node, "batteryDir")))
         config_shelf_battery_dir = obt_xml_node_string(n);
 }

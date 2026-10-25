@@ -33,7 +33,10 @@
 #include <X11/extensions/shape.h>
 #include <math.h>
 
-#define PADDING 2
+#define PADDING (2 + config_shelf_menu_padding / 2)
+#define MARGIN  (config_shelf_menu_padding)
+
+static void round_corners(Window win, gint w, gint h, gint radius);
 #define MAX_MENU_WIDTH 400
 
 #define ITEM_HEIGHT (ob_rr_theme->menu_font_height + 2*PADDING)
@@ -408,6 +411,9 @@ static void menu_entry_frame_render(ObMenuEntryFrame *self)
     RECT_SET_SIZE(self->area, self->frame->inner_w, th);
     XResizeWindow(obt_display, self->window,
                   self->area.width, self->area.height);
+    if (MARGIN && self->entry->type != OB_MENU_ENTRY_TYPE_SEPARATOR)
+        round_corners(self->window, self->area.width, self->area.height,
+                      MIN(config_shelf_menu_radius, 8));
     item_a->surface.parent = self->frame->a_items;
     item_a->surface.parentx = self->area.x;
     item_a->surface.parenty = self->area.y;
@@ -677,9 +683,9 @@ static gint menu_entry_frame_get_height(ObMenuEntryFrame *self,
 }
 
 /* Cuts the corners of the whole frame (border included) to a quarter circle */
-static void round_corners(Window win, gint w, gint h)
+static void round_corners(Window win, gint w, gint h, gint radius)
 {
-    gint r = MIN(config_shelf_menu_radius, MIN(w, h) / 2);
+    gint r = MIN(radius, MIN(w, h) / 2);
     XRectangle *rs;
     gint i;
 
@@ -714,7 +720,7 @@ static void round_corners(Window win, gint w, gint h)
 
 void menu_frame_render(ObMenuFrame *self)
 {
-    gint w = 0, h = 0;
+    gint w = 0, h = MARGIN;
     gint tw, th; /* temps */
     GList *it;
     gboolean has_icon = FALSE;
@@ -782,7 +788,7 @@ void menu_frame_render(ObMenuFrame *self)
             e->border = ob_rr_theme->mbwidth;
         }
 
-        RECT_SET_POINT(e->area, 0, h+e->border);
+        RECT_SET_POINT(e->area, MARGIN, h+e->border);
         XMoveWindow(obt_display, e->window,
                     e->area.x-e->border, e->area.y-e->border);
         XSetWindowBorderWidth(obt_display, e->window, e->border);
@@ -870,9 +876,10 @@ void menu_frame_render(ObMenuFrame *self)
     if (!w) w = 10;
     if (!h) h = 3;
 
-    XResizeWindow(obt_display, self->window, w, h);
-
     self->inner_w = w;
+    w += 2 * MARGIN;
+    h += MARGIN;
+    XResizeWindow(obt_display, self->window, w, h);
 
     RrPaint(self->a_items, self->window, w, h);
 
@@ -883,7 +890,7 @@ void menu_frame_render(ObMenuFrame *self)
     h += ob_rr_theme->mbwidth * 2;
 
     RECT_SET_SIZE(self->area, w, h);
-    round_corners(self->window, w, h);
+    round_corners(self->window, w, h, config_shelf_menu_radius);
 
     XFlush(obt_display);
 }
