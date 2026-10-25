@@ -40,6 +40,10 @@ With `<material>theme</material>` (the default) the shelf follows the Openbox th
 *Regenerate it with [`tools/shelf-themes.sh`](tools/shelf-themes.sh), which also checks that the text reads on
 the islands in every theme. Every bundled theme with all the islands and the hover on the second tile, in a test environment (Xvfb, no compositor, sample data in the player and the weather).*
 
+Menus (a tile's, the network's and the volume's) are Openbox's own, so they take the theme too:
+
+![The shelf menus under each bundled Openbox theme](docs/screenshots/shelf-themes-menus.png)
+
 ### Enable and configure it
 
 Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml)) and reconfigure

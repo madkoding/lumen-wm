@@ -1849,7 +1849,9 @@ static void show_menu(const gchar *name, gint rx, gint ry, ObClient *c)
     GravityPoint pos = { { 0, }, };
     pos.x.pos = rx;
     pos.y.pos = ry;
-    menu_show((gchar*)name, &pos, screen_monitor_primary(FALSE), FALSE, FALSE,
+    /* opened by the pointer: nothing is selected, so a menu's info line is
+       not shown as if it were picked */
+    menu_show((gchar*)name, &pos, screen_monitor_primary(FALSE), TRUE, FALSE,
               c);
 }
 
