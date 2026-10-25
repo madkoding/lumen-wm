@@ -504,6 +504,12 @@ void ct_request_move_resize(ct_win *w, ct_rect r)
     XFlush(dpy);
 }
 
+void ct_request_keyboard_move(ct_win *w)
+{
+    /* direction 10: MOVE_KEYBOARD; no pointer position or button */
+    send_root(w->id, NET_WM_MOVERESIZE, 0, 0, 10, 0);
+}
+
 void ct_request_lower(ct_win *w)
 {
     XWindowChanges ch = { .stack_mode = Below };

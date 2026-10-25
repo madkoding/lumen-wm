@@ -123,6 +123,9 @@ typedef enum {
    window manager to move or resize it from there (a client-side title bar
    or border), and the user drags by dx, dy and lets go. */
 void ct_input_client_drag(ct_win *w, ct_edge edge, int dx, int dy);
+/* The client asks for a move with the keyboard (_NET_WM_MOVERESIZE
+   MOVE_KEYBOARD); type with ct_input_keys() to move it. */
+void ct_request_keyboard_move(ct_win *w);
 /* Click the first button at x, y in the window. */
 void ct_input_click(ct_win *w, int x, int y);
 /* Whether the client saw a click since it was made. */
