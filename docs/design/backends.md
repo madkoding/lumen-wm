@@ -112,9 +112,9 @@ Every step is its own small PR, and the contract tests stay green on X11 through
    6. Client info: property reading in `client.c` becomes `ObSurfaceInfo`, filled by the backend's
       `surface_info` for the fields asked for. Done for the titles, WM_PROTOCOLS, struts, the size hints
       (WM_NORMAL_HINTS, checked for sanity in the backend), WM_HINTS, the window type, Motif hints and
-      transient-for; the core keeps the fallbacks (a title from WM_CLASS, a legacy strut spanning the
+      transient-for, the class, role and session ids; the core keeps the fallbacks (a title from WM_CLASS, a legacy strut spanning the
       screen, a dialog type for transients) and publishes the visible titles with
-      `publish_surface_titles`. Next: the class, role, session ids and icons.
+      `publish_surface_titles`, and decides whether WM_CLIENT_MACHINE is another host. Next: the icons.
    7. Requests: `event.c` splits in two. The X11 half turns XEvents into `ObBackendEvents`, and the core half
       handles them.
    8. Input: `grab.c`, `keyboard.c`, `mouse.c`.

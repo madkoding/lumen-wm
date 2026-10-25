@@ -2302,112 +2302,37 @@ void client_update_icon_geometry(ObClient *self)
 
 static void client_get_session_ids(ObClient *self)
 {
-    guint32 leader;
-    gboolean got;
-    gchar *s;
-    gchar **ss;
+    ObSurfaceInfo info = { 0 };
 
-    if (!OBT_PROP_GET32(self->window, WM_CLIENT_LEADER, WINDOW, &leader))
-        leader = None;
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_CLASS, &info);
 
-    /* get the SM_CLIENT_ID */
-    if (leader && leader != self->window)
-        OBT_PROP_GETS_XPCS(leader, SM_CLIENT_ID, &self->sm_client_id);
-    else
-        OBT_PROP_GETS_XPCS(self->window, SM_CLIENT_ID, &self->sm_client_id);
+    self->sm_client_id = info.session_id;
+    self->wm_command = info.command;
+    info.session_id = info.command = NULL;
 
-    /* get the WM_CLASS (name and class). make them "" if they are not
-       provided */
-    got = OBT_PROP_GETSS_TYPE(self->window, WM_CLASS, STRING_NO_CC, &ss);
+    /* make the names "" if they are not provided */
+    self->name = g_strdup(info.instance ? info.instance : "");
+    self->class = g_strdup(info.app_id ? info.app_id : "");
+    self->group_name = g_strdup(info.group_instance ?
+                                info.group_instance : "");
+    self->group_class = g_strdup(info.group_app_id ? info.group_app_id : "");
+    self->role = g_strdup(info.role ? info.role : "");
 
-    if (got) {
-        if (ss[0]) {
-            self->name = g_strdup(ss[0]);
-            if (ss[1])
-                self->class = g_strdup(ss[1]);
-        }
-        g_strfreev(ss);
-    }
-
-    if (self->name == NULL) self->name = g_strdup("");
-    if (self->class == NULL) self->class = g_strdup("");
-
-    /* get the WM_CLASS (name and class) from the group leader. make them "" if
-       they are not provided */
-    if (leader)
-        got = OBT_PROP_GETSS_TYPE(leader, WM_CLASS, STRING_NO_CC, &ss);
-    else
-        got = FALSE;
-
-    if (got) {
-        if (ss[0]) {
-            self->group_name = g_strdup(ss[0]);
-            if (ss[1])
-                self->group_class = g_strdup(ss[1]);
-        }
-        g_strfreev(ss);
-    }
-
-    if (self->group_name == NULL) self->group_name = g_strdup("");
-    if (self->group_class == NULL) self->group_class = g_strdup("");
-
-    /* get the WM_WINDOW_ROLE. make it "" if it is not provided */
-    got = OBT_PROP_GETS_XPCS(self->window, WM_WINDOW_ROLE, &s);
-
-    if (got)
-        self->role = s;
-    else
-        self->role = g_strdup("");
-
-    /* get the WM_COMMAND */
-    got = FALSE;
-
-    if (leader)
-        got = OBT_PROP_GETSS(leader, WM_COMMAND, &ss);
-    if (!got)
-        got = OBT_PROP_GETSS(self->window, WM_COMMAND, &ss);
-
-    if (got) {
-        /* merge/mash them all together */
-        gchar *merge = NULL;
-        gint i;
-
-        for (i = 0; ss[i]; ++i) {
-            gchar *tmp = merge;
-            if (merge)
-                merge = g_strconcat(merge, ss[i], NULL);
-            else
-                merge = g_strconcat(ss[i], NULL);
-            g_free(tmp);
-        }
-        g_strfreev(ss);
-
-        self->wm_command = merge;
-    }
-
-    /* get the WM_CLIENT_MACHINE */
-    got = FALSE;
-    if (leader)
-        got = OBT_PROP_GETS(leader, WM_CLIENT_MACHINE, &s);
-    if (!got)
-        got = OBT_PROP_GETS(self->window, WM_CLIENT_MACHINE, &s);
-
-    if (got) {
+    if (info.machine) {
         gchar localhost[128];
-        guint32 pid;
 
         gethostname(localhost, 127);
         localhost[127] = '\0';
-        if (strcmp(localhost, s) != 0)
-            self->client_machine = s;
-        else
-            g_free(s);
+        if (strcmp(localhost, info.machine) != 0) {
+            self->client_machine = info.machine;
+            info.machine = NULL;
+        }
 
-        /* see if it has the PID set too (the PID requires that the
-           WM_CLIENT_MACHINE be set) */
-        if (OBT_PROP_GET32(self->window, NET_WM_PID, CARDINAL, &pid))
-            self->pid = pid;
+        if (info.pid)
+            self->pid = info.pid;
     }
+
+    backend_surface_info_clear(&info);
 }
 
 const gchar *client_type_to_string(ObClient *self)
