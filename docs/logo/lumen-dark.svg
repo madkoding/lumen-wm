@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="120" viewBox="0 0 440 120" role="img" aria-label="Lumen Window Manager">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ffd27a" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ffd27a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="core" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffe29a"/>
+      <stop offset="1" stop-color="#f59e42"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="56" fill="url(#glow)"/>
+  <rect x="30" y="30" width="60" height="60" rx="16" fill="none" stroke="url(#core)" stroke-width="5"/>
+  <rect x="30" y="72" width="60" height="18" rx="9" fill="url(#core)"/>
+  <circle cx="60" cy="52" r="9" fill="url(#core)"/>
+  <text x="124" y="70" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="52" font-weight="700" letter-spacing="-1" fill="#f0f3f6">Lumen</text>
+  <text x="127" y="96" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="17" letter-spacing="3" fill="#9198a1">WINDOW MANAGER</text>
+</svg>

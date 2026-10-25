@@ -1,11 +1,19 @@
-# Lumen
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo/lumen-dark.svg">
+    <img src="docs/logo/lumen-light.svg" alt="Lumen Window Manager" width="440">
+  </picture>
+</p>
 
-**A light and fast X11 window manager with colour themes and a modern floating shelf at the bottom of the
+# Lumen Window Manager
+
+**Lumen is a light and fast X11 window manager with colour themes and a modern floating shelf at the bottom of the
 screen.** It gives you a dock with your favourite apps, a music player, the weather, and a clock with wifi,
 volume and power controls. It looks like a modern desktop and keeps the speed of Openbox, which it is based on.
 
-> Lumen is a heavily modified fork of [Openbox](http://openbox.org). For now it still installs and runs as
-> `openbox` and reads its settings from `~/.config/openbox`, so the commands and paths below keep that name.
+> Lumen is a heavily modified fork of [Openbox](http://openbox.org). It installs as `lumen-wm`, and keeps an
+> `openbox` command and reads `~/.config/openbox` when `~/.config/lumen` is missing, so your Openbox setup keeps
+> working.
 
 ![The shelf: dock with pinned apps, music player, weather and clock](docs/screenshots/shelf-desktop.png)
 
@@ -43,7 +51,7 @@ sudo make install
 
 ### 2. Turn the shelf on
 
-Open `~/.config/openbox/rc.xml`. If you don't have it, copy the default from `/etc/xdg/openbox/rc.xml`. Find
+Open `~/.config/lumen/rc.xml`. If you don't have it, copy the default from `/etc/xdg/openbox/rc.xml`. Find
 the `<shelf>` section and set:
 
 ```xml
@@ -55,7 +63,7 @@ the `<shelf>` section and set:
 ### 3. Apply it
 
 ```sh
-openbox --reconfigure
+lumen-wm --reconfigure
 ```
 
 The shelf appears at the bottom of the screen. Every time you change `rc.xml`, run this command again.
@@ -96,7 +104,7 @@ Drag a pinned app onto another to change the order.
 To keep your pins after a restart, tell the shelf where to save them:
 
 ```xml
-<pinsFile>~/.config/openbox/pins</pinsFile>
+<pinsFile>~/.config/lumen/pins</pinsFile>
 ```
 
 You can also list them by hand:
@@ -172,7 +180,7 @@ Click for a menu, scroll to change the volume, middle click to mute.
 
 ```xml
 <power>
-  <item><name>Log out</name><command>openbox --exit</command></item>
+  <item><name>Log out</name><command>lumen-wm --exit</command></item>
   <item><name>Restart</name><command>systemctl reboot</command></item>
   <item><name>Shut down</name><command>systemctl poweroff</command></item>
 </power>
@@ -227,7 +235,7 @@ Sun|67°|cloud
 ## Troubleshooting
 
 - **The shelf doesn't show up.** Check that `<enabled>yes</enabled>` is inside `<shelf>` and run
-  `openbox --reconfigure`. It also hides itself while a window is fullscreen.
+  `lumen-wm --reconfigure`. It also hides itself while a window is fullscreen.
 - **The menus have rough corners and no shadow.** Start a compositor, such as `picom`.
 - **A pin shows a letter instead of an icon.** That icon name doesn't exist in your `<iconTheme>`. Try another
   name, or give the path to an image.
@@ -258,7 +266,7 @@ Sun|67°|cloud
       <class>Pcmanfm</class>          <!-- the window's class; default: the command's first word -->
     </pin>
   </pins>
-  <pinsFile>~/.config/openbox/pins</pinsFile>  <!-- pins saved from the dock; replaces <pins> once it exists -->
+  <pinsFile>~/.config/lumen/pins</pinsFile>  <!-- pins saved from the dock; replaces <pins> once it exists -->
 
   <network>
     <list>nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID dev wifi</list>
@@ -273,7 +281,7 @@ Sun|67°|cloud
     <toggle>wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle</toggle>
   </volume>
   <power>
-    <item><name>Log out</name><command>openbox --exit</command></item>
+    <item><name>Log out</name><command>lumen-wm --exit</command></item>
   </power>
   <battery>yes</battery>
   <batteryDir></batteryDir>           <!-- default: found in /sys/class/power_supply -->
