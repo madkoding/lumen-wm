@@ -451,6 +451,20 @@ bool ct_window_focused(ct_win *w)
         (Window)get_card(root, NET_ACTIVE_WINDOW, 0) == w->id;
 }
 
+bool ct_nothing_focused(void)
+{
+    Window f;
+    int revert;
+
+    if (get_card(root, NET_ACTIVE_WINDOW, 0) != 0) return false;
+    XGetInputFocus(dpy, &f, &revert);
+    for (ct_win *w = windows; w; w = w->next)
+        if (!w->destroyed && w->id == f) return false;
+    /* keys go to the window manager, not to whatever is under the
+       pointer */
+    return f != None && f != PointerRoot;
+}
+
 static bool has_atom(ct_win *w, int state)
 {
     unsigned long *v;

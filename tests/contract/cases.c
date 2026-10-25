@@ -162,6 +162,19 @@ static void close_falls_back(void)
     ct_window_destroy(a);
 }
 
+/* Closing the last window leaves the focus on nothing, not on whatever
+   is under the pointer. */
+static void last_close_focuses_nothing(void)
+{
+    ct_win *w = mapped(CT_WIN_NORMAL, "last", SMALL);
+    CT_EVENTUALLY(ct_window_focused(w));
+
+    ct_request_close(w);
+    CT_EVENTUALLY(ct_window_closed(w));
+    ct_window_destroy(w);
+    CT_EVENTUALLY(ct_nothing_focused());
+}
+
 /* A maximized window fills the work area; restoring gives its size back. */
 static void maximize_fills_workarea(void)
 {
@@ -625,6 +638,7 @@ const ct_case ct_cases[] = {
     { "focus_returns_after_popup", focus_returns_after_popup },
     { "activate_focuses_and_raises", activate_focuses_and_raises },
     { "close_falls_back", close_falls_back },
+    { "last_close_focuses_nothing", last_close_focuses_nothing },
     { "maximize_fills_workarea", maximize_fills_workarea },
     { "maximize_toggles", maximize_toggles },
     { "fullscreen_covers_screen", fullscreen_covers_screen },

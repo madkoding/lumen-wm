@@ -622,8 +622,11 @@ void client_unmanage(ObClient *self)
     /* update the focus lists */
     focus_order_remove(self);
     if (client_focused(self)) {
-        /* don't leave an invalid focus_client */
+        /* don't leave an invalid focus_client, nor tell pagers it is still
+           active */
         focus_client = NULL;
+        if (ob_state() != OB_STATE_EXITING)
+            ob_backend->publish_active(OB_SURFACE_NONE);
     }
 
     /* if we're prompting to kill the client, close that */
