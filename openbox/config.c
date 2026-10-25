@@ -86,6 +86,8 @@ gchar          *config_shelf_material;
 gchar          *config_shelf_font;
 gchar          *config_shelf_icon_theme;
 GSList         *config_shelf_pins;
+ObShelfMedia   *config_shelf_media;
+ObShelfWeather *config_shelf_weather;
 guint           config_dock_show_delay;
 guint           config_dock_app_move_button;
 guint           config_dock_app_move_modifiers;
@@ -981,6 +983,63 @@ static void free_shelf_pins(void)
     config_shelf_pins = NULL;
 }
 
+static void free_shelf_media(void)
+{
+    if (!config_shelf_media) return;
+    g_free(config_shelf_media->command);
+    g_free(config_shelf_media->previous);
+    g_free(config_shelf_media->toggle);
+    g_free(config_shelf_media->next);
+    g_slice_free(ObShelfMedia, config_shelf_media);
+    config_shelf_media = NULL;
+}
+
+static void free_shelf_weather(void)
+{
+    if (!config_shelf_weather) return;
+    g_free(config_shelf_weather->command);
+    g_slice_free(ObShelfWeather, config_shelf_weather);
+    config_shelf_weather = NULL;
+}
+
+static void parse_shelf_media(xmlNodePtr node)
+{
+    xmlNodePtr n;
+    ObShelfMedia *m;
+
+    node = node->children;
+    if (!(n = obt_xml_find_node(node, "command"))) return;
+
+    free_shelf_media();
+    m = config_shelf_media = g_slice_new0(ObShelfMedia);
+    m->command = obt_xml_node_string(n);
+    m->interval = 3;
+    if ((n = obt_xml_find_node(node, "previous")))
+        m->previous = obt_xml_node_string(n);
+    if ((n = obt_xml_find_node(node, "toggle")))
+        m->toggle = obt_xml_node_string(n);
+    if ((n = obt_xml_find_node(node, "next")))
+        m->next = obt_xml_node_string(n);
+    if ((n = obt_xml_find_node(node, "interval")))
+        m->interval = MAX(obt_xml_node_int(n), 1);
+}
+
+static void parse_shelf_weather(xmlNodePtr node)
+{
+    xmlNodePtr n;
+    ObShelfWeather *w;
+
+    node = node->children;
+    if (!(n = obt_xml_find_node(node, "command"))) return;
+
+    free_shelf_weather();
+    w = config_shelf_weather = g_slice_new0(ObShelfWeather);
+    w->command = obt_xml_node_string(n);
+    w->interval = 900;
+    if ((n = obt_xml_find_node(node, "interval")))
+        w->interval = MAX(obt_xml_node_int(n), 1);
+}
+
 static void parse_shelf_pin(xmlNodePtr node, gpointer d)
 {
     xmlNodePtr n;
@@ -1026,6 +1085,10 @@ static void parse_shelf(xmlNodePtr node, gpointer d)
              n = obt_xml_find_node(n->next, "pin"))
             parse_shelf_pin(n, d);
     }
+    if ((n = obt_xml_find_node(node, "media")))
+        parse_shelf_media(n);
+    if ((n = obt_xml_find_node(node, "weather")))
+        parse_shelf_weather(n);
 }
 
 static void parse_menu(xmlNodePtr node, gpointer d)
@@ -1237,6 +1300,8 @@ void config_startup(ObtXmlInst *i)
     g_free(config_shelf_icon_theme);
     config_shelf_icon_theme = g_strdup("");
     free_shelf_pins();
+    free_shelf_media();
+    free_shelf_weather();
     config_dock_show_delay = 300;
     config_dock_app_move_button = 2; /* middle */
     config_dock_app_move_modifiers = 0;

@@ -43,6 +43,45 @@ running starts its command; on a running one it focuses its window (or
 minimises it when it has the focus). The running mark is drawn only while a
 window of the pin's class is open.
 
+### Media and weather islands
+
+`<media>` and `<weather>` add two islands between the dock and the clock, each
+filled by a command and hidden while it prints nothing.
+
+```xml
+<media>
+  <command>kitty-shelf-media</command>
+  <previous>playerctl previous</previous>
+  <toggle>playerctl play-pause</toggle>
+  <next>playerctl next</next>
+  <interval>3</interval>   <!-- seconds; default 3 -->
+</media>
+<weather>
+  <command>kitty-shelf-weather</command>
+  <interval>900</interval> <!-- seconds; default 900 -->
+</weather>
+```
+
+The media command prints four lines: `Playing` or `Paused`, the title, the
+artist and a path to the cover (a file; empty for none). The island shows the
+cover, the title over the artist and three round buttons that run `<previous>`,
+`<toggle>` and `<next>` (and refresh the island right after).
+
+The weather command prints the temperature, the sky, then up to three lines
+`day|temperature|glyph` with glyph one of `sun`, `cloud`, `cloud-sun`, `rain`,
+`snow`, `storm`, `fog`:
+
+```
+59°
+Light rain
+Fri|74°|cloud-sun
+Sat|69°|sun
+Sun|67°|cloud
+```
+
+Commands run asynchronously (a slow one never stalls the window manager) and
+only one run of each is in flight at a time.
+
 The shelf takes its height from the work area (a bottom strut), is hidden
 while a fullscreen window has focus, and needs cairo and pangocairo to build.
 

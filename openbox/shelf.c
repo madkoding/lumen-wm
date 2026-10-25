@@ -53,6 +53,13 @@
 #define SIDE        24
 #define LIP         2
 #define TICK_MS     250
+#define ART         40
+#define BTN         32
+#define BTN_GAP     6
+#define DAY_W       44
+#define HIT_PREV    (-100)
+#define HIT_TOGGLE  (-101)
+#define HIT_NEXT    (-102)
 
 StrutPartial shelf_strut;
 
@@ -94,8 +101,27 @@ typedef struct {
     gint        x;       /* in window coordinates */
 } Tile;
 
+/* What a command prints, kept and refreshed on a timer. */
+typedef struct {
+    const gchar *command;
+    guint        interval;
+    gchar       *out;        /* everything it printed, or NULL */
+    guint        timer;
+    gboolean     running;
+} Feed;
+
+typedef struct {
+    gchar *day, *temp, *glyph;
+} Day;
+
 static struct {
     Window           win;
+    Feed             media, weather;
+    gboolean         has_media, has_weather;
+    gchar           *art_file;   /* the picture the media island shows */
+    RrImage         *art;
+    gint             media_x, media_w, weather_x, weather_w;
+    gint             text_w;     /* the title's room in the media island */
     gboolean         argb;       /* a compositor is running */
     gboolean         shown;
     Visual          *visual;
@@ -405,6 +431,122 @@ static gboolean pinned(const ObClient *c)
     return FALSE;
 }
 
+/* ---- the media and weather islands --------------------------------------- */
+
+/* The nth line a feed printed, stripped ("" when it has none) */
+static gchar *feed_line(const Feed *f, gint n)
+{
+    gchar **v;
+    gchar *r;
+    if (!f->out) return g_strdup("");
+    v = g_strsplit(f->out, "\n", 0);
+    r = g_strdup(g_strv_length(v) > (guint)n ? v[n] : "");
+    g_strfreev(v);
+    return g_strstrip(r);
+}
+
+static gboolean media_shown(void)
+{
+    gchar *st;
+    gboolean ok;
+    if (!S.has_media) return FALSE;
+    st = feed_line(&S.media, 0);
+    ok = !g_ascii_strcasecmp(st, "playing") || !g_ascii_strcasecmp(st, "paused");
+    g_free(st);
+    return ok;
+}
+
+static gboolean media_playing(void)
+{
+    gchar *st = feed_line(&S.media, 0);
+    gboolean ok = !g_ascii_strcasecmp(st, "playing");
+    g_free(st);
+    return ok;
+}
+
+static gboolean weather_shown(void)
+{
+    gchar *t;
+    gboolean ok;
+    if (!S.has_weather) return FALSE;
+    t = feed_line(&S.weather, 0);
+    ok = !!*t;
+    g_free(t);
+    return ok;
+}
+
+/* The forecast days ("day|temperature|glyph" lines): up to three */
+static gint weather_days(Day days[3])
+{
+    gint i, n = 0;
+    for (i = 2; i < 5; ++i) {
+        gchar *l = feed_line(&S.weather, i);
+        gchar **v = g_strsplit(l, "|", 3);
+        if (g_strv_length(v) == 3) {
+            days[n].day = g_strdup(v[0]);
+            days[n].temp = g_strdup(v[1]);
+            days[n].glyph = g_strdup(v[2]);
+            ++n;
+        }
+        g_strfreev(v);
+        g_free(l);
+    }
+    return n;
+}
+
+static void days_free(Day days[3], gint n)
+{
+    while (n--) {
+        g_free(days[n].day);
+        g_free(days[n].temp);
+        g_free(days[n].glyph);
+    }
+}
+
+static gint text_width(cairo_t *cr, const gchar *str, gdouble px,
+                       PangoWeight weight)
+{
+    PangoLayout *l = text(cr, str, px, weight);
+    PangoRectangle ink, logical;
+    pango_layout_get_pixel_extents(l, &ink, &logical);
+    g_object_unref(l);
+    return logical.width;
+}
+
+/* Sizes of the two islands, from what their commands printed */
+static void layout_islands(void)
+{
+    cairo_surface_t *sc = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
+    cairo_t *cr = cairo_create(sc);
+
+    S.media_w = S.weather_w = 0;
+    if (media_shown()) {
+        gchar *title = feed_line(&S.media, 1), *artist = feed_line(&S.media, 2);
+        gint tw = MAX(text_width(cr, title, 15, PANGO_WEIGHT_SEMIBOLD),
+                      text_width(cr, artist, 13, PANGO_WEIGHT_NORMAL));
+        S.text_w = CLAMP(tw, 60, 150);
+        S.media_w = PAD + ART + 12 + S.text_w + 16 +
+                    3 * BTN + 2 * BTN_GAP + PAD;
+        g_free(title);
+        g_free(artist);
+    }
+    if (weather_shown()) {
+        gchar *temp = feed_line(&S.weather, 0), *sky = feed_line(&S.weather, 1);
+        Day days[3];
+        gint lw = MAX(text_width(cr, temp, 26, PANGO_WEIGHT_SEMIBOLD),
+                      text_width(cr, sky, 12, PANGO_WEIGHT_NORMAL));
+        gint n = weather_days(days);
+        lw = MIN(lw, 130);
+        S.weather_w = 2 * PAD + lw +
+                      (n ? DIVIDER_W + n * DAY_W + (n - 1) * 4 - 8 : 0);
+        days_free(days, n);
+        g_free(temp);
+        g_free(sky);
+    }
+    cairo_destroy(cr);
+    cairo_surface_destroy(sc);
+}
+
 static void layout(void)
 {
     const Rect *mon = screen_physical_area_monitor(screen_monitor_primary(FALSE));
@@ -438,8 +580,11 @@ static void layout(void)
 
     S.dock_w = 2 * PAD + TILE;
     if (n) S.dock_w += DIVIDER_W + n * TILE + (n - 1) * TILE_GAP;
+    layout_islands();
     S.status_w = 2 * PAD + CLOCK_W + DIVIDER_W + CONTROLS_W;
     row_w = S.dock_w + ISLAND_GAP + S.status_w;
+    if (S.media_w) row_w += ISLAND_GAP + S.media_w;
+    if (S.weather_w) row_w += ISLAND_GAP + S.weather_w;
     row_x = mon->x + (mon->width - row_w) / 2;
     bottom = mon->y + mon->height;
 
@@ -449,7 +594,12 @@ static void layout(void)
     S.wh = LIP + ISLAND_H + EDGE_INSET;
     S.wy = bottom - S.wh;
     S.dock_x = SIDE;
-    S.status_x = SIDE + S.dock_w + ISLAND_GAP;
+    x = SIDE + S.dock_w + ISLAND_GAP;
+    S.media_x = x;
+    if (S.media_w) x += S.media_w + ISLAND_GAP;
+    S.weather_x = x;
+    if (S.weather_w) x += S.weather_w + ISLAND_GAP;
+    S.status_x = x;
 
     x = S.dock_x + PAD + TILE + DIVIDER_W;
     for (n = 0; n < (gint)S.tiles->len; ++n) {
@@ -465,6 +615,242 @@ static void layout(void)
 
 /* ---- painting ------------------------------------------------------------- */
 
+/* Glyphs of the media buttons: filled, centred on (cx, cy), 12 px high. */
+static void glyph_prev(cairo_t *cr, gdouble cx, gdouble cy, Rgb ink)
+{
+    set_rgb(cr, ink, 1);
+    cairo_rectangle(cr, cx - 6, cy - 6, 2, 12);
+    cairo_fill(cr);
+    cairo_move_to(cr, cx + 6, cy - 6);
+    cairo_line_to(cr, cx + 6, cy + 6);
+    cairo_line_to(cr, cx - 3, cy);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+}
+
+static void glyph_next(cairo_t *cr, gdouble cx, gdouble cy, Rgb ink)
+{
+    set_rgb(cr, ink, 1);
+    cairo_rectangle(cr, cx + 4, cy - 6, 2, 12);
+    cairo_fill(cr);
+    cairo_move_to(cr, cx - 6, cy - 6);
+    cairo_line_to(cr, cx - 6, cy + 6);
+    cairo_line_to(cr, cx + 3, cy);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+}
+
+static void glyph_pause(cairo_t *cr, gdouble cx, gdouble cy, Rgb ink)
+{
+    set_rgb(cr, ink, 1);
+    rrect(cr, cx - 5, cy - 6, 3.5, 12, 1);
+    cairo_fill(cr);
+    rrect(cr, cx + 1.5, cy - 6, 3.5, 12, 1);
+    cairo_fill(cr);
+}
+
+static void glyph_play(cairo_t *cr, gdouble cx, gdouble cy, Rgb ink)
+{
+    set_rgb(cr, ink, 1);
+    cairo_move_to(cr, cx - 4, cy - 7);
+    cairo_line_to(cr, cx - 4, cy + 7);
+    cairo_line_to(cr, cx + 7, cy);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+}
+
+static void cloud_shape(cairo_t *cr, gdouble cx, gdouble cy, gdouble k)
+{
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, cx - 5 * k, cy + 1 * k, 4 * k, 0, 2 * G_PI);
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, cx - 0.5 * k, cy - 2 * k, 5 * k, 0, 2 * G_PI);
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, cx + 5 * k, cy + 1 * k, 4 * k, 0, 2 * G_PI);
+    cairo_rectangle(cr, cx - 5 * k, cy + 1 * k, 10 * k, 4 * k);
+}
+
+/* A weather glyph in a 20 px box centred on (cx, cy). */
+static void glyph_weather(cairo_t *cr, const gchar *kind, gdouble cx,
+                          gdouble cy, Rgb ink)
+{
+    gboolean sun = !strcmp(kind, "sun") || !strcmp(kind, "cloud-sun");
+    gboolean cloud = !strcmp(kind, "cloud") || !strcmp(kind, "cloud-sun") ||
+                     !strcmp(kind, "rain") || !strcmp(kind, "snow") ||
+                     !strcmp(kind, "storm");
+    gint i;
+
+    cairo_save(cr);
+    set_rgb(cr, ink, 1);
+    if (sun) {
+        gdouble sx = cloud ? cx + 4 : cx, sy = cloud ? cy - 4 : cy;
+        gdouble r = cloud ? 3.2 : 4.2;
+        cairo_arc(cr, sx, sy, r, 0, 2 * G_PI);
+        cairo_fill(cr);
+        cairo_set_line_width(cr, 1.5);
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+        for (i = 0; i < 8; ++i) {
+            gdouble a = i * G_PI / 4;
+            if (cloud && (i == 2 || i == 3 || i == 4 || i == 5)) continue;
+            cairo_move_to(cr, sx + cos(a) * (r + 2), sy + sin(a) * (r + 2));
+            cairo_line_to(cr, sx + cos(a) * (r + 4), sy + sin(a) * (r + 4));
+        }
+        cairo_stroke(cr);
+    }
+    if (cloud) {
+        gdouble k = !strcmp(kind, "cloud-sun") ? 0.62 : 0.8;
+        gdouble ox = !strcmp(kind, "cloud-sun") ? -2 : 0;
+        gdouble oy = !strcmp(kind, "cloud-sun") ? 3 : 0;
+        if (!strcmp(kind, "rain") || !strcmp(kind, "snow") ||
+            !strcmp(kind, "storm")) oy = -3;
+        cloud_shape(cr, cx + ox, cy + oy, k);
+        cairo_fill(cr);
+        if (!strcmp(kind, "rain")) {
+            cairo_set_line_width(cr, 1.6);
+            cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+            for (i = 0; i < 3; ++i) {
+                cairo_move_to(cr, cx - 4 + i * 4 + 1, cy + 3);
+                cairo_line_to(cr, cx - 4 + i * 4 - 1, cy + 7);
+            }
+            cairo_stroke(cr);
+        } else if (!strcmp(kind, "snow")) {
+            for (i = 0; i < 3; ++i) {
+                cairo_arc(cr, cx - 4 + i * 4, cy + 5 + (i % 2), 1.2, 0,
+                          2 * G_PI);
+                cairo_fill(cr);
+            }
+        } else if (!strcmp(kind, "storm")) {
+            cairo_move_to(cr, cx + 1, cy + 2);
+            cairo_line_to(cr, cx - 3, cy + 6);
+            cairo_line_to(cr, cx, cy + 6);
+            cairo_line_to(cr, cx - 2, cy + 9);
+            cairo_line_to(cr, cx + 3, cy + 5);
+            cairo_line_to(cr, cx, cy + 5);
+            cairo_close_path(cr);
+            cairo_fill(cr);
+        }
+    } else if (!strcmp(kind, "fog")) {
+        cairo_set_line_width(cr, 1.8);
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+        for (i = 0; i < 3; ++i) {
+            cairo_move_to(cr, cx - 7, cy - 4 + i * 4);
+            cairo_line_to(cr, cx + 7, cy - 4 + i * 4);
+        }
+        cairo_stroke(cr);
+    }
+    cairo_restore(cr);
+}
+
+static void paint_media(cairo_t *cr, const Material *m, gint y)
+{
+    gdouble x = S.media_x + PAD, cy = y + ISLAND_H / 2.0;
+    gchar *title = feed_line(&S.media, 1), *artist = feed_line(&S.media, 2);
+    PangoLayout *l;
+    PangoRectangle ink, lg;
+    gint i;
+    gboolean playing = media_playing();
+    cairo_surface_t *ic = icon_surface(S.art);
+
+    /* the cover, or a note on a tinted square */
+    cairo_save(cr);
+    rrect(cr, x, y + PAD, ART, ART, 9);
+    cairo_clip(cr);
+    if (ic) {
+        gint w = cairo_image_surface_get_width(ic);
+        gint h = cairo_image_surface_get_height(ic);
+        cairo_translate(cr, x, y + PAD);
+        cairo_scale(cr, (gdouble)ART / w, (gdouble)ART / h);
+        cairo_set_source_surface(cr, ic, 0, 0);
+        cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
+        cairo_paint(cr);
+    } else {
+        set_rgb(cr, m->ink, 0.14);
+        cairo_paint(cr);
+    }
+    cairo_restore(cr);
+    if (ic) cairo_surface_destroy(ic);
+
+    /* title over artist */
+    x += ART + 12;
+    l = text(cr, title, 15, PANGO_WEIGHT_SEMIBOLD);
+    pango_layout_set_width(l, S.text_w * PANGO_SCALE);
+    pango_layout_set_ellipsize(l, PANGO_ELLIPSIZE_END);
+    pango_layout_get_pixel_extents(l, &ink, &lg);
+    set_rgb(cr, m->ink, 1);
+    cairo_move_to(cr, x, cy - 1 - lg.height);
+    pango_cairo_show_layout(cr, l);
+    g_object_unref(l);
+    l = text(cr, artist, 13, PANGO_WEIGHT_NORMAL);
+    pango_layout_set_width(l, S.text_w * PANGO_SCALE);
+    pango_layout_set_ellipsize(l, PANGO_ELLIPSIZE_END);
+    set_rgb(cr, m->ink, 0.62);
+    cairo_move_to(cr, x, cy + 1);
+    pango_cairo_show_layout(cr, l);
+    g_object_unref(l);
+    g_free(title);
+    g_free(artist);
+
+    /* previous, play/pause, next: round buttons */
+    x += S.text_w + 16;
+    for (i = 0; i < 3; ++i) {
+        gdouble bx = x + i * (BTN + BTN_GAP) + BTN / 2.0;
+        cairo_arc(cr, bx, cy, BTN / 2.0, 0, 2 * G_PI);
+        set_rgb(cr, m->ink, (i == 1 ? 0.18 : 0.09) +
+                (S.hover == HIT_PREV - i ? 0.10 : 0));
+        cairo_fill(cr);
+        if (i == 0) glyph_prev(cr, bx, cy, m->ink);
+        else if (i == 1) (playing ? glyph_pause : glyph_play)(cr, bx, cy, m->ink);
+        else glyph_next(cr, bx, cy, m->ink);
+    }
+}
+
+static void paint_weather(cairo_t *cr, const Material *m, gint y)
+{
+    gdouble x = S.weather_x + PAD, cy = y + ISLAND_H / 2.0;
+    gchar *temp = feed_line(&S.weather, 0), *sky = feed_line(&S.weather, 1);
+    Day days[3];
+    gint i, n = weather_days(days);
+    gint lw = S.weather_w - 2 * PAD -
+              (n ? DIVIDER_W + n * DAY_W + (n - 1) * 4 - 8 : 0);
+    PangoLayout *l;
+    PangoRectangle ink, lg;
+
+    l = text(cr, temp, 26, PANGO_WEIGHT_SEMIBOLD);
+    pango_layout_get_pixel_extents(l, &ink, &lg);
+    set_rgb(cr, m->ink, 1);
+    cairo_move_to(cr, x, cy - lg.height + 5);
+    pango_cairo_show_layout(cr, l);
+    g_object_unref(l);
+    l = text(cr, sky, 12, PANGO_WEIGHT_NORMAL);
+    pango_layout_set_width(l, lw * PANGO_SCALE);
+    pango_layout_set_ellipsize(l, PANGO_ELLIPSIZE_END);
+    set_rgb(cr, m->ink, 0.62);
+    cairo_move_to(cr, x, cy + 5);
+    pango_cairo_show_layout(cr, l);
+    g_object_unref(l);
+
+    if (n) {
+        gdouble dx = x + lw + 8;
+        cairo_rectangle(cr, dx, y + (ISLAND_H - DIVIDER_H) / 2.0, 1, DIVIDER_H);
+        set_rgb(cr, m->divider, m->divider_a);
+        cairo_fill(cr);
+        dx += DIVIDER_W - 8;
+        for (i = 0; i < n; ++i) {
+            gdouble mx = dx + i * (DAY_W + 4) + DAY_W / 2.0;
+            centred_text(cr, days[i].day, 11, PANGO_WEIGHT_NORMAL, mx,
+                         y + PAD + 4, m->ink, 0.62);
+            glyph_weather(cr, days[i].glyph, mx, cy + 1, m->ink);
+            centred_text(cr, days[i].temp, 13, PANGO_WEIGHT_SEMIBOLD, mx,
+                         y + ISLAND_H - PAD - 4, m->ink, 1);
+        }
+    }
+    days_free(days, n);
+    g_free(temp);
+    g_free(sky);
+}
+
+static void update_art(void);
+
 static void paint(void)
 {
     cairo_surface_t *img, *dst;
@@ -477,6 +863,7 @@ static void paint(void)
     gdouble cx;
 
     if (!S.ready || !S.shown) return;
+    update_art();
 
     img = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, S.ww, S.wh);
     cr = cairo_create(img);
@@ -492,15 +879,17 @@ static void paint(void)
 
     /* islands: shadow, material, stroke */
     {
-        gint xs[2] = { S.dock_x, S.status_x };
-        gint ws[2] = { S.dock_w, S.status_w };
-        for (i = 0; i < 2; ++i) {
+        gint xs[4] = { S.dock_x, S.media_x, S.weather_x, S.status_x };
+        gint ws[4] = { S.dock_w, S.media_w, S.weather_w, S.status_w };
+        for (i = 0; i < 4; ++i) {
+            if (!ws[i]) continue;
             shadow(cr, xs[i], y, ws[i], ISLAND_H, 22, 52, -15, m->shadow,
                    m->shadow_mid_a, S.ww, S.wh);
             shadow(cr, xs[i], y, ws[i], ISLAND_H, 3, 8, 0, m->shadow,
                    m->shadow_near_a, S.ww, S.wh);
         }
-        for (i = 0; i < 2; ++i) {
+        for (i = 0; i < 4; ++i) {
+            if (!ws[i]) continue;
             rrect(cr, xs[i], y, ws[i], ISLAND_H, ISLAND_R);
             set_rgb(cr, m->body, 1);
             cairo_fill(cr);
@@ -558,6 +947,9 @@ static void paint(void)
         }
     }
 
+    if (S.media_w) paint_media(cr, m, y);
+    if (S.weather_w) paint_weather(cr, m, y);
+
     /* the status island: clock, rule, glyphs */
     localtime_r(&now, &tm);
     strftime(tbuf, sizeof tbuf, "%H:%M", &tm);
@@ -596,11 +988,16 @@ static void paint(void)
 static void shape_input(void)
 {
     if (!obt_display_extension_shape) return;
-    XRectangle r[2] = {
-        { S.dock_x,   S.island_y, S.dock_w,   ISLAND_H },
-        { S.status_x, S.island_y, S.status_w, ISLAND_H }
+    XRectangle r[4] = {
+        { S.dock_x,    S.island_y, S.dock_w,    ISLAND_H },
+        { S.media_x,   S.island_y, S.media_w,   ISLAND_H },
+        { S.weather_x, S.island_y, S.weather_w, ISLAND_H },
+        { S.status_x,  S.island_y, S.status_w,  ISLAND_H }
     };
-    XShapeCombineRectangles(obt_display, S.win, ShapeInput, 0, 0, r, 2,
+    gint n = 0, i;
+    for (i = 0; i < 4; ++i)
+        if (r[i].width) r[n++] = r[i];
+    XShapeCombineRectangles(obt_display, S.win, ShapeInput, 0, 0, r, n,
                             ShapeSet, YXBanded);
 }
 
@@ -666,6 +1063,8 @@ static gchar *signature(void)
     strftime(buf, sizeof buf, "%H:%M", &tm);
     g_string_append(g, buf);
     g_string_append_printf(g, "|%d|%d", covered_by_fullscreen(), S.hover);
+    g_string_append_printf(g, "|m:%s|w:%s", S.media.out ? S.media.out : "",
+                           S.weather.out ? S.weather.out : "");
     for (it = client_list; it; it = g_list_next(it)) {
         ObClient *c = it->data;
         if (!listed(c)) continue;
@@ -776,6 +1175,142 @@ static void unload_pin_icons(void)
     S.pin_icons = NULL;
 }
 
+/* ---- the commands behind the islands -------------------------------------- */
+
+typedef struct {
+    Feed    *feed;
+    GString *buf;
+} Run;
+
+static void feed_done(Feed *f, GString *buf)
+{
+    gchar *out = g_strdup(buf->str);
+    if (!g_utf8_validate(out, -1, NULL)) *out = 0;
+    g_strstrip(out);
+    if (g_strcmp0(f->out, out)) {
+        g_free(f->out);
+        f->out = out;
+    } else {
+        g_free(out);
+    }
+    f->running = FALSE;
+}
+
+static gboolean run_read(GIOChannel *ch, GIOCondition cond, gpointer data)
+{
+    Run *r = data;
+    gchar chunk[512];
+    gsize got;
+    gboolean eof = FALSE;
+
+    /* drain what is there first: the pipe can say HUP with data still in it */
+    for (;;) {
+        GIOStatus st = g_io_channel_read_chars(ch, chunk, sizeof chunk, &got,
+                                               NULL);
+        if (st == G_IO_STATUS_NORMAL) {
+            g_string_append_len(r->buf, chunk, got);
+            if (r->buf->len > 4096) { eof = TRUE; break; }
+        } else {
+            if (st == G_IO_STATUS_EOF || st == G_IO_STATUS_ERROR) eof = TRUE;
+            break;
+        }
+    }
+    if (!eof) return TRUE;
+
+    /* S is zeroed when the shelf shuts down: the feed is then not ours */
+    if (S.win && (r->feed == &S.media || r->feed == &S.weather))
+        feed_done(r->feed, r->buf);
+    g_string_free(r->buf, TRUE);
+    g_io_channel_shutdown(ch, FALSE, NULL);
+    g_slice_free(Run, r);
+    return FALSE;
+}
+
+/* Runs the feed's command without waiting for it (a slow one must not stall
+   the window manager); Openbox reaps the child. */
+static gboolean refresh_feed(Feed *f)
+{
+    gchar *argv[] = { "/bin/sh", "-c", (gchar*)f->command, NULL };
+    gint out;
+    GIOChannel *ch;
+    Run *r;
+
+    if (f->running || !f->command) return TRUE;
+    if (!g_spawn_async_with_pipes(NULL, argv, NULL, G_SPAWN_STDERR_TO_DEV_NULL,
+                                  NULL, NULL, NULL, NULL, &out, NULL, NULL))
+        return TRUE;
+    f->running = TRUE;
+    r = g_slice_new0(Run);
+    r->feed = f;
+    r->buf = g_string_new(NULL);
+    ch = g_io_channel_unix_new(out);
+    g_io_channel_set_close_on_unref(ch, TRUE);
+    g_io_channel_set_encoding(ch, NULL, NULL);
+    g_io_channel_set_flags(ch, G_IO_FLAG_NONBLOCK, NULL);
+    g_io_add_watch(ch, G_IO_IN | G_IO_HUP | G_IO_ERR, run_read, r);
+    g_io_channel_unref(ch);
+    return TRUE;
+}
+
+static gboolean feed_timer(gpointer data)
+{
+    return refresh_feed(data);
+}
+
+static void start_feeds(void)
+{
+    if (config_shelf_media) {
+        S.has_media = TRUE;
+        S.media.command = config_shelf_media->command;
+        S.media.interval = config_shelf_media->interval;
+        refresh_feed(&S.media);
+        S.media.timer = g_timeout_add_seconds(S.media.interval, feed_timer,
+                                              &S.media);
+    }
+    if (config_shelf_weather) {
+        S.has_weather = TRUE;
+        S.weather.command = config_shelf_weather->command;
+        S.weather.interval = config_shelf_weather->interval;
+        refresh_feed(&S.weather);
+        S.weather.timer = g_timeout_add_seconds(S.weather.interval,
+                                                feed_timer, &S.weather);
+    }
+}
+
+static void stop_feeds(void)
+{
+    if (S.media.timer) g_source_remove(S.media.timer);
+    if (S.weather.timer) g_source_remove(S.weather.timer);
+    g_free(S.media.out);
+    g_free(S.weather.out);
+    if (S.art) RrImageUnref(S.art);
+    g_free(S.art_file);
+}
+
+/* The cover the player printed (a file), loaded when it changes */
+static void update_art(void)
+{
+    gchar *file = media_shown() ? feed_line(&S.media, 3) : g_strdup("");
+    if (g_strcmp0(file, S.art_file ? S.art_file : "")) {
+        if (S.art) RrImageUnref(S.art);
+        S.art = NULL;
+        g_free(S.art_file);
+        S.art_file = file;
+        if (*file && g_file_test(file, G_FILE_TEST_IS_REGULAR))
+            S.art = RrImageNewFromName(ob_rr_icons, file);
+    } else {
+        g_free(file);
+    }
+}
+
+static void launch(const gchar *command);
+
+static gboolean refresh_media_later(gpointer data)
+{
+    if (S.has_media) refresh_feed(&S.media);
+    return FALSE;
+}
+
 static void launch(const gchar *command)
 {
     gchar *argv[] = { "/bin/sh", "-c", (gchar*)command, NULL };
@@ -822,12 +1357,14 @@ void shelf_startup(gboolean reconfig)
         attr.colormap = S.cmap;
         mask |= CWColormap;
         load_pin_icons();
+        start_feeds();
         layout();
         S.win = XCreateWindow(d, obt_root(ob_screen), S.wx, S.wy, S.ww, S.wh,
                               0, 32, InputOutput, vi.visual, mask, &attr);
     } else {
         S.visual = DefaultVisual(d, ob_screen);
         load_pin_icons();
+        start_feeds();
         layout();
         S.win = XCreateWindow(d, obt_root(ob_screen), S.wx, S.wy, S.ww, S.wh,
                               0, CopyFromParent, InputOutput, CopyFromParent,
@@ -849,6 +1386,7 @@ void shelf_shutdown(gboolean reconfig)
     if (S.cmap) XFreeColormap(obt_display, S.cmap);
     if (S.bg) cairo_surface_destroy(S.bg);
     if (S.tiles) g_array_free(S.tiles, TRUE);
+    stop_feeds();
     unload_pin_icons();
     g_free(S.sig);
     STRUT_PARTIAL_SET(shelf_strut, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
@@ -860,6 +1398,14 @@ void shelf_shutdown(gboolean reconfig)
 static gint hit(gint x, gint y)
 {
     gint i;
+    if (S.media_w && y >= S.island_y + (ISLAND_H - BTN) / 2 &&
+        y < S.island_y + (ISLAND_H + BTN) / 2) {
+        gint bx = S.media_x + PAD + ART + 12 + S.text_w + 16;
+        for (i = 0; i < 3; ++i)
+            if (x >= bx + i * (BTN + BTN_GAP) &&
+                x < bx + i * (BTN + BTN_GAP) + BTN)
+                return HIT_PREV - i;
+    }
     if (y < S.island_y + PAD || y >= S.island_y + PAD + TILE) return -1;
     if (x >= S.dock_x + PAD && x < S.dock_x + PAD + TILE) return 0;
     for (i = 0; i < (gint)S.tiles->len; ++i) {
@@ -900,6 +1446,15 @@ gboolean shelf_event(const XEvent *e)
         if (h == 0 && e->xbutton.button == 1) {
             show_menu("root-menu", e->xbutton.x_root,
                       S.wy + S.island_y - 4, NULL);
+        } else if (h <= HIT_PREV && e->xbutton.button == 1) {
+            const gchar *cmd = h == HIT_PREV ? config_shelf_media->previous :
+                               h == HIT_TOGGLE ? config_shelf_media->toggle :
+                               config_shelf_media->next;
+            if (cmd) {
+                launch(cmd);
+                /* show what the click changed (the track, play or pause) */
+                g_timeout_add(600, refresh_media_later, NULL);
+            }
         } else if (h > 0) {
             Tile *t = &g_array_index(S.tiles, Tile, h - 1);
             ObClient *c = t->client;
