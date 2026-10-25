@@ -27,6 +27,8 @@
 #include "debug.h"
 #include "config.h"
 #include "screen.h"
+#include "frame.h"
+#include "stacking.h"
 
 static ObClient *client_of(ObSurfaceId s)
 {
@@ -201,6 +203,314 @@ static void request_surface_desktop(ObSurfaceId s, guint desktop)
         client_set_desktop(client, desktop, FALSE, FALSE);
 }
 
+static void request_configure(ObSurfaceId s, const ObConfigureRequest *req)
+{
+    ObClient *client = client_of(s);
+
+    if (!client) return;
+
+    /* dont compress these unless you're going to watch for property
+       notifies in between (these can change what the configure would
+       do to the window).
+       also you can't compress stacking events
+    */
+    {
+        gint x, y, w, h;
+        gboolean move = FALSE;
+        gboolean resize = FALSE;
+
+        /* get the current area */
+        RECT_TO_DIMS(client->area, x, y, w, h);
+
+        ob_debug("ConfigureRequest for \"%s\" desktop %d wmstate %d "
+                 "visible %d",
+                 client->title,
+                 screen_desktop, client->wmstate, client->frame->visible);
+        ob_debug("                     x %d y %d w %d h %d b %d",
+                 x, y, w, h, client->border_width);
+
+        if (req->fields & OB_CONFIGURE_BORDER)
+            if (client->border_width != req->border) {
+                client->border_width = req->border;
+
+                /* if the border width is changing then that is the same
+                   as requesting a resize, but we don't actually change
+                   the client's border, so it will change their root
+                   coordinates (since they include the border width) and
+                   we need to a notify then */
+                move = TRUE;
+            }
+
+        if (req->fields & OB_CONFIGURE_STACK) {
+            ObWindow *sibling = NULL;
+            gulong ignore_start;
+            gboolean ok = TRUE;
+
+            /* get the sibling */
+            if (req->fields & OB_CONFIGURE_SIBLING) {
+                ObWindow *win;
+                win = window_find((Window)req->sibling);
+                if (win && WINDOW_IS_CLIENT(win) &&
+                    WINDOW_AS_CLIENT(win) != client)
+                {
+                    sibling = win;
+                }
+                else if (win && WINDOW_IS_DOCK(win))
+                {
+                    sibling = win;
+                }
+                else
+                    /* an invalid sibling was specified so don't restack at
+                       all, it won't make sense no matter what we do */
+                    ok = FALSE;
+            }
+
+            if (ok) {
+                if (!config_focus_under_mouse)
+                    ignore_start = event_start_ignore_all_enters();
+                stacking_restack_request(client, sibling,
+                                         req->stack);
+                if (!config_focus_under_mouse)
+                    event_end_ignore_all_enters(ignore_start);
+            }
+
+            /* a stacking change moves the window without resizing */
+            move = TRUE;
+        }
+
+        if ((req->fields & OB_CONFIGURE_X) ||
+            (req->fields & OB_CONFIGURE_Y) ||
+            (req->fields & OB_CONFIGURE_WIDTH) ||
+            (req->fields & OB_CONFIGURE_HEIGHT))
+        {
+            /* don't allow clients to move shaded windows (fvwm does this)
+            */
+            if (req->fields & OB_CONFIGURE_X) {
+                if (!client->shaded)
+                    x = req->want.x;
+                move = TRUE;
+            }
+            if (req->fields & OB_CONFIGURE_Y) {
+                if (!client->shaded)
+                    y = req->want.y;
+                move = TRUE;
+            }
+
+            if (req->fields & OB_CONFIGURE_WIDTH) {
+                w = req->want.width;
+                resize = TRUE;
+            }
+            if (req->fields & OB_CONFIGURE_HEIGHT) {
+                h = req->want.height;
+                resize = TRUE;
+            }
+        }
+
+        ob_debug("ConfigureRequest x(%d) %d y(%d) %d w(%d) %d h(%d) %d "
+                 "move %d resize %d",
+                 req->fields & OB_CONFIGURE_X, x,
+                 req->fields & OB_CONFIGURE_Y, y,
+                 req->fields & OB_CONFIGURE_WIDTH, w,
+                 req->fields & OB_CONFIGURE_HEIGHT, h,
+                 move, resize);
+
+        /* check for broken apps moving to their root position
+
+           XXX remove this some day...that would be nice. right now all
+           kde apps do this when they try activate themselves on another
+           desktop. eg. open amarok window on desktop 1, switch to desktop
+           2, click amarok tray icon. it will move by its decoration size.
+        */
+        if (x != client->area.x &&
+            x == (client->frame->area.x + client->frame->size.left -
+                  (gint)client->border_width) &&
+            y != client->area.y &&
+            y == (client->frame->area.y + client->frame->size.top -
+                  (gint)client->border_width) &&
+            w == client->area.width &&
+            h == client->area.height)
+        {
+            ob_debug_type(OB_DEBUG_APP_BUGS,
+                          "Application %s is trying to move via "
+                          "ConfigureRequest to it's root window position "
+                          "but it is not using StaticGravity",
+                          client->title);
+            /* don't move it */
+            x = client->area.x;
+            y = client->area.y;
+
+            /* they still requested a move, so don't change whether a
+               notify is sent or not */
+        }
+
+        /* check for broken apps (java swing) moving to 0,0 when there is a
+           strut there.
+
+           XXX remove this some day...that would be nice. but really unexpected
+           from Sun Microsystems.
+        */
+        if (x == 0 && y == 0 && client->gravity == NorthWestGravity &&
+            client_normal(client))
+        {
+            const Rect to = { x, y, w, h };
+
+            /* oldschool fullscreen windows are allowed */
+            if (!client_is_oldfullscreen(client, &to)) {
+                Rect *r;
+
+                r = screen_area(client->desktop, SCREEN_AREA_ALL_MONITORS,
+                                NULL);
+                if (r->x || r->y) {
+                    /* move the window only to the corner outside struts */
+                    x = r->x;
+                    y = r->y;
+
+                    ob_debug_type(OB_DEBUG_APP_BUGS,
+                                  "Application %s is trying to move via "
+                                  "ConfigureRequest to 0,0 using "
+                                  "NorthWestGravity, while there is a "
+                                  "strut there. "
+                                  "Moving buggy app from (0,0) to (%d,%d)",
+                                  client->title, r->x, r->y);
+                }
+
+                g_slice_free(Rect, r);
+
+                /* they still requested a move, so don't change whether a
+                   notify is sent or not */
+            }
+        }
+
+        {
+            gint lw, lh;
+
+            client_try_configure(client, &x, &y, &w, &h, &lw, &lh, FALSE);
+
+            /* if x was not given, then use gravity to figure out the new
+               x.  the reference point should not be moved */
+            if ((req->fields & OB_CONFIGURE_WIDTH &&
+                 !(req->fields & OB_CONFIGURE_X)))
+                client_gravity_resize_w(client, &x, client->area.width, w);
+            /* same for y */
+            if ((req->fields & OB_CONFIGURE_HEIGHT &&
+                 !(req->fields & OB_CONFIGURE_Y)))
+                client_gravity_resize_h(client, &y, client->area.height,h);
+
+            client_find_onscreen(client, &x, &y, w, h, FALSE);
+
+            ob_debug("Granting ConfigureRequest x %d y %d w %d h %d",
+                     x, y, w, h);
+            client_configure(client, x, y, w, h, FALSE, TRUE, TRUE);
+        }
+    }
+}
+
+static void request_geometry(ObSurfaceId s, const ObConfigureRequest *req,
+                             ObRequestSource from)
+{
+    ObClient *client = client_of(s);
+
+    (void)from;
+    if (!client) return;
+
+    {
+        gint ograv, x, y, w, h;
+
+        ograv = client->gravity;
+
+        if (req->fields & OB_CONFIGURE_GRAVITY)
+            client->gravity = req->gravity;
+
+        if (req->fields & OB_CONFIGURE_X)
+            x = req->want.x;
+        else
+            x = client->area.x;
+        if (req->fields & OB_CONFIGURE_Y)
+            y = req->want.y;
+        else
+            y = client->area.y;
+
+        if (req->fields & OB_CONFIGURE_WIDTH) {
+            w = req->want.width;
+
+            /* if x was not given, then use gravity to figure out the new
+               x.  the reference point should not be moved */
+            if (!(req->fields & OB_CONFIGURE_X))
+                client_gravity_resize_w(client, &x, client->area.width, w);
+        }
+        else
+            w = client->area.width;
+
+        if (req->fields & OB_CONFIGURE_HEIGHT) {
+            h = req->want.height;
+
+            /* same for y */
+            if (!(req->fields & OB_CONFIGURE_Y))
+                client_gravity_resize_h(client, &y, client->area.height,h);
+        }
+        else
+            h = client->area.height;
+
+        ob_debug("MOVERESIZE x %d %d y %d %d (gravity %d)",
+                 req->fields & OB_CONFIGURE_X, x,
+                 req->fields & OB_CONFIGURE_Y, y,
+                 client->gravity);
+
+        client_find_onscreen(client, &x, &y, w, h, FALSE);
+
+        client_configure(client, x, y, w, h, FALSE, TRUE, FALSE);
+
+        client->gravity = ograv;
+    }
+}
+
+static void request_restack(ObSurfaceId s, guintptr sibling_id,
+                            ObStackMode mode, ObRequestSource from)
+{
+    ObClient *client = client_of(s);
+    ObWindow *sibling = NULL;
+    gulong ignore_start = 0;
+
+    if (!client) return;
+
+    if (from != OB_REQUEST_FROM_PAGER) {
+        ob_debug_type(OB_DEBUG_APP_BUGS,
+                      "_NET_RESTACK_WINDOW sent for window %s with "
+                      "invalid source indication %d",
+                      client->title, from);
+        return;
+    }
+
+    if (sibling_id) {
+        ObWindow *win = window_find((Window)sibling_id);
+        if (WINDOW_IS_CLIENT(win) &&
+            WINDOW_AS_CLIENT(win) != client)
+        {
+            sibling = win;
+        }
+        if (WINDOW_IS_DOCK(win))
+        {
+            sibling = win;
+        }
+        if (sibling == NULL)
+            ob_debug_type(OB_DEBUG_APP_BUGS,
+                          "_NET_RESTACK_WINDOW sent for window %s "
+                          "with invalid sibling 0x%lx",
+                          client->title, (gulong)sibling_id);
+    }
+
+    if (!config_focus_under_mouse)
+        ignore_start = event_start_ignore_all_enters();
+    /* just raise, don't activate */
+    stacking_restack_request(client, sibling, mode);
+    if (!config_focus_under_mouse)
+        event_end_ignore_all_enters(ignore_start);
+
+    /* send a synthetic ConfigureNotify, cuz this is supposed
+       to be like a ConfigureRequest. */
+    client_reconfigure(client, TRUE);
+}
+
 const ObBackendEvents ob_backend_events = {
     .surface_changed = surface_changed,
     .request_states = request_states,
@@ -208,4 +518,7 @@ const ObBackendEvents ob_backend_events = {
     .request_activate = request_activate,
     .request_close = request_close,
     .request_surface_desktop = request_surface_desktop,
+    .request_configure = request_configure,
+    .request_geometry = request_geometry,
+    .request_restack = request_restack,
 };

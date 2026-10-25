@@ -213,6 +213,23 @@ static void above_stays_above(void)
     ct_window_destroy(top);
 }
 
+/* A window can lower itself, and a pager can raise it again. */
+static void restack_requests_honoured(void)
+{
+    CT_REQUIRE(CT_CAP_STACKING);
+    ct_win *a = mapped(CT_WIN_NORMAL, "stays", SMALL);
+    ct_win *b = mapped(CT_WIN_NORMAL, "lowers itself", SMALL);
+    CT_EVENTUALLY(ct_window_stack_index(b) > ct_window_stack_index(a));
+
+    ct_request_lower(b);
+    CT_EVENTUALLY(ct_window_stack_index(b) < ct_window_stack_index(a));
+
+    ct_pager_raise(b);
+    CT_EVENTUALLY(ct_window_stack_index(b) > ct_window_stack_index(a));
+    ct_window_destroy(b);
+    ct_window_destroy(a);
+}
+
 /* A dialog stays above the window it belongs to. */
 static void dialog_above_parent(void)
 {
@@ -300,6 +317,19 @@ static void move_request_honoured(void)
     ct_window_destroy(w);
 }
 
+/* A pager can move and resize a window. */
+static void pager_move_resize_honoured(void)
+{
+    CT_REQUIRE(CT_CAP_CLIENT_POSITION);
+    ct_win *w = mapped(CT_WIN_NORMAL, "pager moved", SMALL);
+
+    ct_pager_move_resize(w, (ct_rect){ 300, 200, 350, 250 });
+    CT_EVENTUALLY(ct_window_client(w).w == 350 &&
+                  ct_window_client(w).h == 250);
+    CT_EVENTUALLY(ct_window_frame(w).x == 300 && ct_window_frame(w).y == 200);
+    ct_window_destroy(w);
+}
+
 /* Switching desktops hides the windows of the old one; a window sent to
    another desktop goes there. */
 static void desktops_switch(void)
@@ -359,11 +389,13 @@ const ct_case ct_cases[] = {
     { "starts_fullscreen", starts_fullscreen },
     { "iconify_hides", iconify_hides },
     { "above_stays_above", above_stays_above },
+    { "restack_requests_honoured", restack_requests_honoured },
     { "dialog_above_parent", dialog_above_parent },
     { "strut_shrinks_workarea", strut_shrinks_workarea },
     { "resize_request_honoured", resize_request_honoured },
     { "min_size_change_applies", min_size_change_applies },
     { "move_request_honoured", move_request_honoured },
+    { "pager_move_resize_honoured", pager_move_resize_honoured },
     { "desktops_switch", desktops_switch },
     { "starts_on_desktop", starts_on_desktop },
     { NULL, NULL }

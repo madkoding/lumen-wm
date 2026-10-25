@@ -20,6 +20,8 @@
 #ifndef __stacking_h
 #define __stacking_h
 
+#include "backend.h"
+
 #include <glib.h>
 #include <X11/Xlib.h>
 
@@ -80,6 +82,6 @@ void stacking_below(struct _ObWindow *window, struct _ObWindow *below);
 */
 gboolean stacking_restack_request(struct _ObClient *client,
                                   struct _ObWindow *sibling_win,
-                                  gint detail);
+                                  ObStackMode detail);
 
 #endif

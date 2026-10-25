@@ -21,6 +21,7 @@
 #include "backend.h"
 #include "backend-x11.h"
 #include "openbox.h"
+#include "debug.h"
 #include "obrender/render.h"
 #include "obt/display.h"
 #include "obt/xqueue.h"
@@ -788,6 +789,39 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
         events->request_states(s, a, atom_state(e->data.l[1]),
                                atom_state(e->data.l[2]),
                                request_source(e->data.l[3]));
+    } else if (msgtype == OBT_PROP_ATOM(NET_MOVERESIZE_WINDOW)) {
+        ObConfigureRequest req;
+        const glong flags = e->data.l[0];
+
+        req.fields = 0;
+        if (flags & 0xff) {
+            req.fields |= OB_CONFIGURE_GRAVITY;
+            req.gravity = flags & 0xff;
+        }
+        if (flags & 1 << 8) req.fields |= OB_CONFIGURE_X;
+        if (flags & 1 << 9) req.fields |= OB_CONFIGURE_Y;
+        if (flags & 1 << 10) req.fields |= OB_CONFIGURE_WIDTH;
+        if (flags & 1 << 11) req.fields |= OB_CONFIGURE_HEIGHT;
+        RECT_SET(req.want, e->data.l[1], e->data.l[2],
+                 e->data.l[3], e->data.l[4]);
+        events->request_geometry(s, &req, request_source(flags >> 12 & 0xf));
+    } else if (msgtype == OBT_PROP_ATOM(NET_RESTACK_WINDOW)) {
+        const glong detail = e->data.l[2];
+        ObStackMode mode;
+
+        if (detail == Above) mode = OB_STACK_ABOVE;
+        else if (detail == Below) mode = OB_STACK_BELOW;
+        else if (detail == TopIf) mode = OB_STACK_TOP_IF;
+        else if (detail == BottomIf) mode = OB_STACK_BOTTOM_IF;
+        else if (detail == Opposite) mode = OB_STACK_OPPOSITE;
+        else {
+            ob_debug_type(OB_DEBUG_APP_BUGS,
+                          "_NET_RESTACK_WINDOW sent for window 0x%lx "
+                          "with invalid detail %ld", e->window, detail);
+            return TRUE;
+        }
+        events->request_restack(s, (guintptr)e->data.l[1], mode,
+                                request_source(e->data.l[0]));
     } else if (msgtype == OBT_PROP_ATOM(NET_CLOSE_WINDOW)) {
         events->request_close(s, request_source(e->data.l[1]));
     } else if (msgtype == OBT_PROP_ATOM(NET_ACTIVE_WINDOW)) {
@@ -798,6 +832,33 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
     } else
         return FALSE;
     return TRUE;
+}
+
+void backend_x11_configure_request(const XConfigureRequestEvent *e)
+{
+    ObConfigureRequest req;
+
+    req.fields = 0;
+    if (e->value_mask & CWX) req.fields |= OB_CONFIGURE_X;
+    if (e->value_mask & CWY) req.fields |= OB_CONFIGURE_Y;
+    if (e->value_mask & CWWidth) req.fields |= OB_CONFIGURE_WIDTH;
+    if (e->value_mask & CWHeight) req.fields |= OB_CONFIGURE_HEIGHT;
+    if (e->value_mask & CWBorderWidth) req.fields |= OB_CONFIGURE_BORDER;
+    if (e->value_mask & CWSibling) req.fields |= OB_CONFIGURE_SIBLING;
+    if (e->value_mask & CWStackMode) req.fields |= OB_CONFIGURE_STACK;
+    RECT_SET(req.want, e->x, e->y, e->width, e->height);
+    req.border = e->border_width;
+    req.sibling = (guintptr)e->above;
+    switch (e->detail) {
+    case Below: req.stack = OB_STACK_BELOW; break;
+    case TopIf: req.stack = OB_STACK_TOP_IF; break;
+    case BottomIf: req.stack = OB_STACK_BOTTOM_IF; break;
+    case Opposite: req.stack = OB_STACK_OPPOSITE; break;
+    default: req.stack = OB_STACK_ABOVE; break;
+    }
+    req.gravity = 0;
+
+    events->request_configure((ObSurfaceId)e->window, &req);
 }
 
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)

@@ -87,6 +87,11 @@ bool ct_window_closed(ct_win *w);
 
 /* Requests, as a pager or a taskbar would send them. */
 void ct_request_state(ct_win *w, ct_state s, bool on);
+/* The window asks to go below every other window. */
+void ct_request_lower(ct_win *w);
+/* A pager raises the window, or moves and resizes it. */
+void ct_pager_raise(ct_win *w);
+void ct_pager_move_resize(ct_win *w, ct_rect r);
 /* Turn the state off when it is on, on when it is off. */
 void ct_request_toggle_state(ct_win *w, ct_state s);
 void ct_request_activate(ct_win *w);
