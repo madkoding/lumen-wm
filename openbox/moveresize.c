@@ -47,9 +47,6 @@
 
 gboolean moveresize_in_progress = FALSE;
 ObClient *moveresize_client = NULL;
-#ifdef SYNC
-XSyncAlarm moveresize_alarm = None;
-#endif
 
 static gboolean moving = FALSE; /* TRUE - moving, FALSE - resizing */
 
@@ -66,9 +63,8 @@ static gboolean edge_warp_odd = FALSE;
 static guint edge_warp_timer = 0;
 static ObDirection key_resize_edge = -1;
 static guint waiting_for_sync;
-#ifdef SYNC
+static gboolean syncing = FALSE; /* the client takes sync requests */
 static guint sync_timer = 0;
-#endif
 
 static ObPopup *popup = NULL;
 
@@ -76,9 +72,7 @@ static void do_move(gboolean keyboard, gint keydist);
 static void do_resize(void);
 static void do_edge_warp(gint x, gint y);
 static void cancel_edge_warp();
-#ifdef SYNC
 static gboolean sync_timeout_func(gpointer data);
-#endif
 
 static void client_dest(ObClient *client, gpointer data)
 {
@@ -269,45 +263,12 @@ void moveresize_start(ObClient *c, gint x, gint y, guint b, ObMoveResize cnr)
     moveresize_in_progress = TRUE;
     waiting_for_sync = 0;
 
-#ifdef SYNC
-    if (config_resize_redraw && !moving && obt_display_extension_sync &&
+    syncing = FALSE;
+    if (config_resize_redraw && !moving &&
         moveresize_client->sync_request && moveresize_client->sync_counter &&
         !moveresize_client->not_responding)
-    {
-        /* Initialize values for the resize syncing, and create an alarm for
-           the client's xsync counter */
-
-        XSyncValue val;
-        XSyncAlarmAttributes aa;
-
-        /* set the counter to an initial value */
-        XSyncIntToValue(&val, 0);
-        XSyncSetCounter(obt_display, moveresize_client->sync_counter, val);
-
-        /* this will be incremented when we tell the client what we're
-           looking for */
-        moveresize_client->sync_counter_value = 0;
-
-        /* the next sequence we're waiting for with the alarm */
-        XSyncIntToValue(&val, 1);
-
-        /* set an alarm on the counter */
-        aa.trigger.counter = moveresize_client->sync_counter;
-        aa.trigger.wait_value = val;
-        aa.trigger.value_type = XSyncAbsolute;
-        aa.trigger.test_type = XSyncPositiveTransition;
-        aa.events = True;
-        XSyncIntToValue(&aa.delta, 1);
-        moveresize_alarm = XSyncCreateAlarm(obt_display,
-                                            XSyncCACounter |
-                                            XSyncCAValue |
-                                            XSyncCAValueType |
-                                            XSyncCATestType |
-                                            XSyncCADelta |
-                                            XSyncCAEvents,
-                                            &aa);
-    }
-#endif
+        syncing = (*ob_backend->sync_start)(moveresize_client->window,
+                                            moveresize_client->sync_counter);
 }
 
 void moveresize_end(gboolean cancel)
@@ -319,16 +280,11 @@ void moveresize_end(gboolean cancel)
     popup->client = NULL;
 
     if (!moving) {
-#ifdef SYNC
-        /* turn off the alarm */
-        if (moveresize_alarm != None) {
-            XSyncDestroyAlarm(obt_display, moveresize_alarm);
-            moveresize_alarm = None;
-        }
+        if (syncing) (*ob_backend->sync_stop)();
+        syncing = FALSE;
 
         if (sync_timer) g_source_remove(sync_timer);
         sync_timer = 0;
-#endif
     }
 
     /* don't use client_move() here, use the same width/height as
@@ -410,41 +366,18 @@ static void do_resize(void)
            that many times already, so forget about waiting more */
         (waiting_for_sync == 0 || waiting_for_sync > SYNC_TIMEOUTS))
     {
-#ifdef SYNC
-        if (config_resize_redraw && obt_display_extension_sync &&
-            /* don't send another sync when one is pending */
-            waiting_for_sync == 0 &&
-            moveresize_client->sync_request &&
-            moveresize_client->sync_counter &&
+        /* don't send another sync when one is pending */
+        if (syncing && waiting_for_sync == 0 &&
             !moveresize_client->not_responding)
         {
-            XEvent ce;
-            XSyncValue val;
-
-            /* increment the value we're waiting for */
-            ++moveresize_client->sync_counter_value;
-            XSyncIntToValue(&val, moveresize_client->sync_counter_value);
-
             /* tell the client what we're waiting for */
-            ce.xclient.type = ClientMessage;
-            ce.xclient.message_type = OBT_PROP_ATOM(WM_PROTOCOLS);
-            ce.xclient.display = obt_display;
-            ce.xclient.window = moveresize_client->window;
-            ce.xclient.format = 32;
-            ce.xclient.data.l[0] = OBT_PROP_ATOM(NET_WM_SYNC_REQUEST);
-            ce.xclient.data.l[1] = event_time();
-            ce.xclient.data.l[2] = XSyncValueLow32(val);
-            ce.xclient.data.l[3] = XSyncValueHigh32(val);
-            ce.xclient.data.l[4] = 0l;
-            XSendEvent(obt_display, moveresize_client->window, FALSE,
-                       NoEventMask, &ce);
-
+            (*ob_backend->sync_request)(moveresize_client->window,
+                                        event_time());
             waiting_for_sync = 1;
 
             if (sync_timer) g_source_remove(sync_timer);
             sync_timer = g_timeout_add(2000, sync_timeout_func, NULL);
         }
-#endif
 
         /* force a ConfigureNotify, it is part of the spec for SYNC resizing
            and MUST follow the sync counter notification */
@@ -461,7 +394,6 @@ static void do_resize(void)
         popup_coords(moveresize_client, "%d x %d", lw, lh);
 }
 
-#ifdef SYNC
 static gboolean sync_timeout_func(gpointer data)
 {
     ++waiting_for_sync; /* we timed out waiting for our sync... */
@@ -474,7 +406,15 @@ static gboolean sync_timeout_func(gpointer data)
     else
         return TRUE; /* keep waiting */
 }
-#endif
+
+void moveresize_synced(void)
+{
+    waiting_for_sync = 0; /* we got our sync... */
+    do_resize(); /* ...so try resize if there is more change pending */
+
+    if (moveresize_client == focus_client)
+        event_update_user_time();
+}
 
 static void calc_resize(gboolean keyboard, gint keydist, gint *dw, gint *dh,
                         ObDirection dir)
@@ -1086,14 +1026,6 @@ gboolean moveresize_event(XEvent *e)
             }
         }
     }
-#ifdef SYNC
-    else if (e->type == obt_display_extension_sync_basep + XSyncAlarmNotify)
-    {
-        waiting_for_sync = 0; /* we got our sync... */
-        do_resize(); /* ...so try resize if there is more change pending */
-        used = TRUE;
-    }
-#endif
 
     if (used && moveresize_client == focus_client)
         event_update_user_time();

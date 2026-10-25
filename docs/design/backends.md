@@ -117,12 +117,12 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       and publishes the visible titles with `publish_surface_titles`, decides whether WM_CLIENT_MACHINE is another
       host, and builds the icon images from the ARGB sizes the backend hands over (`ObIcon`), publishing the
       theme's icon with `publish_surface_icon` for a window that has none. Still read in `client.c`: the geometry,
-      shape, colormap, opacity and sync counter, which go with the frames and move/resize.
+      shape, colormap and opacity, which go with the frames.
    7. Requests: `event.c` splits in two. The X11 half turns XEvents into `ObBackendEvents`, and the core half
       (`backend-events.c`) handles them. While `event.c` still reads the X queue, it hands each kind of event
       that has moved to a `backend_x11_*` function (`backend-x11.h`). Done for property changes on clients
-      (`surface_changed`, with the queue compression for titles and icons in the backend; opacity and the
-      sync counter stay in `event.c` until the frames and move/resize move) and for the client messages
+      (`surface_changed`, with the queue compression for titles and icons in the backend; opacity stays in
+      `event.c` until the frames move; the sync counter moved with move/resize, 9) and for the client messages
       about states, iconifying, activating, closing and desktops (`request_*`; `client_set_state()` now
       takes `ObSurfaceStates`). Configure requests, `_NET_MOVERESIZE_WINDOW` and
       `_NET_RESTACK_WINDOW` are `request_configure`, `request_geometry` and `request_restack`, with
@@ -144,7 +144,10 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       `ObMoveResize` (the `_NET_WM_MOVERESIZE` directions as a core enum) instead of the atoms, and the
       client's `_NET_WM_MOVERESIZE` is `request_move_resize`. The pointer queries and warps (keyboard moves,
       the edge warp between desktops) are `pointer_position` and `pointer_warp`, which can swallow the
-      motion it makes. Next: the XSync counter of synced resizes.
+      motion it makes. A synced resize is `sync_start`, `sync_request` and `sync_stop`, and the client's
+      answer is `surface_synced`: the backend owns the XSync counter and alarm (`OB_SURFACE_INFO_SYNC`
+      reads the counter id) and the core only counts the pending request and its timeouts. A Wayland
+      backend maps the same calls onto configure and ack_configure.
 4. **Render without Xlib**: obrender, frames, the shelf, menus and popups draw into cairo image surfaces and hand
    them to `canvas_present`. Themes are unchanged, and `tools/shelf-themes.sh` checks that they still read.
 5. **backend-wlroots**: a compositor on wlroots' scene graph with xdg-shell, xdg-decoration, layer-shell,

@@ -158,7 +158,8 @@ typedef enum {
     OB_SURFACE_INFO_DESKTOP  = 1 << 12, /*!< the desktop it asks for */
     OB_SURFACE_INFO_STATES   = 1 << 13, /*!< the states it maps in */
     OB_SURFACE_INFO_USER_TIME = 1 << 14,
-    OB_SURFACE_INFO_ALL      = (1 << 15) - 1
+    OB_SURFACE_INFO_SYNC     = 1 << 15, /*!< its resize sync counter */
+    OB_SURFACE_INFO_ALL      = (1 << 16) - 1
 } ObSurfaceInfoFields;
 
 /*! One size of a client's icon. */
@@ -245,6 +246,9 @@ typedef struct _ObSurfaceInfo {
     /*! when the user last used it, in event time; 0 asks not to be
       focused */
     guint32 user_time;
+    /*! what it syncs resizes with (an XSync counter on X11); 0 for
+      nothing. Only with OB_BACKEND_CAP_SYNC_RESIZE. */
+    guint32 sync_counter;
 
     ObIcon *icons;          /*!< every size it offers; NULL for none */
     guint n_icons;
@@ -317,6 +321,14 @@ struct _ObBackend {
     void (*surface_set_states)(ObSurfaceId s, ObSurfaceStates states);
     /*! Ask whether it still answers; the answer comes as pong(). */
     void (*surface_ping)(ObSurfaceId s, guint32 serial);
+    /*! Synced resizes (OB_BACKEND_CAP_SYNC_RESIZE), one surface at a time:
+      start syncing with the counter surface_info() gave, ask the client
+      to say when it has drawn the next size it is configured to (the
+      answer comes as surface_synced()), and stop. sync_start is FALSE
+      when it can't sync (X11: no XSync extension). */
+    gboolean (*sync_start)(ObSurfaceId s, guint32 counter);
+    void (*sync_request)(ObSurfaceId s, guint32 time);
+    void (*sync_stop)(void);
     /*! Read what the client says about itself now, for the given fields
       only; the others are left as they are. Free the strings with
       backend_surface_info_clear(). */
@@ -432,6 +444,8 @@ struct _ObBackendEvents {
     /*! The client hid itself (X11 unmap, a null buffer on Wayland). */
     void (*surface_withdrawn)(ObSurfaceId s);
     void (*pong)(ObSurfaceId s, guint32 serial);
+    /*! It drew the size sync_request() asked about. */
+    void (*surface_synced)(ObSurfaceId s);
 
     /*! The client configures itself (X11 ConfigureRequest; on Wayland, a
       new size it commits on its own). */

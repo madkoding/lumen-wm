@@ -23,10 +23,6 @@
 
 #include <glib.h>
 
-#ifdef SYNC
-#include <X11/extensions/sync.h>
-#endif
-
 struct _ObClient;
 
 typedef enum {
@@ -37,9 +33,6 @@ typedef enum {
 
 extern gboolean moveresize_in_progress;
 extern struct _ObClient *moveresize_client;
-#ifdef SYNC
-extern XSyncAlarm moveresize_alarm;
-#endif
 
 void moveresize_startup(gboolean reconfig);
 void moveresize_shutdown(gboolean reconfig);
@@ -47,6 +40,9 @@ void moveresize_shutdown(gboolean reconfig);
 void moveresize_start(struct _ObClient *c,
                       gint x, gint y, guint button, ObMoveResize corner);
 void moveresize_end(gboolean cancel);
+
+/* the client answered the last sync request of a resize */
+void moveresize_synced(void);
 
 gboolean moveresize_event(XEvent *e);
 

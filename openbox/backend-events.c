@@ -134,6 +134,15 @@ static void surface_changed(ObSurfaceId s, ObSurfaceInfoFields changed,
         client_update_icons(client);
     if (changed & OB_SURFACE_INFO_ICON_AREA)
         client_update_icon_geometry(client);
+    if (changed & OB_SURFACE_INFO_SYNC) {
+        /* if they are resizing right now this would cause weird behaviour.
+           if one day a user reports clients stop resizing, then handle
+           this better by syncing with the new counter, but I expect it will
+           never happen */
+        if (moveresize_client == client)
+            moveresize_end(FALSE);
+        client_update_sync_request_counter(client);
+    }
     if (changed & OB_SURFACE_INFO_USER_TIME && client == focus_client) {
         ObSurfaceInfo info = { 0 };
 
@@ -575,6 +584,14 @@ static void focus_lost(gboolean refocus)
     focus_fallback(refocus, config_focus_under_mouse, TRUE, TRUE);
 }
 
+static void surface_synced(ObSurfaceId s)
+{
+    ObClient *client = client_of(s);
+
+    if (client && moveresize_in_progress && client == moveresize_client)
+        moveresize_synced();
+}
+
 static void request_move_resize(ObSurfaceId s, ObMoveResize edge, gint x,
                                 gint y, guint button)
 {
@@ -590,6 +607,7 @@ static void request_move_resize(ObSurfaceId s, ObMoveResize edge, gint x,
 
 const ObBackendEvents ob_backend_events = {
     .surface_new = surface_new,
+    .surface_synced = surface_synced,
     .surface_gone = surface_gone,
     .surface_withdrawn = surface_withdrawn,
     .surface_changed = surface_changed,
