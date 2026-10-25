@@ -84,6 +84,10 @@ bool ct_window_viewable(ct_win *w);
 bool ct_window_focused(ct_win *w);
 /* No client has the focus: keys go to the window manager. */
 bool ct_nothing_focused(void);
+/* The window manager says it runs and what it supports, as pagers and
+   panels look for (X11: WM_Sn, _NET_SUPPORTING_WM_CHECK, _NET_SUPPORTED;
+   Wayland: it is the compositor). */
+bool ct_wm_announced(void);
 bool ct_window_has_state(ct_win *w, ct_state s);
 /* the client area, in root coordinates */
 ct_rect ct_window_client(ct_win *w);

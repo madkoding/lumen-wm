@@ -48,14 +48,7 @@
 #endif
 #include <assert.h>
 
-/*! The event mask to grab on the root window */
-#define ROOT_EVENTMASK (StructureNotifyMask | PropertyChangeMask | \
-                        EnterWindowMask | LeaveWindowMask | \
-                        SubstructureRedirectMask | FocusChangeMask | \
-                        ButtonPressMask | ButtonReleaseMask)
-
 static gboolean screen_validate_layout(ObDesktopLayout *l);
-static gboolean replace_wm(void);
 static void     screen_fallback_focus(void);
 
 guint                  screen_num_desktops;
@@ -65,7 +58,6 @@ guint                  screen_last_desktop;
 ObScreenShowDestopMode screen_show_desktop_mode;
 ObDesktopLayout        screen_desktop_layout;
 gchar                **screen_desktop_names;
-Window                 screen_support_win;
 Time                   screen_desktop_user_time = CurrentTime;
 
 static Size     screen_physical_size;
@@ -88,237 +80,11 @@ static gboolean      desktop_popup_perm;
   replace the remembered "last desktop" */
 #define REMEMBER_LAST_DESKTOP_TIME 750
 
-static gboolean replace_wm(void)
-{
-    gchar *wm_sn;
-    Atom wm_sn_atom;
-    Window current_wm_sn_owner;
-    Time timestamp;
-
-    wm_sn = g_strdup_printf("WM_S%d", ob_screen);
-    wm_sn_atom = XInternAtom(obt_display, wm_sn, FALSE);
-    g_free(wm_sn);
-
-    current_wm_sn_owner = XGetSelectionOwner(obt_display, wm_sn_atom);
-    if (current_wm_sn_owner == screen_support_win)
-        current_wm_sn_owner = None;
-    if (current_wm_sn_owner) {
-        if (!ob_replace_wm) {
-            g_message(_("A window manager is already running on screen %d"),
-                      ob_screen);
-            return FALSE;
-        }
-        obt_display_ignore_errors(TRUE);
-
-        /* We want to find out when the current selection owner dies */
-        XSelectInput(obt_display, current_wm_sn_owner, StructureNotifyMask);
-        XSync(obt_display, FALSE);
-
-        obt_display_ignore_errors(FALSE);
-        if (obt_display_error_occured)
-            current_wm_sn_owner = None;
-    }
-
-    timestamp = event_time();
-
-    XSetSelectionOwner(obt_display, wm_sn_atom, screen_support_win,
-                       timestamp);
-
-    if (XGetSelectionOwner(obt_display, wm_sn_atom) != screen_support_win) {
-        g_message(_("Could not acquire window manager selection on screen %d"),
-                  ob_screen);
-        return FALSE;
-    }
-
-    /* Wait for old window manager to go away */
-    if (current_wm_sn_owner) {
-      gulong wait = 0;
-      const gulong timeout = G_USEC_PER_SEC * 15; /* wait for 15s max */
-      ObtXQueueWindowType wt;
-
-      wt.window = current_wm_sn_owner;
-      wt.type = DestroyNotify;
-
-      while (wait < timeout) {
-          /* Checks the local queue and incoming events for this event */
-          if (xqueue_exists_local(xqueue_match_window_type, &wt))
-              break;
-          g_usleep(G_USEC_PER_SEC / 10);
-          wait += G_USEC_PER_SEC / 10;
-      }
-
-      if (wait >= timeout) {
-          g_message(_("The WM on screen %d is not exiting"), ob_screen);
-          return FALSE;
-      }
-    }
-
-    /* Send client message indicating that we are now the WM */
-    obt_prop_message(ob_screen, obt_root(ob_screen), OBT_PROP_ATOM(MANAGER),
-                     timestamp, wm_sn_atom, screen_support_win, 0, 0,
-                     SubstructureNotifyMask);
-
-    return TRUE;
-}
-
 gboolean screen_annex(void)
 {
-    XSetWindowAttributes attrib;
-    pid_t pid;
-    gint i, num_support;
-    gulong *supported;
-
-    /* create the netwm support window */
-    attrib.override_redirect = TRUE;
-    attrib.event_mask = PropertyChangeMask;
-    screen_support_win = XCreateWindow(obt_display, obt_root(ob_screen),
-                                       -100, -100, 1, 1, 0,
-                                       CopyFromParent, InputOutput,
-                                       CopyFromParent,
-                                       CWEventMask | CWOverrideRedirect,
-                                       &attrib);
-    XMapWindow(obt_display, screen_support_win);
-    XLowerWindow(obt_display, screen_support_win);
-
-    if (!replace_wm()) {
-        XDestroyWindow(obt_display, screen_support_win);
+    if (!(*ob_backend->claim_screen)())
         return FALSE;
-    }
-
-    obt_display_ignore_errors(TRUE);
-    XSelectInput(obt_display, obt_root(ob_screen), ROOT_EVENTMASK);
-    obt_display_ignore_errors(FALSE);
-    if (obt_display_error_occured) {
-        g_message(_("A window manager is already running on screen %d"),
-                  ob_screen);
-
-        XDestroyWindow(obt_display, screen_support_win);
-        return FALSE;
-    }
-
     screen_set_root_cursor();
-
-    /* set the OPENBOX_PID hint */
-    pid = getpid();
-    OBT_PROP_SET32(obt_root(ob_screen), OPENBOX_PID, CARDINAL, pid);
-
-    /* set supporting window */
-    OBT_PROP_SET32(obt_root(ob_screen),
-                   NET_SUPPORTING_WM_CHECK, WINDOW, screen_support_win);
-
-    /* set properties on the supporting window */
-    OBT_PROP_SETS(screen_support_win, NET_WM_NAME, "Openbox");
-    OBT_PROP_SET32(screen_support_win, NET_SUPPORTING_WM_CHECK,
-                   WINDOW, screen_support_win);
-
-    /* set the _NET_SUPPORTED_ATOMS hint */
-
-    /* this is all the atoms after NET_SUPPORTED in the ObtPropAtoms enum */
-    num_support = OBT_PROP_NUM_ATOMS - OBT_PROP_NET_SUPPORTED - 1;
-    i = 0;
-    supported = g_new(gulong, num_support);
-    supported[i++] = OBT_PROP_ATOM(NET_SUPPORTING_WM_CHECK);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_FULL_PLACEMENT);
-    supported[i++] = OBT_PROP_ATOM(NET_CURRENT_DESKTOP);
-    supported[i++] = OBT_PROP_ATOM(NET_NUMBER_OF_DESKTOPS);
-    supported[i++] = OBT_PROP_ATOM(NET_DESKTOP_GEOMETRY);
-    supported[i++] = OBT_PROP_ATOM(NET_DESKTOP_VIEWPORT);
-    supported[i++] = OBT_PROP_ATOM(NET_ACTIVE_WINDOW);
-    supported[i++] = OBT_PROP_ATOM(NET_WORKAREA);
-    supported[i++] = OBT_PROP_ATOM(NET_CLIENT_LIST);
-    supported[i++] = OBT_PROP_ATOM(NET_CLIENT_LIST_STACKING);
-    supported[i++] = OBT_PROP_ATOM(NET_DESKTOP_NAMES);
-    supported[i++] = OBT_PROP_ATOM(NET_CLOSE_WINDOW);
-    supported[i++] = OBT_PROP_ATOM(NET_DESKTOP_LAYOUT);
-    supported[i++] = OBT_PROP_ATOM(NET_SHOWING_DESKTOP);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_NAME);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_VISIBLE_NAME);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ICON_NAME);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_VISIBLE_ICON_NAME);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_DESKTOP);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STRUT);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STRUT_PARTIAL);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ICON);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ICON_GEOMETRY);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_WINDOW_TYPE);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_DESKTOP);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_DOCK);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_TOOLBAR);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_MENU);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_UTILITY);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_SPLASH);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_DIALOG);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_NORMAL);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ALLOWED_ACTIONS);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_WINDOW_OPACITY);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ACTION_MOVE);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ACTION_RESIZE);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ACTION_MINIMIZE);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ACTION_SHADE);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ACTION_MAXIMIZE_HORZ);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ACTION_MAXIMIZE_VERT);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ACTION_FULLSCREEN);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ACTION_CHANGE_DESKTOP);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ACTION_CLOSE);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ACTION_ABOVE);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_ACTION_BELOW);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STATE);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STATE_MODAL);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_VERT);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_HORZ);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STATE_SHADED);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STATE_SKIP_TASKBAR);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STATE_SKIP_PAGER);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STATE_HIDDEN);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STATE_FULLSCREEN);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STATE_ABOVE);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STATE_BELOW);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_STATE_DEMANDS_ATTENTION);
-    supported[i++] = OBT_PROP_ATOM(NET_MOVERESIZE_WINDOW);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_MOVERESIZE);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_USER_TIME);
-/*
-    supported[i++] = OBT_PROP_ATOM(NET_WM_USER_TIME_WINDOW);
-*/
-    supported[i++] = OBT_PROP_ATOM(NET_FRAME_EXTENTS);
-    supported[i++] = OBT_PROP_ATOM(NET_REQUEST_FRAME_EXTENTS);
-    supported[i++] = OBT_PROP_ATOM(NET_RESTACK_WINDOW);
-    supported[i++] = OBT_PROP_ATOM(NET_STARTUP_ID);
-#ifdef SYNC
-    supported[i++] = OBT_PROP_ATOM(NET_WM_SYNC_REQUEST);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_SYNC_REQUEST_COUNTER);
-#endif
-    supported[i++] = OBT_PROP_ATOM(NET_WM_PID);
-    supported[i++] = OBT_PROP_ATOM(NET_WM_PING);
-
-    supported[i++] = OBT_PROP_ATOM(KDE_WM_CHANGE_STATE);
-    supported[i++] = OBT_PROP_ATOM(KDE_NET_WM_FRAME_STRUT);
-    supported[i++] = OBT_PROP_ATOM(KDE_NET_WM_WINDOW_TYPE_OVERRIDE);
-
-    supported[i++] = OBT_PROP_ATOM(OB_WM_ACTION_UNDECORATE);
-    supported[i++] = OBT_PROP_ATOM(OB_WM_STATE_UNDECORATED);
-    supported[i++] = OBT_PROP_ATOM(OPENBOX_PID);
-    supported[i++] = OBT_PROP_ATOM(OB_THEME);
-    supported[i++] = OBT_PROP_ATOM(OB_CONFIG_FILE);
-    supported[i++] = OBT_PROP_ATOM(OB_LAST_DESKTOP);
-    supported[i++] = OBT_PROP_ATOM(OB_CONTROL);
-    supported[i++] = OBT_PROP_ATOM(OB_VERSION);
-    supported[i++] = OBT_PROP_ATOM(OB_APP_ROLE);
-    supported[i++] = OBT_PROP_ATOM(OB_APP_TITLE);
-    supported[i++] = OBT_PROP_ATOM(OB_APP_NAME);
-    supported[i++] = OBT_PROP_ATOM(OB_APP_CLASS);
-    supported[i++] = OBT_PROP_ATOM(OB_APP_GROUP_NAME);
-    supported[i++] = OBT_PROP_ATOM(OB_APP_GROUP_CLASS);
-    supported[i++] = OBT_PROP_ATOM(OB_APP_TYPE);
-    g_assert(i == num_support);
-
-    OBT_PROP_SETA32(obt_root(ob_screen),
-                    NET_SUPPORTED, ATOM, supported, num_support);
-    g_free(supported);
-
-    OBT_PROP_SETS(RootWindow(obt_display, ob_screen), OB_VERSION,
-                  OPENBOX_VERSION);
-
     return TRUE;
 }
 
@@ -462,16 +228,7 @@ void screen_shutdown(gboolean reconfig)
     if (reconfig)
         return;
 
-    XSelectInput(obt_display, obt_root(ob_screen), NoEventMask);
-
-    /* we're not running here no more! */
-    OBT_PROP_ERASE(obt_root(ob_screen), OPENBOX_PID);
-    /* not without us */
-    OBT_PROP_ERASE(obt_root(ob_screen), NET_SUPPORTED);
-    /* don't keep this mode */
-    OBT_PROP_ERASE(obt_root(ob_screen), NET_SHOWING_DESKTOP);
-
-    XDestroyWindow(obt_display, screen_support_win);
+    (*ob_backend->release_screen)();
 
     g_strfreev(screen_desktop_names);
     screen_desktop_names = NULL;

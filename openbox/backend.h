@@ -285,12 +285,18 @@ struct _ObBackend {
 
     /* --- lifetime --- */
 
-    /*! Connect and take over the screen, and report to events from then on.
-      replace: replace a running window manager (X11), or fail when one is
-      running. */
+    /*! Connect, and report to events from then on. replace: when the core
+      claims the screen, replace a running window manager (X11) instead of
+      failing. */
     gboolean (*startup)(const gchar *display, gboolean replace,
                         const ObBackendEvents *events);
     void (*shutdown)(void);
+    /*! Become the screen's window manager and tell clients what we
+      support (X11: WM_Sn, _NET_SUPPORTING_WM_CHECK, _NET_SUPPORTED; on
+      Wayland the compositor already is). FALSE when another one runs. */
+    gboolean (*claim_screen)(void);
+    /*! Hand the screen back, focus and all. */
+    void (*release_screen)(void);
     /*! The source that delivers the backend's events to the main loop. */
     GSource *(*event_source)(void);
     /*! Milliseconds since some fixed point, comparable to event times. */
@@ -313,7 +319,8 @@ struct _ObBackend {
     void (*surface_show)(ObSurfaceId s, gboolean show);
     /*! Give it the keyboard. input: hand it the keyboard focus; take_focus:
       tell it to take the focus itself (ICCCM WM_TAKE_FOCUS, X11 only).
-      Returns FALSE when it couldn't be focused. */
+      OB_SURFACE_NONE gives the keyboard to no client, so keys reach the
+      core. Returns FALSE when it couldn't be focused. */
     gboolean (*surface_focus)(ObSurfaceId s, guint32 time, gboolean input,
                               gboolean take_focus);
     /*! Ask it to close; it may refuse or hang. */

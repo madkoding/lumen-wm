@@ -97,7 +97,9 @@ Every step is its own small PR, and the contract tests stay green on X11 through
    (moving the Xlib code out of the core file, not rewriting it) and switches the callers:
    1. `backend-x11.c` skeleton: `startup`, `shutdown` and `event_source`, wrapping `obt_display` and `xqueue`
       (done). `openbox.c` starts the backend through `backend_startup()`. The other `ObBackend` functions stay
-      NULL until the step that moves their callers, and `time` comes with the event split (7).
+      NULL until the step that moves their callers, and `time` comes with the event split (7). Taking over the
+      screen is `claim_screen` and `release_screen`: the support window, the WM_Sn selection (and `--replace`),
+      the root event mask, `_NET_SUPPORTING_WM_CHECK` and `_NET_SUPPORTED` live in the backend (done).
    2. Outputs: `screen.c` stops calling Xinerama and asks `output_count` and `output_area` instead (done).
       `--debug-xinerama` still splits a single output in two, now in the core.
    3. Publishing: the root properties move out of `screen.c`, `focus.c`, `stacking.c` and `client.c` (done).
@@ -107,8 +109,8 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       windows to put below it, top first, so the core still restacks one layer at a time.
    5. Surfaces: `surface_*` replaces the XSetInputFocus, WM_PROTOCOLS and kill calls in `client.c` (done for
       focus, close, kill, `_NET_WM_STATE` and ping). `surface_configure` and `surface_show` come with the frames,
-      which still reparent and map the client themselves, and focusing nothing (`focus.c`'s fallback to the
-      support window) comes with the support window.
+      which still reparent and map the client themselves. Focusing nothing is `surface_focus(OB_SURFACE_NONE)`,
+      which on X11 gives the keyboard to the support window.
    6. Client info: property reading in `client.c` becomes `ObSurfaceInfo`, filled by the backend's `surface_info`
       for the fields asked for. Done for the titles, WM_PROTOCOLS, struts, the size hints (WM_NORMAL_HINTS, checked
       for sanity in the backend), WM_HINTS, the window type, Motif hints and transient-for, the class, role and
