@@ -200,7 +200,7 @@ void mouse_replay_pointer(void)
 {
     if (replay_pointer_needed) {
         /* replay the pointer event before any windows move */
-        XAllowEvents(obt_display, ReplayPointer, event_time());
+        ob_backend->pass_click(event_time());
         replay_pointer_needed = FALSE;
     }
 }

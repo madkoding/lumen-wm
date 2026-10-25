@@ -113,6 +113,19 @@ void ct_input_keys(const char *keys);
 /* Hold mods ("A", or "" for none), press the first button over the middle of
    the window, drag it by dx, dy and let go. */
 void ct_input_drag(ct_win *w, const char *mods, int dx, int dy);
+/* Where a client starts an interactive move or resize from. */
+typedef enum {
+    CT_EDGE_MOVE,
+    CT_EDGE_BOTTOM_RIGHT,
+} ct_edge;
+
+/* Press the first button in the middle of the window; the client asks the
+   window manager to move or resize it from there (a client-side title bar
+   or border), and the user drags by dx, dy and lets go. */
+void ct_input_client_drag(ct_win *w, ct_edge edge, int dx, int dy);
+/* The client asks for a move with the keyboard (_NET_WM_MOVERESIZE
+   MOVE_KEYBOARD); type with ct_input_keys() to move it. */
+void ct_request_keyboard_move(ct_win *w);
 /* Click the first button at x, y in the window. */
 void ct_input_click(ct_win *w, int x, int y);
 /* Whether the client saw a click since it was made. */

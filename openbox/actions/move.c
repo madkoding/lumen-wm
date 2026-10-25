@@ -15,11 +15,11 @@ void action_move_startup(void)
 static gboolean run_func(ObActionsData *data, gpointer options)
 {
     if (data->client) {
-        guint32 corner;
+        ObMoveResize corner;
 
         corner = data->button != 0 ?
-            OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE) :
-            OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE_KEYBOARD);
+            OB_MOVERESIZE_MOVE :
+            OB_MOVERESIZE_MOVE_KEYBOARD;
 
         moveresize_start(data->client, data->x, data->y, data->button, corner);
     }

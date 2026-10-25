@@ -379,8 +379,15 @@ struct _ObBackend {
     void (*bind_button)(guintptr over, guint button, guint mods,
                         gboolean hold, ObCursor cursor);
     void (*unbind_button)(guintptr over, guint button, guint mods);
-    void (*pointer_position)(gint *x, gint *y);
-    void (*pointer_warp)(gint x, gint y);
+    /*! Let the press a hold binding held reach the client after all
+      (X11 XAllowEvents ReplayPointer). time: the press's. */
+    void (*pass_click)(guint32 time);
+    /*! Where the pointer is, in layout coordinates. FALSE when it isn't
+      over any output of ours (X11: on another screen). */
+    gboolean (*pointer_position)(gint *x, gint *y);
+    /*! Move the pointer there. swallow: drop the motion this makes, so the
+      core doesn't take it for the user's. */
+    void (*pointer_warp)(gint x, gint y, gboolean swallow);
     void (*set_cursor)(ObCanvasId c, ObCursor cursor);
 
     /* --- state for pagers and taskbars --- */
@@ -449,10 +456,12 @@ struct _ObBackendEvents {
     void (*request_activate)(ObSurfaceId s, ObRequestSource from,
                              guint32 time);
     void (*request_close)(ObSurfaceId s, ObRequestSource from);
-    /*! An interactive move or resize the client started (xdg_toplevel.move,
-      _NET_WM_MOVERESIZE). cursor names the edge, or OB_CURSOR_MOVE. */
-    void (*request_move_resize)(ObSurfaceId s, ObCursor cursor,
-                                guint32 time);
+    /*! An interactive move or resize the client started (xdg_toplevel.move
+      and resize, _NET_WM_MOVERESIZE), or OB_MOVERESIZE_CANCEL to stop the
+      one going on. x, y: where the pointer is, in layout coordinates;
+      button: the one held down, or 0 for the keyboard. */
+    void (*request_move_resize)(ObSurfaceId s, ObMoveResize edge, gint x,
+                                gint y, guint button);
     void (*request_desktop)(guint desktop, guint32 time);
     /*! desktop is DESKTOP_ALL for every desktop; it may be out of range. */
     void (*request_surface_desktop)(ObSurfaceId s, guint desktop);

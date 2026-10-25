@@ -29,6 +29,7 @@
 #include "screen.h"
 #include "frame.h"
 #include "stacking.h"
+#include "moveresize.h"
 
 static ObClient *client_of(ObSurfaceId s)
 {
@@ -574,6 +575,19 @@ static void focus_lost(gboolean refocus)
     focus_fallback(refocus, config_focus_under_mouse, TRUE, TRUE);
 }
 
+static void request_move_resize(ObSurfaceId s, ObMoveResize edge, gint x,
+                                gint y, guint button)
+{
+    ObClient *client = client_of(s);
+
+    if (!client) return;
+
+    if (edge != OB_MOVERESIZE_CANCEL)
+        moveresize_start(client, x, y, button, edge);
+    else if (moveresize_client)
+        moveresize_end(TRUE);
+}
+
 const ObBackendEvents ob_backend_events = {
     .surface_new = surface_new,
     .surface_gone = surface_gone,
@@ -587,6 +601,7 @@ const ObBackendEvents ob_backend_events = {
     .request_configure = request_configure,
     .request_geometry = request_geometry,
     .request_restack = request_restack,
+    .request_move_resize = request_move_resize,
     .focus_changed = focus_changed,
     .focus_left = focus_left,
     .focus_lost = focus_lost,

@@ -7,15 +7,15 @@
 
 typedef struct {
     gboolean corner_specified;
-    guint32 corner;
+    ObMoveResize corner;
 } Options;
 
 static gpointer setup_func(xmlNodePtr node);
 static void free_func(gpointer o);
 static gboolean run_func(ObActionsData *data, gpointer options);
 
-static guint32 pick_corner(gint x, gint y, gint cx, gint cy, gint cw, gint ch,
-                           gboolean shaded);
+static ObMoveResize pick_corner(gint x, gint y, gint cx, gint cy,
+                                gint cw, gint ch, gboolean shaded);
 
 void action_resize_startup(void)
 {
@@ -34,21 +34,21 @@ static gpointer setup_func(xmlNodePtr node)
 
         o->corner_specified = TRUE;
         if (!g_ascii_strcasecmp(s, "top"))
-            o->corner = OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOP);
+            o->corner = OB_MOVERESIZE_SIZE_TOP;
         else if (!g_ascii_strcasecmp(s, "bottom"))
-            o->corner = OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOM);
+            o->corner = OB_MOVERESIZE_SIZE_BOTTOM;
         else if (!g_ascii_strcasecmp(s, "left"))
-            o->corner = OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_LEFT);
+            o->corner = OB_MOVERESIZE_SIZE_LEFT;
         else if (!g_ascii_strcasecmp(s, "right"))
-            o->corner = OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_RIGHT);
+            o->corner = OB_MOVERESIZE_SIZE_RIGHT;
         else if (!g_ascii_strcasecmp(s, "topleft"))
-            o->corner = OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPLEFT);
+            o->corner = OB_MOVERESIZE_SIZE_TOPLEFT;
         else if (!g_ascii_strcasecmp(s, "topright"))
-            o->corner = OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPRIGHT);
+            o->corner = OB_MOVERESIZE_SIZE_TOPRIGHT;
         else if (!g_ascii_strcasecmp(s, "bottomleft"))
-            o->corner = OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT);
+            o->corner = OB_MOVERESIZE_SIZE_BOTTOMLEFT;
         else if (!g_ascii_strcasecmp(s, "bottomright"))
-            o->corner = OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT);
+            o->corner = OB_MOVERESIZE_SIZE_BOTTOMRIGHT;
         else
             o->corner_specified = FALSE;
 
@@ -69,10 +69,10 @@ static gboolean run_func(ObActionsData *data, gpointer options)
 
     if (data->client) {
         ObClient *c = data->client;
-        guint32 corner;
+        ObMoveResize corner;
 
         if (!data->button)
-            corner = OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_KEYBOARD);
+            corner = OB_MOVERESIZE_SIZE_KEYBOARD;
         else if (o->corner_specified)
             corner = o->corner; /* it was specified in the binding */
         else if (c->functions & OB_CLIENT_FUNC_RESIZE)
@@ -87,7 +87,7 @@ static gboolean run_func(ObActionsData *data, gpointer options)
                                  c->area.height + c->frame->size.top +
                                  c->frame->size.bottom, c->shaded);
         else if (c->functions & OB_CLIENT_FUNC_MOVE)
-            corner = OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE);
+            corner = OB_MOVERESIZE_MOVE;
         else
             return FALSE;
 
@@ -97,8 +97,8 @@ static gboolean run_func(ObActionsData *data, gpointer options)
     return FALSE;
 }
 
-static guint32 pick_corner(gint x, gint y, gint cx, gint cy, gint cw, gint ch,
-                           gboolean shaded)
+static ObMoveResize pick_corner(gint x, gint y, gint cx, gint cy,
+                                gint cw, gint ch, gboolean shaded)
 {
     const Rect *full = screen_physical_area_all_monitors();
     if (cx < full->x) { cw = cw + cx - full->x; cx = full->x; }
@@ -168,30 +168,30 @@ static guint32 pick_corner(gint x, gint y, gint cx, gint cy, gint cw, gint ch,
     if (shaded) {
         /* for shaded windows, you can only resize west/east and move */
         if (b)
-            return OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_LEFT);
+            return OB_MOVERESIZE_SIZE_LEFT;
         if (c)
-            return OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_RIGHT);
-        return OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE);
+            return OB_MOVERESIZE_SIZE_RIGHT;
+        return OB_MOVERESIZE_MOVE;
     }
 
     if (y < A && y >= C)
-        return OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPLEFT);
+        return OB_MOVERESIZE_SIZE_TOPLEFT;
     else if (y >= A && y >= B && a)
-        return OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOP);
+        return OB_MOVERESIZE_SIZE_TOP;
     else if (y < B && y >= D)
-        return OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPRIGHT);
+        return OB_MOVERESIZE_SIZE_TOPRIGHT;
     else if (y < C && y >= E && b)
-        return OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_LEFT);
+        return OB_MOVERESIZE_SIZE_LEFT;
     else if (y < D && y >= F && c)
-        return OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_RIGHT);
+        return OB_MOVERESIZE_SIZE_RIGHT;
     else if (y < E && y >= G)
-        return OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT);
+        return OB_MOVERESIZE_SIZE_BOTTOMLEFT;
     else if (y < G && y < H && d)
-        return OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOM);
+        return OB_MOVERESIZE_SIZE_BOTTOM;
     else if (y >= H && y < F)
-        return OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT);
+        return OB_MOVERESIZE_SIZE_BOTTOMRIGHT;
     else
-        return OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE);
+        return OB_MOVERESIZE_MOVE;
 
 #undef X
 #undef A

@@ -499,6 +499,67 @@ static void click_focuses_and_passes(void)
     ct_window_destroy(a);
 }
 
+/* A client with its own title bar starts a move, and the drag moves the
+   window. */
+static void client_move_follows_pointer(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT);
+    ct_win *w = mapped(CT_WIN_NORMAL, "csd move", SMALL);
+    ct_settle();
+    ct_rect before = ct_window_frame(w);
+
+    ct_input_client_drag(w, CT_EDGE_MOVE, 90, 60);
+    CT_EVENTUALLY(ct_window_frame(w).x == before.x + 90 &&
+                  ct_window_frame(w).y == before.y + 60);
+    CT_CHECK(ct_window_client(w).w == SMALL.w);
+    ct_window_destroy(w);
+}
+
+/* A client with its own borders starts a resize from a corner, and the drag
+   resizes the window. */
+static void client_resize_follows_pointer(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT);
+    ct_win *w = mapped(CT_WIN_NORMAL, "csd resize", SMALL);
+    ct_settle();
+    ct_rect before = ct_window_frame(w);
+
+    ct_input_client_drag(w, CT_EDGE_BOTTOM_RIGHT, 70, 40);
+    CT_EVENTUALLY(ct_window_client(w).w == SMALL.w + 70 &&
+                  ct_window_client(w).h == SMALL.h + 40);
+    CT_CHECK(ct_window_frame(w).x == before.x);
+    CT_CHECK(ct_window_frame(w).y == before.y);
+    ct_window_destroy(w);
+}
+
+/* A keyboard move goes a step for each arrow key, and Return ends it. */
+static void keyboard_move_steps(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT);
+    ct_win *w = mapped(CT_WIN_NORMAL, "keyboard move", SMALL);
+    ct_settle();
+    ct_rect before = ct_window_frame(w);
+
+    ct_request_keyboard_move(w);
+    ct_settle();
+    ct_input_keys("Right");
+    ct_input_keys("Right");
+    ct_input_keys("Down");
+    ct_input_keys("Return");
+    CT_EVENTUALLY(ct_window_frame(w).x > before.x &&
+                  ct_window_frame(w).y > before.y);
+    ct_settle();
+    ct_rect after = ct_window_frame(w);
+    /* two steps right, one down */
+    CT_CHECK(after.x - before.x == 2 * (after.y - before.y));
+
+    /* it ended: more arrows do nothing */
+    ct_input_keys("Right");
+    ct_settle();
+    CT_CHECK(ct_rect_eq(ct_window_frame(w), after));
+    ct_window_destroy(w);
+}
+
 /* Dragging a window with Alt held moves it by as much. */
 static void alt_drag_moves(void)
 {
@@ -547,5 +608,8 @@ const ct_case ct_cases[] = {
     { "alt_tab_switches", alt_tab_switches },
     { "click_focuses_and_passes", click_focuses_and_passes },
     { "alt_drag_moves", alt_drag_moves },
+    { "client_move_follows_pointer", client_move_follows_pointer },
+    { "client_resize_follows_pointer", client_resize_follows_pointer },
+    { "keyboard_move_steps", keyboard_move_steps },
     { NULL, NULL }
 };

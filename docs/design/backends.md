@@ -137,8 +137,14 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       Alt-Tab, Alt-drag). Done: the active grabs (`grab_keyboard`, `grab_pointer`, `grab_server`); `grab.c`
       keeps counting nested grabs and picking the ungrab time. The passive grabs are `bind_key` (xkb keycodes
       and modifier masks, which are X11's) and `bind_button` (on a frame, a client, or a dock app), with
-      every lock-key combination in the backend. Next: the held clicks `mouse.c` replays to the client.
-   9. Move/resize: XSync and pointer warps go behind the backend.
+      every lock-key combination in the backend; a held click reaches the client with `pass_click`. What is
+      left in `mouse.c` and `keyboard.c` reads the XEvent itself (and asks the size of the window a click is
+      let go over), and becomes the `button`, `motion` and `key` events when the backend reads the queue. Next: move/resize (9).
+   9. Move/resize: XSync and pointer warps go behind the backend. Done: `moveresize_start()` takes an
+      `ObMoveResize` (the `_NET_WM_MOVERESIZE` directions as a core enum) instead of the atoms, and the
+      client's `_NET_WM_MOVERESIZE` is `request_move_resize`. The pointer queries and warps (keyboard moves,
+      the edge warp between desktops) are `pointer_position` and `pointer_warp`, which can swallow the
+      motion it makes. Next: the XSync counter of synced resizes.
 4. **Render without Xlib**: obrender, frames, the shelf, menus and popups draw into cairo image surfaces and hand
    them to `canvas_present`. Themes are unchanged, and `tools/shelf-themes.sh` checks that they still read.
 5. **backend-wlroots**: a compositor on wlroots' scene graph with xdg-shell, xdg-decoration, layer-shell,

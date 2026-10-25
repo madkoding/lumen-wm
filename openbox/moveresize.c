@@ -27,6 +27,7 @@
 #include "resist.h"
 #include "popup.h"
 #include "moveresize.h"
+#include "backend.h"
 #include "config.h"
 #include "event.h"
 #include "debug.h"
@@ -59,7 +60,7 @@ static gboolean was_max_horz, was_max_vert;
 static Rect pre_max_area;
 static gint cur_x, cur_y, cur_w, cur_h;
 static guint button;
-static guint32 corner;
+static ObMoveResize corner;
 static ObDirection edge_warp_dir = -1;
 static gboolean edge_warp_odd = FALSE;
 static guint edge_warp_timer = 0;
@@ -174,11 +175,11 @@ static void popup_coords(ObClient *c, const gchar *format, gint a, gint b)
     g_free(text);
 }
 
-void moveresize_start(ObClient *c, gint x, gint y, guint b, guint32 cnr)
+void moveresize_start(ObClient *c, gint x, gint y, guint b, ObMoveResize cnr)
 {
     ObCursor cur;
-    gboolean mv = (cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE) ||
-                   cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE_KEYBOARD));
+    gboolean mv = (cnr == OB_MOVERESIZE_MOVE ||
+                   cnr == OB_MOVERESIZE_MOVE_KEYBOARD);
     gint up = 1;
     gint left = 1;
 
@@ -188,37 +189,37 @@ void moveresize_start(ObClient *c, gint x, gint y, guint b, guint32 cnr)
           (c->functions & OB_CLIENT_FUNC_RESIZE)))
         return;
 
-    if (cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPLEFT)) {
+    if (cnr == OB_MOVERESIZE_SIZE_TOPLEFT) {
         cur = OB_CURSOR_NORTHWEST;
         up = left = -1;
     }
-    else if (cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOP)) {
+    else if (cnr == OB_MOVERESIZE_SIZE_TOP) {
         cur = OB_CURSOR_NORTH;
         up = -1;
     }
-    else if (cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPRIGHT)) {
+    else if (cnr == OB_MOVERESIZE_SIZE_TOPRIGHT) {
         cur = OB_CURSOR_NORTHEAST;
         up = -1;
     }
-    else if (cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_RIGHT))
+    else if (cnr == OB_MOVERESIZE_SIZE_RIGHT)
         cur = OB_CURSOR_EAST;
-    else if (cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT))
+    else if (cnr == OB_MOVERESIZE_SIZE_BOTTOMRIGHT)
         cur = OB_CURSOR_SOUTHEAST;
-    else if (cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOM))
+    else if (cnr == OB_MOVERESIZE_SIZE_BOTTOM)
         cur = OB_CURSOR_SOUTH;
-    else if (cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT)) {
+    else if (cnr == OB_MOVERESIZE_SIZE_BOTTOMLEFT) {
         cur = OB_CURSOR_SOUTHWEST;
         left = -1;
     }
-    else if (cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_LEFT)) {
+    else if (cnr == OB_MOVERESIZE_SIZE_LEFT) {
         cur = OB_CURSOR_WEST;
         left = -1;
     }
-    else if (cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_KEYBOARD))
+    else if (cnr == OB_MOVERESIZE_SIZE_KEYBOARD)
         cur = OB_CURSOR_SOUTHEAST;
-    else if (cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE))
+    else if (cnr == OB_MOVERESIZE_MOVE)
         cur = OB_CURSOR_MOVE;
-    else if (cnr == OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE_KEYBOARD))
+    else if (cnr == OB_MOVERESIZE_MOVE_KEYBOARD)
         cur = OB_CURSOR_MOVE;
     else
         g_assert_not_reached();
@@ -602,7 +603,7 @@ static void edge_warp_move_ptr(void)
         g_assert_not_reached();
     }
 
-    XWarpPointer(obt_display, 0, obt_root(ob_screen), 0, 0, 0, 0, x, y);
+    ob_backend->pointer_warp(x, y, FALSE);
 }
 
 static gboolean edge_warp_delay_func(gpointer data)
@@ -718,14 +719,8 @@ static void move_with_keys(KeySym sym, guint state)
     }
 
     screen_pointer_pos(&opx, &opy);
-    XWarpPointer(obt_display, None, None, 0, 0, 0, 0, dx, dy);
-    /* steal the motion events this causes */
-    XSync(obt_display, FALSE);
-    {
-        XEvent ce;
-        while (xqueue_remove_local(&ce, xqueue_match_type,
-                                   GINT_TO_POINTER(MotionNotify)));
-    }
+    /* without the motion events this causes */
+    ob_backend->pointer_warp(opx + dx, opy + dy, TRUE);
     screen_pointer_pos(&px, &py);
 
     cur_x += dx;
@@ -910,14 +905,8 @@ static void resize_with_keys(KeySym sym, guint state)
         pdy = dh;
 
     screen_pointer_pos(&opx, &opy);
-    XWarpPointer(obt_display, None, None, 0, 0, 0, 0, pdx, pdy);
-    /* steal the motion events this causes */
-    XSync(obt_display, FALSE);
-    {
-        XEvent ce;
-        while (xqueue_remove_local(&ce, xqueue_match_type,
-                                   GINT_TO_POINTER(MotionNotify)));
-    }
+    /* without the motion events this causes */
+    ob_backend->pointer_warp(opx + pdx, opy + pdy, TRUE);
     screen_pointer_pos(&px, &py);
 
     do_resize();
@@ -972,44 +961,40 @@ gboolean moveresize_event(XEvent *e)
             gint dw, dh;
             ObDirection dir;
 
-            if (corner == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPLEFT)) {
+            if (corner == OB_MOVERESIZE_SIZE_TOPLEFT) {
                 dw = -(e->xmotion.x_root - start_x);
                 dh = -(e->xmotion.y_root - start_y);
                 dir = OB_DIRECTION_NORTHWEST;
-            } else if (corner == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOP)) {
+            } else if (corner == OB_MOVERESIZE_SIZE_TOP) {
                 dw = 0;
                 dh = -(e->xmotion.y_root - start_y);
                 dir = OB_DIRECTION_NORTH;
-            } else if (corner ==
-                       OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPRIGHT)) {
+            } else if (corner == OB_MOVERESIZE_SIZE_TOPRIGHT) {
                 dw = (e->xmotion.x_root - start_x);
                 dh = -(e->xmotion.y_root - start_y);
                 dir = OB_DIRECTION_NORTHEAST;
-            } else if (corner == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_RIGHT)) {
+            } else if (corner == OB_MOVERESIZE_SIZE_RIGHT) {
                 dw = (e->xmotion.x_root - start_x);
                 dh = 0;
                 dir = OB_DIRECTION_EAST;
-            } else if (corner ==
-                       OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT)) {
+            } else if (corner == OB_MOVERESIZE_SIZE_BOTTOMRIGHT) {
                 dw = (e->xmotion.x_root - start_x);
                 dh = (e->xmotion.y_root - start_y);
                 dir = OB_DIRECTION_SOUTHEAST;
-            } else if (corner == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOM))
+            } else if (corner == OB_MOVERESIZE_SIZE_BOTTOM)
             {
                 dw = 0;
                 dh = (e->xmotion.y_root - start_y);
                 dir = OB_DIRECTION_SOUTH;
-            } else if (corner ==
-                       OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT)) {
+            } else if (corner == OB_MOVERESIZE_SIZE_BOTTOMLEFT) {
                 dw = -(e->xmotion.x_root - start_x);
                 dh = (e->xmotion.y_root - start_y);
                 dir = OB_DIRECTION_SOUTHWEST;
-            } else if (corner == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_LEFT)) {
+            } else if (corner == OB_MOVERESIZE_SIZE_LEFT) {
                 dw = -(e->xmotion.x_root - start_x);
                 dh = 0;
                 dir = OB_DIRECTION_WEST;
-            } else if (corner ==
-                       OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_KEYBOARD)) {
+            } else if (corner == OB_MOVERESIZE_SIZE_KEYBOARD) {
                 dw = (e->xmotion.x_root - start_x);
                 dh = (e->xmotion.y_root - start_y);
                 dir = OB_DIRECTION_SOUTHEAST;
@@ -1063,15 +1048,15 @@ gboolean moveresize_event(XEvent *e)
             cur_w += dw;
             cur_h += dh;
 
-            if (corner == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPLEFT) ||
-                corner == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_LEFT) ||
-                corner == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT))
+            if (corner == OB_MOVERESIZE_SIZE_TOPLEFT ||
+                corner == OB_MOVERESIZE_SIZE_LEFT ||
+                corner == OB_MOVERESIZE_SIZE_BOTTOMLEFT)
             {
                 cur_x -= dw;
             }
-            if (corner == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPLEFT) ||
-                corner == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOP) ||
-                corner == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPRIGHT))
+            if (corner == OB_MOVERESIZE_SIZE_TOPLEFT ||
+                corner == OB_MOVERESIZE_SIZE_TOP ||
+                corner == OB_MOVERESIZE_SIZE_TOPRIGHT)
             {
                 cur_y -= dh;
             }
@@ -1091,11 +1076,10 @@ gboolean moveresize_event(XEvent *e)
         } else if (sym == XK_Right || sym == XK_Left ||
                    sym == XK_Up || sym == XK_Down)
         {
-            if (corner == OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_KEYBOARD)) {
+            if (corner == OB_MOVERESIZE_SIZE_KEYBOARD) {
                 resize_with_keys(sym, e->xkey.state);
                 used = TRUE;
-            } else if (corner ==
-                       OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE_KEYBOARD))
+            } else if (corner == OB_MOVERESIZE_MOVE_KEYBOARD)
             {
                 move_with_keys(sym, e->xkey.state);
                 used = TRUE;

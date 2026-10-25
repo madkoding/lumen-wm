@@ -1160,47 +1160,7 @@ static void event_handle_client(ObClient *client, XEvent *e)
         if (e->xclient.format != 32) return;
 
         /* requests pagers and clients make go through the backend */
-        if (backend_x11_client_message(&e->xclient))
-            break;
-
-        msgtype = e->xclient.message_type;
-        if (msgtype == OBT_PROP_ATOM(NET_WM_MOVERESIZE)) {
-            ob_debug("net_wm_moveresize for 0x%lx direction %d",
-                     client->window, e->xclient.data.l[2]);
-            if ((Atom)e->xclient.data.l[2] ==
-                OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPLEFT) ||
-                (Atom)e->xclient.data.l[2] ==
-                OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOP) ||
-                (Atom)e->xclient.data.l[2] ==
-                OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_TOPRIGHT) ||
-                (Atom)e->xclient.data.l[2] ==
-                OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_RIGHT) ||
-                (Atom)e->xclient.data.l[2] ==
-                OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_RIGHT) ||
-                (Atom)e->xclient.data.l[2] ==
-                OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT) ||
-                (Atom)e->xclient.data.l[2] ==
-                OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOM) ||
-                (Atom)e->xclient.data.l[2] ==
-                OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT) ||
-                (Atom)e->xclient.data.l[2] ==
-                OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_LEFT) ||
-                (Atom)e->xclient.data.l[2] ==
-                OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE) ||
-                (Atom)e->xclient.data.l[2] ==
-                OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_KEYBOARD) ||
-                (Atom)e->xclient.data.l[2] ==
-                OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE_KEYBOARD))
-            {
-                moveresize_start(client, e->xclient.data.l[0],
-                                 e->xclient.data.l[1], e->xclient.data.l[3],
-                                 e->xclient.data.l[2]);
-            }
-            else if ((Atom)e->xclient.data.l[2] ==
-                     OBT_PROP_ATOM(NET_WM_MOVERESIZE_CANCEL))
-                if (moveresize_client)
-                    moveresize_end(TRUE);
-        }
+        backend_x11_client_message(&e->xclient);
         break;
     case PropertyNotify:
         /* validate cuz we query stuff off the client here */
