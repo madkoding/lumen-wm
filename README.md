@@ -55,10 +55,11 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
 
   <!-- the status island's glyphs; each is optional and does nothing without its section -->
   <network>
-    <list>nmcli -t -f IN-USE,SSID dev wifi</list>  <!-- "in-use:name" lines -->
+    <list>nmcli -t -f IN-USE,SIGNAL,SSID dev wifi</list>  <!-- "in-use:signal:name" lines -->
     <connect>nmcli dev wifi connect %s</connect>   <!-- %s: the quoted name -->
   </network>
-  <volume>                            <!-- click: toggle, wheel: up and down -->
+  <volume>                            <!-- click: menu, middle click: toggle, wheel: up and down -->
+    <level>pamixer --get-volume-human</level>  <!-- optional: shown at the top of the menu -->
     <up>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+</up>
     <down>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-</down>
     <toggle>wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle</toggle>
@@ -68,6 +69,7 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
     <item><name>Shut down</name><command>systemctl poweroff</command></item>
   </power>
   <battery>yes</battery>              <!-- shown only when the machine has one -->
+  <menuRadius>10</menuRadius>         <!-- rounded corners of every menu; 0 = square -->
 
   <media>
     <command>my-media-script</command>  <!-- prints what the island shows -->
@@ -87,9 +89,9 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
   already has focus). Bare icon names are searched in `$XDG_DATA_DIRS/icons/<iconTheme>/`.
 - **Pin and unpin**: right click a tile for *Pin to dock* or *Unpin from dock* (running apps also get their
   window menu). With `<pinsFile>` set, each change is saved there as `name|icon|command|class` lines, and the
-  file replaces the `<pins>` of rc.xml from then on. The first word of the window's command line is the command.
+  file replaces the `<pins>` of rc.xml from then on. The window's command line, with its arguments, is the command.
 - **Status glyphs**: the network glyph opens a menu of the networks `<list>` prints, and picking one runs
-  `<connect>`. The volume glyph toggles on click and steps with the wheel. The power glyph opens the `<power>`
+  `<connect>`. The volume glyph opens a menu (level, louder, quieter, mute), steps with the wheel and mutes on middle click. The power glyph opens the `<power>`
   items. With `<battery>` and a battery in `/sys/class/power_supply` (or `<batteryDir>`), its charge shows next
   to the glyphs, and a click tells the state. Without these sections the glyphs only show.
 - **Font**: `Sansation` is the font Kitties uses. Install it and name it in `<font>`.

@@ -381,7 +381,7 @@ void client_menu_startup(void)
     menu_set_update_func(menu, send_to_menu_update);
     menu_set_execute_func(menu, send_to_menu_execute);
 
-    menu = menu_new(CLIENT_MENU_NAME, _("Client menu"), TRUE, NULL);
+    menu = menu_new(CLIENT_MENU_NAME, _("Window"), TRUE, NULL);
     menu_show_all_shortcuts(menu, TRUE);
     menu_set_update_func(menu, client_menu_update);
     menu_set_place_func(menu, client_menu_place);

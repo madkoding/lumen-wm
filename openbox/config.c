@@ -91,6 +91,7 @@ ObShelfNetwork *config_shelf_network;
 ObShelfVolume  *config_shelf_volume;
 GSList         *config_shelf_power;
 gboolean        config_shelf_battery;
+gint            config_shelf_menu_radius;
 gchar          *config_shelf_battery_dir;
 ObShelfMedia   *config_shelf_media;
 ObShelfWeather *config_shelf_weather;
@@ -1003,6 +1004,7 @@ static void free_shelf_system(void)
         g_free(config_shelf_volume->up);
         g_free(config_shelf_volume->down);
         g_free(config_shelf_volume->toggle);
+        g_free(config_shelf_volume->level);
         g_slice_free(ObShelfVolume, config_shelf_volume);
         config_shelf_volume = NULL;
     }
@@ -1015,6 +1017,7 @@ static void free_shelf_system(void)
     g_slist_free(config_shelf_power);
     config_shelf_power = NULL;
     config_shelf_battery = FALSE;
+    config_shelf_menu_radius = 0;
     g_free(config_shelf_battery_dir);
     config_shelf_battery_dir = NULL;
 }
@@ -1098,6 +1101,7 @@ static void parse_shelf_system(xmlNodePtr node)
         v->up = shelf_string(n->children, "up");
         v->down = shelf_string(n->children, "down");
         v->toggle = shelf_string(n->children, "toggle");
+        v->level = shelf_string(n->children, "level");
         config_shelf_volume = v;
     }
     if ((n = obt_xml_find_node(node, "power"))) {
@@ -1116,6 +1120,8 @@ static void parse_shelf_system(xmlNodePtr node)
     }
     if ((n = obt_xml_find_node(node, "battery")))
         config_shelf_battery = obt_xml_node_bool(n);
+    if ((n = obt_xml_find_node(node, "menuRadius")))
+        config_shelf_menu_radius = CLAMP(obt_xml_node_int(n), 0, 32);
     if ((n = obt_xml_find_node(node, "batteryDir")))
         config_shelf_battery_dir = obt_xml_node_string(n);
 }

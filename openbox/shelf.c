@@ -1576,24 +1576,37 @@ static void pins_changed(void)
     S.sig = NULL;   /* repaint on the next tick */
 }
 
-/* The first word of the window's command line, to start it again */
+/* The window's command line, to start it again: every argument, quoted. The
+   first one alone when the line is long or the process is gone. */
 static gchar *client_command(const ObClient *c, gchar **exe)
 {
     gchar *path = g_strdup_printf("/proc/%d/cmdline", (gint)c->pid);
     gchar *data = NULL;
-    gsize len = 0;
-    gchar *cmd = NULL;
+    gsize len = 0, off;
+    GString *cmd = NULL;
 
     if (c->pid > 0 && g_file_get_contents(path, &data, &len, NULL) && len &&
-        *data)
-        *exe = g_strdup(data), cmd = g_shell_quote(data); /* argv[0] */
+        *data) {
+        cmd = g_string_new(NULL);
+        *exe = g_strdup(data);
+        for (off = 0; off < len; off += strlen(data + off) + 1) {
+            gchar *q = g_shell_quote(data + off);
+            if (cmd->len) {
+                if (cmd->len + strlen(q) > 480) { g_free(q); break; }
+                g_string_append_c(cmd, ' ');
+            }
+            g_string_append(cmd, q);
+            g_free(q);
+        }
+    }
     g_free(data);
     g_free(path);
     if (!cmd) {
-        cmd = g_ascii_strdown(c->class ? c->class : c->name, -1);
-        *exe = g_strdup(cmd);
+        gchar *low = g_ascii_strdown(c->class ? c->class : c->name, -1);
+        *exe = g_strdup(low);
+        return low;
     }
-    return cmd;
+    return g_string_free(cmd, FALSE);
 }
 
 static void pin_client(ObClient *c)
@@ -1720,21 +1733,35 @@ static void network_menu(void)
         gchar *colon = strchr(lines[i], ':');
         gboolean active;
         GString *name;
-        gchar *c, *label, *cmd = NULL, *q;
+        gchar *c, *label, *cmd = NULL, *q, *signal = NULL;
 
         if (!colon || !colon[1]) continue;
         active = lines[i][0] == '*';
         name = g_string_new(NULL);
-        for (c = colon + 1; *c; ++c) {
+        c = colon + 1;
+        /* "in-use:signal:name" when the command prints the signal too */
+        {
+            gchar *e = c;
+            while (g_ascii_isdigit(*e)) ++e;
+            if (e > c && *e == ':' && e[1]) {
+                signal = g_strndup(c, e - c);
+                c = e + 1;
+            }
+        }
+        for (; *c; ++c) {
             if (*c == '\\' && c[1]) ++c;
             g_string_append_c(name, *c);
         }
         if (g_hash_table_contains(seen, name->str)) {
             g_string_free(name, TRUE);
+            g_free(signal);
             continue;
         }
         g_hash_table_add(seen, g_strdup(name->str));
-        label = g_strdup_printf("%s%s", active ? "\342\234\223 " : "", name->str);
+        label = g_strdup_printf("%s%s%s%s%s", active ? "\342\234\223 " : "",
+                                name->str, signal ? "   " : "",
+                                signal ? signal : "", signal ? "%" : "");
+        g_free(signal);
         if (config_shelf_network->connect && !active) {
             gchar **parts;
             q = g_shell_quote(name->str);
@@ -1756,6 +1783,27 @@ static void network_menu(void)
     g_hash_table_destroy(seen);
 }
 
+/* Level (when the config can print it) and the steps of the volume */
+static void volume_menu(void)
+{
+    ObShelfVolume *v = config_shelf_volume;
+
+    if (v->level) {
+        gchar *argv[] = { "/bin/sh", "-c", v->level, NULL };
+        gchar *out = NULL, *l;
+        g_spawn_sync(NULL, argv, NULL, G_SPAWN_STDERR_TO_DEV_NULL, NULL, NULL,
+                     &out, NULL, NULL, NULL);
+        if (out) g_strstrip(out);
+        l = g_strdup_printf("Volume %s", out && *out ? out : "unknown");
+        sys_menu_add(l, NULL, FALSE);
+        g_free(l);
+        g_free(out);
+    }
+    if (v->up) sys_menu_add("Louder", v->up, TRUE);
+    if (v->down) sys_menu_add("Quieter", v->down, TRUE);
+    if (v->toggle) sys_menu_add("Mute / unmute", v->toggle, TRUE);
+}
+
 static void show_status_menu(gint h, gint rx, gint ry)
 {
     GSList *it;
@@ -1764,6 +1812,9 @@ static void show_status_menu(gint h, gint rx, gint ry)
     if (h == HIT_NET && config_shelf_network) {
         sys_menu_begin();
         network_menu();
+    } else if (h == HIT_VOL && config_shelf_volume) {
+        sys_menu_begin();
+        volume_menu();
     } else if (h == HIT_POWER && config_shelf_power) {
         sys_menu_begin();
         for (it = config_shelf_power; it; it = g_slist_next(it)) {
@@ -1825,10 +1876,13 @@ gboolean shelf_event(const XEvent *e)
         } else if (h <= HIT_NET && h >= HIT_BATT) {
             guint b = e->xbutton.button;
             if (h == HIT_VOL && config_shelf_volume) {
-                const gchar *cmd = b == 1 ? config_shelf_volume->toggle :
+                const gchar *cmd = b == 2 ? config_shelf_volume->toggle :
                                    b == 4 ? config_shelf_volume->up :
                                    b == 5 ? config_shelf_volume->down : NULL;
                 if (cmd) launch(cmd);
+                else if (b == 1)
+                    show_status_menu(h, e->xbutton.x_root,
+                                     S.wy + S.island_y - MENU_GAP);
             } else if (b == 1) {
                 show_status_menu(h, e->xbutton.x_root,
                                  S.wy + S.island_y - MENU_GAP);

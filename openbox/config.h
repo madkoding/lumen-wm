@@ -195,6 +195,7 @@ typedef struct _ObShelfVolume {
     gchar *up;       /*!< the wheel and the click */
     gchar *down;
     gchar *toggle;
+    gchar *level;    /*!< prints the volume as a percentage, or "muted" */
 } ObShelfVolume;
 extern ObShelfVolume *config_shelf_volume;
 typedef struct _ObShelfPower {
@@ -208,6 +209,9 @@ extern GSList *config_shelf_power;
 extern gboolean config_shelf_battery;
 /*! Where the kernel lists power supplies (default /sys/class/power_supply) */
 extern gchar   *config_shelf_battery_dir;
+
+/*! Radius, in pixels, of the corners of menus; 0 keeps them square */
+extern gint config_shelf_menu_radius;
 
 /*! The number of milliseconds to wait before showing the dock */
 extern guint config_dock_show_delay;

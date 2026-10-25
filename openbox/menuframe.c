@@ -30,6 +30,9 @@
 #include "obt/keyboard.h"
 #include "obrender/theme.h"
 
+#include <X11/extensions/shape.h>
+#include <math.h>
+
 #define PADDING 2
 #define MAX_MENU_WIDTH 400
 
@@ -673,6 +676,42 @@ static gint menu_entry_frame_get_height(ObMenuEntryFrame *self,
     return h;
 }
 
+/* Cuts the corners of the whole frame (border included) to a quarter circle */
+static void round_corners(Window win, gint w, gint h)
+{
+    gint r = MIN(config_shelf_menu_radius, MIN(w, h) / 2);
+    XRectangle *rs;
+    gint i;
+
+    if (r <= 0) {
+        XShapeCombineMask(obt_display, win, ShapeBounding, 0, 0, None,
+                          ShapeSet);
+        return;
+    }
+    rs = g_new(XRectangle, r + 1);
+    for (i = 0; i < r; ++i) {
+        /* the rows of the corner, then the one rectangle for the rest;
+           the top and bottom corners are mirrored by the same inset */
+        gdouble dy = r - i - 0.5;
+        gint inset = r - (gint)floor(sqrt((gdouble)r * r - dy * dy) + 0.5);
+        rs[i].x = inset;
+        rs[i].y = i;
+        rs[i].width = w - 2 * inset;
+        rs[i].height = 1;
+    }
+    rs[r].x = 0;
+    rs[r].y = r;
+    rs[r].width = w;
+    rs[r].height = MAX(h - 2 * r, 0);
+    XShapeCombineRectangles(obt_display, win, ShapeBounding, 0, 0, rs, r + 1,
+                            ShapeSet, Unsorted);
+    for (i = 0; i < r; ++i)
+        rs[i].y = h - 1 - i;
+    XShapeCombineRectangles(obt_display, win, ShapeBounding, 0, 0, rs, r,
+                            ShapeUnion, Unsorted);
+    g_free(rs);
+}
+
 void menu_frame_render(ObMenuFrame *self)
 {
     gint w = 0, h = 0;
@@ -844,6 +883,7 @@ void menu_frame_render(ObMenuFrame *self)
     h += ob_rr_theme->mbwidth * 2;
 
     RECT_SET_SIZE(self->area, w, h);
+    round_corners(self->window, w, h);
 
     XFlush(obt_display);
 }
