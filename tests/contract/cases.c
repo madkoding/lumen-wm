@@ -98,6 +98,40 @@ static void new_window_focused(void)
     ct_window_destroy(a);
 }
 
+/* A client that gives itself the focus becomes the active window. */
+static void client_focus_followed(void)
+{
+    CT_REQUIRE(CT_CAP_CLIENT_FOCUS);
+    ct_win *a = mapped(CT_WIN_NORMAL, "first", SMALL);
+    ct_win *b = mapped(CT_WIN_NORMAL, "second", SMALL);
+    CT_EVENTUALLY(ct_window_focused(b));
+
+    ct_window_take_focus(a);
+    CT_EVENTUALLY(ct_window_focused(a));
+    ct_window_destroy(b);
+    ct_window_destroy(a);
+}
+
+/* When a popup that took the focus goes away, the focus comes back to a
+   window. */
+static void focus_returns_after_popup(void)
+{
+    CT_REQUIRE(CT_CAP_CLIENT_FOCUS);
+    ct_win *a = mapped(CT_WIN_NORMAL, "witness", SMALL);
+    CT_EVENTUALLY(ct_window_focused(a));
+
+    ct_win *p = ct_window_new(CT_WIN_POPUP, "popup", SMALL);
+    ct_window_map(p);
+    CT_EVENTUALLY(ct_window_viewable(p));
+    CT_CHECK(!ct_window_managed(p));
+    ct_window_take_focus(p);
+    CT_EVENTUALLY(!ct_window_focused(a));
+
+    ct_window_destroy(p);
+    CT_EVENTUALLY(ct_window_focused(a));
+    ct_window_destroy(a);
+}
+
 /* Activating a window focuses it and raises it above the others. */
 static void activate_focuses_and_raises(void)
 {
@@ -411,6 +445,8 @@ const ct_case ct_cases[] = {
     { "destroy_unmanages", destroy_unmanages },
     { "withdraw_unmanages", withdraw_unmanages },
     { "new_window_focused", new_window_focused },
+    { "client_focus_followed", client_focus_followed },
+    { "focus_returns_after_popup", focus_returns_after_popup },
     { "activate_focuses_and_raises", activate_focuses_and_raises },
     { "close_falls_back", close_falls_back },
     { "maximize_fills_workarea", maximize_fills_workarea },

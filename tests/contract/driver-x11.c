@@ -160,7 +160,7 @@ const char *ct_driver_name(void)
 ct_caps ct_driver_caps(void)
 {
     return CT_CAP_CLIENT_POSITION | CT_CAP_DESKTOPS | CT_CAP_STRUTS |
-        CT_CAP_STACKING;
+        CT_CAP_STACKING | CT_CAP_CLIENT_FOCUS;
 }
 
 void ct_pump(void)
@@ -198,6 +198,10 @@ ct_win *ct_window_new(ct_win_type type, const char *title, ct_rect want)
 
     w->id = XCreateSimpleWindow(dpy, root, want.x, want.y, want.w, want.h, 0,
                                 0, WhitePixel(dpy, DefaultScreen(dpy)));
+    if (type == CT_WIN_POPUP) {
+        XSetWindowAttributes attr = { .override_redirect = True };
+        XChangeWindowAttributes(dpy, w->id, CWOverrideRedirect, &attr);
+    }
     XSelectInput(dpy, w->id, StructureNotifyMask | PropertyChangeMask);
     if (title)
         ct_window_set_title(w, title);
@@ -296,6 +300,12 @@ void ct_window_set_strut(ct_win *w, int top)
 void ct_window_map(ct_win *w)
 {
     XMapWindow(dpy, w->id);
+    XFlush(dpy);
+}
+
+void ct_window_take_focus(ct_win *w)
+{
+    XSetInputFocus(dpy, w->id, RevertToPointerRoot, CurrentTime);
     XFlush(dpy);
 }
 
