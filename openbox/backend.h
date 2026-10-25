@@ -102,6 +102,38 @@ typedef enum {
     OB_REQUEST_FROM_PAGER
 } ObRequestSource;
 
+/*! Where a client asks to be stacked, relative to a sibling or to every
+  other window (X's stack modes). */
+typedef enum {
+    OB_STACK_ABOVE,
+    OB_STACK_BELOW,
+    OB_STACK_TOP_IF,        /*!< raise if something covers it */
+    OB_STACK_BOTTOM_IF,     /*!< lower if it covers something */
+    OB_STACK_OPPOSITE       /*!< whichever of those two applies */
+} ObStackMode;
+
+/*! Which parts of an ObConfigureRequest the client gave. */
+typedef enum {
+    OB_CONFIGURE_X       = 1 << 0,
+    OB_CONFIGURE_Y       = 1 << 1,
+    OB_CONFIGURE_WIDTH   = 1 << 2,
+    OB_CONFIGURE_HEIGHT  = 1 << 3,
+    OB_CONFIGURE_BORDER  = 1 << 4, /*!< X11 border width */
+    OB_CONFIGURE_STACK   = 1 << 5,
+    OB_CONFIGURE_SIBLING = 1 << 6, /*!< stack relative to sibling */
+    OB_CONFIGURE_GRAVITY = 1 << 7  /*!< use gravity for this request */
+} ObConfigureFields;
+
+/*! A client or a pager asks for a new geometry or stacking. */
+typedef struct _ObConfigureRequest {
+    ObConfigureFields fields;
+    Rect want;              /*!< the client's own area */
+    gint border;
+    ObStackMode stack;
+    guintptr sibling;
+    gint gravity;           /*!< X's win_gravity values */
+} ObConfigureRequest;
+
 /*! What to do with the states in a request. */
 typedef enum {
     OB_STATE_ACTION_REMOVE,
@@ -370,9 +402,16 @@ struct _ObBackendEvents {
     void (*surface_withdrawn)(ObSurfaceId s);
     void (*pong)(ObSurfaceId s, guint32 serial);
 
-    /*! fields: which of want's x, y, width, height it asked for, as
-      1 << 0 .. 1 << 3. */
-    void (*request_configure)(ObSurfaceId s, const Rect *want, guint fields);
+    /*! The client configures itself (X11 ConfigureRequest; on Wayland, a
+      new size it commits on its own). */
+    void (*request_configure)(ObSurfaceId s, const ObConfigureRequest *req);
+    /*! A pager moves or resizes it (_NET_MOVERESIZE_WINDOW). Only the
+      geometry and gravity fields are used. */
+    void (*request_geometry)(ObSurfaceId s, const ObConfigureRequest *req,
+                             ObRequestSource from);
+    /*! A pager restacks it (_NET_RESTACK_WINDOW); sibling may be 0. */
+    void (*request_restack)(ObSurfaceId s, guintptr sibling,
+                            ObStackMode mode, ObRequestSource from);
     /*! first and second are one state each, or 0; they are applied in that
       order, as _NET_WM_STATE does. */
     void (*request_states)(ObSurfaceId s, ObStateAction action,

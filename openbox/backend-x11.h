@@ -32,5 +32,7 @@ gboolean backend_x11_property_notify(const XPropertyEvent *e);
 /*! A client message about a managed window. Returns FALSE when it isn't
   one the backend reports, so event.c handles it. */
 gboolean backend_x11_client_message(const XClientMessageEvent *e);
+/*! A managed window configures itself. */
+void backend_x11_configure_request(const XConfigureRequestEvent *e);
 
 #endif
