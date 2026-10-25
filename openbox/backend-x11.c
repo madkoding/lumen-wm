@@ -246,6 +246,89 @@ static void get_strut(Window w, ObSurfaceInfo *info)
                           0, 0, 0, 0, 0, 0, 0, 0);
 }
 
+/* sizes past this are taken as a broken client */
+#define MAX_HINT 4096
+
+static void get_size_hints(Window w, ObSurfaceInfo *info)
+{
+    XSizeHints size = {0};
+    glong ret;
+
+    info->min_ratio = 0.0f;
+    info->max_ratio = 0.0f;
+    SIZE_SET(info->inc, 1, 1);
+    SIZE_SET(info->base, -1, -1);
+    SIZE_SET(info->min, 0, 0);
+    SIZE_SET(info->max, G_MAXINT, G_MAXINT);
+    info->size_hints = FALSE;
+
+    if (!XGetWMNormalHints(obt_display, w, &size, &ret))
+        return;
+
+    if ((size.flags & PAspect &&
+         ((unsigned int)size.min_aspect.x > MAX_HINT ||
+          (unsigned int)size.min_aspect.y > MAX_HINT)) ||
+        (size.flags & PMinSize &&
+         ((unsigned int)size.min_width > MAX_HINT ||
+          (unsigned int)size.min_height > MAX_HINT)) ||
+        (size.flags & PMaxSize &&
+         ((unsigned int)size.max_width > MAX_HINT ||
+          (unsigned int)size.max_height > MAX_HINT)) ||
+        (size.flags & PBaseSize &&
+         ((unsigned int)size.base_width > MAX_HINT ||
+          (unsigned int)size.base_height > MAX_HINT)) ||
+        (size.flags & PResizeInc && size.width_inc && size.height_inc &&
+         ((unsigned int)size.width_inc > MAX_HINT ||
+          (unsigned int)size.height_inc > MAX_HINT)))
+        return;
+
+    info->size_hints = TRUE;
+    info->has_position = !!(size.flags & (PPosition|USPosition));
+    info->has_size = !!(size.flags & (PSize|USSize));
+    info->has_gravity = !!(size.flags & PWinGravity);
+    if (info->has_gravity)
+        info->gravity = size.win_gravity;
+
+    if (size.flags & PAspect) {
+        if (size.min_aspect.y)
+            info->min_ratio = (gfloat) size.min_aspect.x / size.min_aspect.y;
+        if (size.max_aspect.y)
+            info->max_ratio = (gfloat) size.max_aspect.x / size.max_aspect.y;
+    }
+    if (size.flags & PMinSize)
+        SIZE_SET(info->min, size.min_width, size.min_height);
+    if (size.flags & PMaxSize)
+        SIZE_SET(info->max, size.max_width, size.max_height);
+    if (size.flags & PBaseSize)
+        SIZE_SET(info->base, size.base_width, size.base_height);
+    if (size.flags & PResizeInc && size.width_inc && size.height_inc)
+        SIZE_SET(info->inc, size.width_inc, size.height_inc);
+}
+
+static void get_hints(Window w, ObSurfaceInfo *info)
+{
+    XWMHints *hints;
+
+    /* assume a window takes input if it doesn't specify */
+    info->accepts_focus = TRUE;
+    info->hints = FALSE;
+
+    if ((hints = XGetWMHints(obt_display, w)) == NULL)
+        return;
+
+    info->hints = TRUE;
+    if (hints->flags & InputHint)
+        info->accepts_focus = hints->input;
+    info->has_initial_state = !!(hints->flags & StateHint);
+    info->starts_iconic = info->has_initial_state &&
+        hints->initial_state == IconicState;
+    info->urgent = !!(hints->flags & XUrgencyHint);
+    info->group = hints->flags & WindowGroupHint ?
+        (ObSurfaceId)hints->window_group : OB_SURFACE_NONE;
+    info->icon_in_hints = !!(hints->flags & IconPixmapHint);
+    XFree(hints);
+}
+
 static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
                              ObSurfaceInfo *info)
 {
@@ -255,6 +338,10 @@ static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
         get_protocols((Window)s, info);
     if (fields & OB_SURFACE_INFO_STRUT)
         get_strut((Window)s, info);
+    if (fields & OB_SURFACE_INFO_SIZE)
+        get_size_hints((Window)s, info);
+    if (fields & OB_SURFACE_INFO_HINTS)
+        get_hints((Window)s, info);
 }
 
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)
