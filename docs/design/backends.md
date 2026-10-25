@@ -98,7 +98,8 @@ Every step is its own small PR, and the contract tests stay green on X11 through
    1. `backend-x11.c` skeleton: `startup`, `shutdown` and `event_source`, wrapping `obt_display` and `xqueue`
       (done). `openbox.c` starts the backend through `backend_startup()`. The other `ObBackend` functions stay
       NULL until the step that moves their callers, and `time` comes with the event split (7).
-   2. Outputs: `screen.c` stops calling Xinerama/RandR.
+   2. Outputs: `screen.c` stops calling Xinerama and asks `output_count` and `output_area` instead (done).
+      `--debug-xinerama` still splits a single output in two, now in the core.
    3. Publishing: the root properties move out of `screen.c`, `focus.c`, `stacking.c` and `client.c`.
    4. Stacking: `restack` replaces XRestackWindows.
    5. Surfaces: `surface_*` replaces the XSetInputFocus, WM_PROTOCOLS and kill calls in `client.c`.
