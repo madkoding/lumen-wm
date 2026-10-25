@@ -1,0 +1,89 @@
+/* Lumen contract tests: the driver interface.
+
+   The contract cases (cases.c) say what the window manager must do, in terms
+   a client can see. They never touch a display protocol themselves: a driver
+   creates the windows, sends the requests and reads back what the window
+   manager did. driver-x11.c is the X11 driver; a Wayland driver implements the
+   same functions, and a case that needs something a backend cannot offer
+   asks for it with CT_REQUIRE(). */
+
+#ifndef lumen__contract_driver_h
+#define lumen__contract_driver_h
+
+#include <stdbool.h>
+
+typedef struct { int x, y, w, h; } ct_rect;
+
+typedef struct ct_win ct_win;
+
+/* What a backend lets a client do or see. X11 has them all; xdg-shell, for
+   one, does not let a client place itself. */
+typedef enum {
+    CT_CAP_CLIENT_POSITION = 1 << 0, /* a client can ask for a position */
+    CT_CAP_DESKTOPS        = 1 << 1, /* virtual desktops (workspaces) */
+    CT_CAP_STRUTS          = 1 << 2, /* docks that reserve screen edges */
+    CT_CAP_STACKING        = 1 << 3, /* the full stacking order is visible */
+} ct_caps;
+
+typedef enum {
+    CT_STATE_MAXIMIZED,
+    CT_STATE_FULLSCREEN,
+    CT_STATE_ICONIC,
+    CT_STATE_ABOVE,
+} ct_state;
+
+typedef enum {
+    CT_WIN_NORMAL,
+    CT_WIN_DOCK,   /* a panel; give it a strut with ct_window_set_strut() */
+    CT_WIN_DIALOG, /* give it a parent with ct_window_set_parent() */
+} ct_win_type;
+
+/* Connect to the running window manager. Returns false when there is none. */
+bool ct_driver_open(void);
+void ct_driver_close(void);
+const char *ct_driver_name(void);
+ct_caps ct_driver_caps(void);
+
+/* Handle what the window manager sent: configure, close requests... */
+void ct_pump(void);
+
+ct_win *ct_window_new(ct_win_type type, const char *title, ct_rect want);
+void ct_window_set_min_size(ct_win *w, int minw, int minh);
+void ct_window_set_parent(ct_win *w, ct_win *parent);
+/* Reserve this many pixels at the top of the screen (a dock). */
+void ct_window_set_strut(ct_win *w, int top);
+void ct_window_map(ct_win *w);
+/* The handle stays valid, to ask what the window manager did. */
+void ct_window_destroy(ct_win *w);
+
+/* What the window manager did with the window. */
+bool ct_window_managed(ct_win *w);
+bool ct_window_viewable(ct_win *w);
+bool ct_window_focused(ct_win *w);
+bool ct_window_has_state(ct_win *w, ct_state s);
+/* the client area, in root coordinates */
+ct_rect ct_window_client(ct_win *w);
+/* the client area plus the decorations */
+ct_rect ct_window_frame(ct_win *w);
+/* -1 for a window on every desktop */
+int ct_window_desktop(ct_win *w);
+/* position in the stacking order of managed windows, 0 being the bottom;
+   -1 when it is not there */
+int ct_window_stack_index(ct_win *w);
+/* the window asked to close itself and is gone */
+bool ct_window_closed(ct_win *w);
+
+/* Requests, as a pager or a taskbar would send them. */
+void ct_request_state(ct_win *w, ct_state s, bool on);
+void ct_request_activate(ct_win *w);
+void ct_request_close(ct_win *w);
+void ct_request_move_resize(ct_win *w, ct_rect r);
+void ct_request_desktop(int d);
+void ct_request_window_desktop(ct_win *w, int d);
+
+ct_rect ct_screen(void);
+ct_rect ct_workarea(void);
+int ct_desktop_count(void);
+int ct_current_desktop(void);
+
+#endif

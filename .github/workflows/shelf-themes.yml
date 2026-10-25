@@ -1,8 +1,8 @@
 name: shelf-themes
 
-# Builds Lumen, then shoots the shelf under every bundled theme and checks
-# that its colours read (tools/shelf-themes.sh). The screenshots are kept as an
-# artifact.
+# Builds Lumen, runs the contract tests (tests/contract), then shoots the shelf
+# under every bundled theme and checks that its colours read
+# (tools/shelf-themes.sh). The screenshots are kept as an artifact.
 on:
   push:
     branches: [main]
@@ -34,6 +34,12 @@ jobs:
           "$GITHUB_WORKSPACE/configure" --prefix="$HOME/ob"
           make -j"$(nproc)"
           make install
+          make tests/contract/contract-x11
+      - name: Contract tests
+        timeout-minutes: 5
+        env:
+          CONTRACT: ${{ github.workspace }}/../build/tests/contract/contract-x11
+        run: tests/contract/run.sh "$HOME/ob"
       - name: Shoot the themes
         timeout-minutes: 10
         # with a compositor, so the menus take the cairo path
