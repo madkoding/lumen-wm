@@ -258,6 +258,18 @@ static void resize_request_honoured(void)
     ct_window_destroy(w);
 }
 
+/* A larger minimum size set while mapped makes the window grow to it. */
+static void min_size_change_applies(void)
+{
+    ct_win *w = mapped(CT_WIN_NORMAL, "grow", SMALL);
+    CT_CHECK(ct_window_client(w).w == SMALL.w);
+
+    ct_window_set_min_size(w, SMALL.w + 100, SMALL.h + 50);
+    CT_EVENTUALLY(ct_window_client(w).w >= SMALL.w + 100 &&
+                  ct_window_client(w).h >= SMALL.h + 50);
+    ct_window_destroy(w);
+}
+
 /* A client can place itself. */
 static void move_request_honoured(void)
 {
@@ -333,6 +345,7 @@ const ct_case ct_cases[] = {
     { "dialog_above_parent", dialog_above_parent },
     { "strut_shrinks_workarea", strut_shrinks_workarea },
     { "resize_request_honoured", resize_request_honoured },
+    { "min_size_change_applies", min_size_change_applies },
     { "move_request_honoured", move_request_honoured },
     { "desktops_switch", desktops_switch },
     { "starts_on_desktop", starts_on_desktop },

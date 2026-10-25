@@ -19,12 +19,14 @@
    moves here one area at a time (docs/design/backends.md). */
 
 #include "backend.h"
+#include "backend-x11.h"
 #include "openbox.h"
 #include "obrender/render.h"
 #include "obt/display.h"
 #include "obt/xqueue.h"
 #include "obt/prop.h"
 
+#include <X11/Xatom.h>
 #include <string.h>
 
 static const ObBackendEvents *events;
@@ -640,6 +642,73 @@ static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
         if (info->has_user_time)
             info->user_time = t;
     }
+}
+
+/* --- events --- */
+
+struct skip_property {
+    Window window;
+    Atom prop;
+};
+
+static gboolean is_title(Atom a)
+{
+    return a == OBT_PROP_ATOM(NET_WM_NAME) ||
+        a == OBT_PROP_ATOM(WM_NAME) ||
+        a == OBT_PROP_ATOM(NET_WM_ICON_NAME) ||
+        a == OBT_PROP_ATOM(WM_ICON_NAME);
+}
+
+/* another change to the same thing is already queued */
+static gboolean skip_property_change(XEvent *e, gpointer data)
+{
+    const struct skip_property s = *(struct skip_property*)data;
+
+    if (e->type == PropertyNotify && e->xproperty.window == s.window) {
+        const Atom a = e->xproperty.atom;
+        const Atom b = s.prop;
+
+        /* these are all updated together */
+        if (is_title(a) && is_title(b))
+            return TRUE;
+        else if (a == b && a == OBT_PROP_ATOM(NET_WM_ICON))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static ObSurfaceInfoFields property_fields(Atom a)
+{
+    if (a == XA_WM_NORMAL_HINTS) return OB_SURFACE_INFO_SIZE;
+    if (a == OBT_PROP_ATOM(MOTIF_WM_HINTS)) return OB_SURFACE_INFO_DECOR;
+    if (a == XA_WM_HINTS) return OB_SURFACE_INFO_HINTS;
+    if (a == XA_WM_TRANSIENT_FOR) return OB_SURFACE_INFO_PARENT;
+    if (is_title(a)) return OB_SURFACE_INFO_TITLE;
+    if (a == OBT_PROP_ATOM(WM_PROTOCOLS)) return OB_SURFACE_INFO_PROTOCOLS;
+    if (a == OBT_PROP_ATOM(NET_WM_STRUT) ||
+        a == OBT_PROP_ATOM(NET_WM_STRUT_PARTIAL))
+        return OB_SURFACE_INFO_STRUT;
+    if (a == OBT_PROP_ATOM(NET_WM_ICON)) return OB_SURFACE_INFO_ICON;
+    if (a == OBT_PROP_ATOM(NET_WM_ICON_GEOMETRY))
+        return OB_SURFACE_INFO_ICON_AREA;
+    if (a == OBT_PROP_ATOM(NET_WM_USER_TIME)) return OB_SURFACE_INFO_USER_TIME;
+    return 0;
+}
+
+gboolean backend_x11_property_notify(const XPropertyEvent *e)
+{
+    ObSurfaceInfoFields f = property_fields(e->atom);
+    struct skip_property s;
+
+    if (!f) return FALSE;
+
+    /* ignore changes to some properties if there is another change
+       coming in the queue */
+    s.window = e->window;
+    s.prop = e->atom;
+    if (!xqueue_exists_local(skip_property_change, &s))
+        events->surface_changed((ObSurfaceId)e->window, f, e->time);
+    return TRUE;
 }
 
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)

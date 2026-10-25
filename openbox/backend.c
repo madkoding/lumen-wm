@@ -21,10 +21,6 @@
 
 const ObBackend *ob_backend = NULL;
 
-/* the core still reads X events itself (event.c); these get filled in as
-   it moves onto the backend */
-const ObBackendEvents ob_backend_events = { NULL };
-
 gboolean backend_startup(const gchar *display, gboolean replace)
 {
     /* X11 is the only backend so far */
