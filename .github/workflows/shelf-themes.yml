@@ -30,6 +30,9 @@ jobs:
       - name: Build and install
         run: |
           ./bootstrap
+          # the checkout can leave a man page source newer than the page
+          # built from it, and docbook-to-man isn't installed
+          touch doc/*.1.in
           mkdir ../build && cd ../build
           "$GITHUB_WORKSPACE/configure" --prefix="$HOME/ob"
           make -j"$(nproc)"
