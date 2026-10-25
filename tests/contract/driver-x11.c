@@ -19,7 +19,7 @@
 
 struct ct_win {
     Window id;
-    bool destroyed, closed;
+    bool destroyed, closed, clicked;
     XSizeHints hints;
     ct_win *next;
 };
@@ -177,6 +177,9 @@ void ct_pump(void)
     while (XPending(dpy)) {
         XEvent e;
         XNextEvent(dpy, &e);
+        if (e.type == ButtonPress)
+            for (ct_win *w = windows; w; w = w->next)
+                if (w->id == e.xbutton.window) w->clicked = true;
         if (e.type != ClientMessage ||
             e.xclient.message_type != atoms[WM_PROTOCOLS] ||
             (Atom)e.xclient.data.l[0] != atoms[WM_DELETE_WINDOW])
@@ -210,7 +213,8 @@ ct_win *ct_window_new(ct_win_type type, const char *title, ct_rect want)
         XSetWindowAttributes attr = { .override_redirect = True };
         XChangeWindowAttributes(dpy, w->id, CWOverrideRedirect, &attr);
     }
-    XSelectInput(dpy, w->id, StructureNotifyMask | PropertyChangeMask);
+    XSelectInput(dpy, w->id,
+                 StructureNotifyMask | PropertyChangeMask | ButtonPressMask);
     if (title)
         ct_window_set_title(w, title);
     XSetWMHints(dpy, w->id, &wmhints);
@@ -340,6 +344,12 @@ bool ct_window_viewable(ct_win *w)
     XWindowAttributes a;
     if (w->destroyed || !XGetWindowAttributes(dpy, w->id, &a)) return false;
     return a.map_state == IsViewable;
+}
+
+bool ct_window_clicked(ct_win *w)
+{
+    ct_pump();
+    return w->clicked;
 }
 
 bool ct_window_focused(ct_win *w)
@@ -636,8 +646,20 @@ void ct_input_drag(ct_win *w, const char *mods, int dx, int dy)
     fake_mods(mods, strlen(mods), False);
     XFlush(dpy);
 }
+void ct_input_click(ct_win *w, int x, int y)
+{
+    ct_rect c = ct_window_client(w);
+
+    XTestFakeMotionEvent(dpy, -1, c.x + x, c.y + y, 0);
+    fake_sync();
+    XTestFakeButtonEvent(dpy, 1, True, 0);
+    fake_sync();
+    XTestFakeButtonEvent(dpy, 1, False, 0);
+    XFlush(dpy);
+}
 #else
 void ct_input_keys(const char *keys) { (void)keys; }
+void ct_input_click(ct_win *w, int x, int y) { (void)w; (void)x; (void)y; }
 void ct_input_drag(ct_win *w, const char *mods, int dx, int dy)
 {
     (void)w; (void)mods; (void)dx; (void)dy;

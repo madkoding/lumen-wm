@@ -448,6 +448,19 @@ static void key_binding_runs(void)
     CT_EVENTUALLY(ct_current_desktop() == 0);
 }
 
+/* Key bindings work with Num Lock on too. */
+static void key_binding_ignores_num_lock(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT | CT_CAP_DESKTOPS);
+    CT_EVENTUALLY(ct_current_desktop() == 0);
+    ct_input_keys("Num_Lock");
+    ct_input_keys("C-A-Right");
+    CT_EVENTUALLY(ct_current_desktop() == 1);
+    ct_input_keys("C-A-Left");
+    CT_EVENTUALLY(ct_current_desktop() == 0);
+    ct_input_keys("Num_Lock");
+}
+
 /* Alt-Tab goes to the window used before, and holds the keyboard until Alt
    is let go. */
 static void alt_tab_switches(void)
@@ -462,6 +475,26 @@ static void alt_tab_switches(void)
     ct_settle();
     ct_input_keys("A-Tab");
     CT_EVENTUALLY(ct_window_focused(b));
+    ct_window_destroy(b);
+    ct_window_destroy(a);
+}
+
+/* Clicking a window behind another focuses and raises it, and the client
+   still gets the click. */
+static void click_focuses_and_passes(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT);
+    const ct_rect lower = { 100, 100, 300, 200 }, upper = { 250, 150, 300, 200 };
+    ct_win *a = mapped(CT_WIN_NORMAL, "behind", lower);
+    ct_win *b = mapped(CT_WIN_NORMAL, "front", upper);
+    CT_EVENTUALLY(ct_window_focused(b));
+    ct_settle();
+
+    ct_input_click(a, 20, 20);
+    CT_EVENTUALLY(ct_window_focused(a));
+    CT_EVENTUALLY(ct_window_stack_index(a) > ct_window_stack_index(b));
+    CT_EVENTUALLY(ct_window_clicked(a));
+    CT_CHECK(!ct_window_clicked(b));
     ct_window_destroy(b);
     ct_window_destroy(a);
 }
@@ -510,7 +543,9 @@ const ct_case ct_cases[] = {
     { "desktops_switch", desktops_switch },
     { "starts_on_desktop", starts_on_desktop },
     { "key_binding_runs", key_binding_runs },
+    { "key_binding_ignores_num_lock", key_binding_ignores_num_lock },
     { "alt_tab_switches", alt_tab_switches },
+    { "click_focuses_and_passes", click_focuses_and_passes },
     { "alt_drag_moves", alt_drag_moves },
     { NULL, NULL }
 };

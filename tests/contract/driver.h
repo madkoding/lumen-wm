@@ -113,6 +113,10 @@ void ct_input_keys(const char *keys);
 /* Hold mods ("A", or "" for none), press the first button over the middle of
    the window, drag it by dx, dy and let go. */
 void ct_input_drag(ct_win *w, const char *mods, int dx, int dy);
+/* Click the first button at x, y in the window. */
+void ct_input_click(ct_win *w, int x, int y);
+/* Whether the client saw a click since it was made. */
+bool ct_window_clicked(ct_win *w);
 
 ct_rect ct_screen(void);
 ct_rect ct_workarea(void);
