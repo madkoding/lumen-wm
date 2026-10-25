@@ -1070,6 +1070,11 @@ static void x11_unbind_button(guintptr over, guint button, guint mods)
         XUngrabButton(obt_display, button, mods | locks[i], (Window)over);
 }
 
+static void x11_pass_click(guint32 time)
+{
+    XAllowEvents(obt_display, ReplayPointer, time);
+}
+
 static void x11_grab_server(gboolean grab)
 {
     if (grab) {
@@ -1112,6 +1117,7 @@ const ObBackend ob_backend_x11 = {
     .unbind_all_keys = x11_unbind_all_keys,
     .bind_button = x11_bind_button,
     .unbind_button = x11_unbind_button,
+    .pass_click = x11_pass_click,
 
     .publish_clients = x11_publish_clients,
     .publish_stacking = x11_publish_stacking,

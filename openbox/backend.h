@@ -379,6 +379,9 @@ struct _ObBackend {
     void (*bind_button)(guintptr over, guint button, guint mods,
                         gboolean hold, ObCursor cursor);
     void (*unbind_button)(guintptr over, guint button, guint mods);
+    /*! Let the press a hold binding held reach the client after all
+      (X11 XAllowEvents ReplayPointer). time: the press's. */
+    void (*pass_click)(guint32 time);
     void (*pointer_position)(gint *x, gint *y);
     void (*pointer_warp)(gint x, gint y);
     void (*set_cursor)(ObCanvasId c, ObCursor cursor);

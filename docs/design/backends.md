@@ -137,7 +137,9 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       Alt-Tab, Alt-drag). Done: the active grabs (`grab_keyboard`, `grab_pointer`, `grab_server`); `grab.c`
       keeps counting nested grabs and picking the ungrab time. The passive grabs are `bind_key` (xkb keycodes
       and modifier masks, which are X11's) and `bind_button` (on a frame, a client, or a dock app), with
-      every lock-key combination in the backend. Next: the held clicks `mouse.c` replays to the client.
+      every lock-key combination in the backend; a held click reaches the client with `pass_click`. What is
+      left in `mouse.c` and `keyboard.c` reads the XEvent itself (and asks the size of the window a click is
+      let go over), and becomes the `button`, `motion` and `key` events when the backend reads the queue. Next: move/resize (9).
    9. Move/resize: XSync and pointer warps go behind the backend.
 4. **Render without Xlib**: obrender, frames, the shelf, menus and popups draw into cairo image surfaces and hand
    them to `canvas_present`. Themes are unchanged, and `tools/shelf-themes.sh` checks that they still read.
