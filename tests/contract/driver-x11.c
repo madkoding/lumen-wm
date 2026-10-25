@@ -34,7 +34,7 @@ enum {
     NET_WM_STATE_FULLSCREEN, NET_WM_STATE_HIDDEN, NET_WM_STATE_ABOVE,
     NET_WM_WINDOW_TYPE, NET_WM_WINDOW_TYPE_NORMAL, NET_WM_WINDOW_TYPE_DOCK,
     NET_WM_WINDOW_TYPE_DIALOG, UTF8_STRING, NET_WM_VISIBLE_NAME,
-    NUM_ATOMS
+    MOTIF_WM_HINTS, NUM_ATOMS
 };
 
 static char *atom_names[NUM_ATOMS] = {
@@ -49,7 +49,7 @@ static char *atom_names[NUM_ATOMS] = {
     "_NET_WM_STATE_HIDDEN", "_NET_WM_STATE_ABOVE",
     "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NORMAL",
     "_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_WINDOW_TYPE_DIALOG", "UTF8_STRING",
-    "_NET_WM_VISIBLE_NAME",
+    "_NET_WM_VISIBLE_NAME", "_MOTIF_WM_HINTS",
 };
 
 static Atom atoms[NUM_ATOMS];
@@ -229,6 +229,14 @@ void ct_window_set_min_size(ct_win *w, int minw, int minh)
 void ct_window_set_parent(ct_win *w, ct_win *parent)
 {
     XSetTransientForHint(dpy, w->id, parent->id);
+}
+
+void ct_window_set_undecorated(ct_win *w)
+{
+    /* flags: MWM_HINTS_DECORATIONS; decorations: none */
+    long hints[5] = { 1 << 1, 0, 0, 0, 0 };
+    XChangeProperty(dpy, w->id, atoms[MOTIF_WM_HINTS], atoms[MOTIF_WM_HINTS],
+                    32, PropModeReplace, (unsigned char *)hints, 5);
 }
 
 void ct_window_set_title(ct_win *w, const char *title)
