@@ -20,6 +20,7 @@
 #include "menuframe.h"
 #include "client.h"
 #include "menu.h"
+#include "shelf.h"
 #include "screen.h"
 #include "actions.h"
 #include "event.h"
@@ -33,7 +34,7 @@
 #include <X11/extensions/shape.h>
 #include <math.h>
 
-#define PADDING (2 + config_shelf_menu_padding / 2)
+#define PADDING MENU_ITEM_PADDING
 #define MARGIN  (config_shelf_menu_padding)
 
 static void round_corners(Window win, gint w, gint h, gint radius);
@@ -66,9 +67,26 @@ static gboolean submenu_hide_timeout(gpointer data);
 static Window createWindow(Window parent, gulong mask,
                            XSetWindowAttributes *attrib)
 {
+    XSetWindowAttributes a;
+
+    /* a colormap and a border pixel are needed when the parent is a 32-bit
+       window and this one is not */
+    if (attrib) a = *attrib;
+    a.colormap = RrColormap(ob_rr_inst);
+    a.border_pixel = 0;
     return XCreateWindow(obt_display, parent, 0, 0, 1, 1, 0,
                          RrDepth(ob_rr_inst), InputOutput,
-                         RrVisual(ob_rr_inst), mask, attrib);
+                         RrVisual(ob_rr_inst),
+                         mask | CWColormap | CWBorderPixel, &a);
+}
+
+/* An entry's window when its frame is drawn with cairo: it only takes the
+   pointer's events, the frame paints what it shows */
+static Window inputWindow(Window parent, gulong mask,
+                          XSetWindowAttributes *attrib)
+{
+    return XCreateWindow(obt_display, parent, 0, 0, 1, 1, 0, 0, InputOnly,
+                         CopyFromParent, mask, attrib);
 }
 
 static void client_dest(ObClient *client, gpointer data)
@@ -126,16 +144,37 @@ ObMenuFrame* menu_frame_new(ObMenu *menu, guint show_from, ObClient *client)
     self->show_from = show_from;
 
     attr.event_mask = FRAME_EVENTMASK;
-    self->window = createWindow(obt_root(ob_screen),
-                                CWEventMask, &attr);
+    {
+        Visual *vis;
+        Colormap cmap;
+
+        self->argb = config_shelf_menu_radius > 0 &&
+                     shelf_menu_argb(&vis, &cmap);
+        if (self->argb) {
+            self->shadow = 24;
+            attr.colormap = cmap;
+            attr.border_pixel = 0;
+            attr.background_pixmap = None;
+            self->window = XCreateWindow(obt_display, obt_root(ob_screen),
+                                         0, 0, 1, 1, 0, 32, InputOutput, vis,
+                                         CWEventMask | CWColormap |
+                                         CWBorderPixel | CWBackPixmap, &attr);
+        } else {
+            self->window = createWindow(obt_root(ob_screen),
+                                        CWEventMask, &attr);
+        }
+    }
 
     /* make it a popup menu type window */
     OBT_PROP_SET32(self->window, NET_WM_WINDOW_TYPE, ATOM,
                    OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_POPUP_MENU));
 
-    XSetWindowBorderWidth(obt_display, self->window, ob_rr_theme->mbwidth);
-    XSetWindowBorder(obt_display, self->window,
-                     RrColorPixel(ob_rr_theme->menu_border_color));
+    if (!self->argb) {
+        XSetWindowBorderWidth(obt_display, self->window,
+                              ob_rr_theme->mbwidth);
+        XSetWindowBorder(obt_display, self->window,
+                         RrColorPixel(ob_rr_theme->menu_border_color));
+    }
 
     self->a_items = RrAppearanceCopy(ob_rr_theme->a_menu);
 
@@ -184,17 +223,24 @@ static ObMenuEntryFrame* menu_entry_frame_new(ObMenuEntry *entry,
     menu_entry_ref(entry);
 
     attr.event_mask = ENTRY_EVENTMASK;
-    self->window = createWindow(self->frame->window, CWEventMask, &attr);
-    self->text = createWindow(self->window, 0, NULL);
+    if (frame->argb) {
+        self->window = inputWindow(self->frame->window, CWEventMask, &attr);
+        self->text = inputWindow(self->window, 0, NULL);
+    } else {
+        self->window = createWindow(self->frame->window, CWEventMask, &attr);
+        self->text = createWindow(self->window, 0, NULL);
+    }
     g_hash_table_insert(menu_frame_map, &self->window, self);
     g_hash_table_insert(menu_frame_map, &self->text, self);
     if ((entry->type == OB_MENU_ENTRY_TYPE_NORMAL) ||
         (entry->type == OB_MENU_ENTRY_TYPE_SUBMENU)) {
-        self->icon = createWindow(self->window, 0, NULL);
+        self->icon = frame->argb ? inputWindow(self->window, 0, NULL) :
+                                   createWindow(self->window, 0, NULL);
         g_hash_table_insert(menu_frame_map, &self->icon, self);
     }
     if (entry->type == OB_MENU_ENTRY_TYPE_SUBMENU) {
-        self->bullet = createWindow(self->window, 0, NULL);
+        self->bullet = frame->argb ? inputWindow(self->window, 0, NULL) :
+                                     createWindow(self->window, 0, NULL);
         g_hash_table_insert(menu_frame_map, &self->bullet, self);
     }
 
@@ -234,7 +280,8 @@ void menu_frame_move(ObMenuFrame *self, gint x, gint y)
 {
     RECT_SET_POINT(self->area, x, y);
     self->monitor = screen_find_monitor_point(x, y);
-    XMoveWindow(obt_display, self->window, self->area.x, self->area.y);
+    XMoveWindow(obt_display, self->window, self->area.x - self->shadow,
+                self->area.y - self->shadow);
 }
 
 static void menu_frame_place_topmenu(ObMenuFrame *self, const GravityPoint *pos,
@@ -341,7 +388,7 @@ void menu_frame_move_on_screen(ObMenuFrame *self, gint x, gint y,
 {
     const Rect *a = NULL;
     Rect search = self->area;
-    gint pos, half, monitor;
+    gint pos, half, monitor, bottom, limit;
 
     *dx = *dy = 0;
     RECT_SET_POINT(search, x, y);
@@ -352,6 +399,11 @@ void menu_frame_move_on_screen(ObMenuFrame *self, gint x, gint y,
         monitor = screen_find_monitor(&search);
 
     a = screen_physical_area_monitor(monitor);
+    bottom = a->y + a->height;
+    /* a submenu that starts above the shelf stays above it */
+    if (self->parent && (limit = shelf_menu_limit()) > 0 && y < limit &&
+        limit < bottom)
+        bottom = limit;
 
     half = g_list_length(self->entries) / 2;
     pos = g_list_index(self->entries, self->selected);
@@ -363,7 +415,7 @@ void menu_frame_move_on_screen(ObMenuFrame *self, gint x, gint y,
         *dy = MAX(*dy, a->y - y);
     }
     *dx = MIN(*dx, (a->x + a->width) - (x + self->area.width));
-    *dy = MIN(*dy, (a->y + a->height) - (y + self->area.height));
+    *dy = MIN(*dy, bottom - (y + self->area.height));
     /* if in the top half then check this stuff last, will keep the top
        edge of the menu visible */
     if (pos <= half) {
@@ -411,9 +463,8 @@ static void menu_entry_frame_render(ObMenuEntryFrame *self)
     RECT_SET_SIZE(self->area, self->frame->inner_w, th);
     XResizeWindow(obt_display, self->window,
                   self->area.width, self->area.height);
-    if (MARGIN && self->entry->type != OB_MENU_ENTRY_TYPE_SEPARATOR)
-        round_corners(self->window, self->area.width, self->area.height,
-                      MIN(config_shelf_menu_radius, 8));
+    /* a cairo frame paints its entries itself (shelf_menu_paint) */
+    if (frame->argb) return;
     item_a->surface.parent = self->frame->a_items;
     item_a->surface.parentx = self->area.x;
     item_a->surface.parenty = self->area.y;
@@ -789,11 +840,19 @@ void menu_frame_render(ObMenuFrame *self)
         }
 
         RECT_SET_POINT(e->area, MARGIN, h+e->border);
+        /* the border of an ARGB frame is painted inside the window */
         XMoveWindow(obt_display, e->window,
-                    e->area.x-e->border, e->area.y-e->border);
-        XSetWindowBorderWidth(obt_display, e->window, e->border);
-        XSetWindowBorder(obt_display, e->window,
-                         RrColorPixel(ob_rr_theme->menu_border_color));
+                    e->area.x - e->border + (self->argb ?
+                                             ob_rr_theme->mbwidth : 0) +
+                    self->shadow,
+                    e->area.y - e->border + (self->argb ?
+                                             ob_rr_theme->mbwidth : 0) +
+                    self->shadow);
+        if (!self->argb) {
+            XSetWindowBorderWidth(obt_display, e->window, e->border);
+            XSetWindowBorder(obt_display, e->window,
+                             RrColorPixel(ob_rr_theme->menu_border_color));
+        }
 
         text_a = (e->entry->type == OB_MENU_ENTRY_TYPE_NORMAL &&
                   !e->entry->data.normal.enabled ?
@@ -879,9 +938,18 @@ void menu_frame_render(ObMenuFrame *self)
     self->inner_w = w;
     w += 2 * MARGIN;
     h += MARGIN;
-    XResizeWindow(obt_display, self->window, w, h);
-
-    RrPaint(self->a_items, self->window, w, h);
+    if (self->argb) {
+        Pixmap old = RrPaintPixmap(self->a_items, w, h);
+        /* the entries take their background from a_items; the frame itself
+           is drawn with cairo, border included */
+        if (old) XFreePixmap(obt_display, old);
+        XResizeWindow(obt_display, self->window,
+                      w + 2 * ob_rr_theme->mbwidth + 2 * self->shadow,
+                      h + 2 * ob_rr_theme->mbwidth + 2 * self->shadow);
+    } else {
+        XResizeWindow(obt_display, self->window, w, h);
+        RrPaint(self->a_items, self->window, w, h);
+    }
 
     for (it = self->entries; it; it = g_list_next(it))
         menu_entry_frame_render(it->data);
@@ -890,7 +958,17 @@ void menu_frame_render(ObMenuFrame *self)
     h += ob_rr_theme->mbwidth * 2;
 
     RECT_SET_SIZE(self->area, w, h);
-    round_corners(self->window, w, h, config_shelf_menu_radius);
+    if (self->argb) {
+        Visual *vis;
+        XRectangle box = { self->shadow, self->shadow, w, h };
+        /* the shadow lets the pointer through */
+        XShapeCombineRectangles(obt_display, self->window, ShapeInput, 0, 0,
+                                &box, 1, ShapeSet, Unsorted);
+        if (shelf_menu_argb(&vis, NULL))
+            shelf_menu_paint(self, vis);
+    } else {
+        round_corners(self->window, w, h, config_shelf_menu_radius);
+    }
 
     XFlush(obt_display);
 }
@@ -1299,6 +1377,12 @@ void menu_frame_select(ObMenuFrame *self, ObMenuEntryFrame *entry,
                                        submenu_hide_timeout, oldchild, submenu_hide_dest);
             }
         }
+    }
+
+    if (self->argb) {
+        Visual *vis;
+        if (shelf_menu_argb(&vis, NULL))
+            shelf_menu_paint(self, vis);
     }
 
     if (self->selected) {

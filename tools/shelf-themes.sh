@@ -1,11 +1,16 @@
 #!/bin/bash
 # Take a screenshot of the shelf under every bundled Openbox theme and check
-# that its text reads on its islands (contrast >= 4.5:1).
+# that its text reads on its islands (4.5:1), on the hovered tile (3:1) and that
+# the running mark shows (3:1).
 #
 #   tools/shelf-themes.sh [PREFIX [OUTPUT.png]]
 #
 # PREFIX is where Openbox is installed (default /usr/local); OUTPUT defaults to
-# docs/screenshots/shelf-themes.png. Needs Xvfb, xdotool, xterm and ImageMagick.
+# docs/screenshots/shelf-themes.png; the menus (a tile's with its window submenu,
+# the network's, the volume's and the power's) go to the same name ending in -menus.png. ONLY=Onyx limits it to
+# one theme, COMPOSITOR=1 runs picom (the menus are then drawn with cairo:
+# anti-aliased corners and highlight; needs picom and hsetroot), RADIUS and PADDING set <menuRadius> and <menuPadding>.
+# Needs Xvfb, xdotool, xterm and ImageMagick.
 # Exits non-zero when a theme fails the contrast check.
 set -u
 PREFIX=${1:-/usr/local}
@@ -23,20 +28,29 @@ cat >"$WORK/weather" <<'X'
 #!/bin/sh
 printf '59°\nLight rain\nFri|74°|cloud-sun\nSat|69°|sun\nSun|67°|cloud\n'
 X
-chmod +x "$WORK/media" "$WORK/weather"
+cat >"$WORK/wifi" <<'X'
+#!/bin/sh
+printf '*:82:WPA2:Home network\n :64:WPA2:Cafe\n :41::Guest\n :23:WPA2:Neighbour\n'
+X
+cat >"$WORK/level" <<'X'
+#!/bin/sh
+echo 65%
+X
+chmod +x "$WORK/media" "$WORK/weather" "$WORK/wifi" "$WORK/level"
 
 status=0
 shots=()
-for dir in "$ROOT"/themes/*/; do
+menus=()
+for dir in "$ROOT"/themes/${ONLY:-*}/; do
     t=$(basename "$dir")
     [ -d "$dir/openbox-3" ] || continue
     home=$WORK/home-$t
     mkdir -p "$home/.config/openbox" "$home/.themes"
     cp -r "$ROOT"/themes/* "$home/.themes/"
     python3 - "$ROOT/data/rc.xml" "$home/.config/openbox/rc.xml" "$t" \
-              "$WORK" <<'PY'
+              "$WORK" "${RADIUS:-12}" "${PADDING:-8}" <<'PY'
 import re, sys
-src, dst, theme, work = sys.argv[1:5]
+src, dst, theme, work, radius, padding = sys.argv[1:7]
 s = open(src).read()
 s = re.sub(r'(<theme>\s*<name>)[^<]*', r'\g<1>' + theme, s, count=1)
 s = s.replace('<enabled>no</enabled>', '<enabled>yes</enabled>', 1)
@@ -48,15 +62,32 @@ s = re.sub(r'(<shelf>.*?)<pins>.*?</pins>', r'\1<pins>'
 s = s.replace('</shelf>',
               '<media><command>%s/media</command><previous>true</previous>'
               '<toggle>true</toggle><next>true</next></media>'
-              '<weather><command>%s/weather</command></weather></shelf>'
-              % (work, work), 1)
+              '<weather><command>%s/weather</command></weather>'
+              '<network><list>%s/wifi</list><connect>true</connect>'
+              '<secured>true</secured><password>true</password></network>'
+              '<volume><level>%s/level</level><up>true</up><down>true</down>'
+              '<toggle>true</toggle></volume>'
+              '<menuRadius>%s</menuRadius><menuPadding>%s</menuPadding>'
+              '<power><item><name>Log out</name><command>true</command></item>'
+              '<item><name>Shut down</name><command>true</command></item>'
+              '</power></shelf>' % (work, work, work, work,
+                                   radius, padding), 1)
 open(dst, 'w').write(s)
 PY
     Xvfb $DISP -screen 0 1000x420x24 >/dev/null 2>&1 &
     xp=$!
     sleep 1
     export DISPLAY=$DISP
-    display -window root -size 1000x420 gradient:'#6d8fb5-#3b5173' &
+    if [ -n "${COMPOSITOR:-}" ]; then
+        # the compositor paints the wallpaper from _XROOTPMAP_ID
+        [ -f "$WORK/wall.png" ] ||
+            convert -size 1000x420 gradient:'#6d8fb5-#3b5173' "$WORK/wall.png"
+        hsetroot -fill "$WORK/wall.png" >/dev/null
+        picom --backend xrender --no-fading-openclose 2>/dev/null &
+        sleep 0.5
+    else
+        display -window root -size 1000x420 gradient:'#6d8fb5-#3b5173' &
+    fi
     HOME=$home OB_SHELF_DEBUG=1 "$PREFIX/bin/openbox" \
         --config-file "$home/.config/openbox/rc.xml" 2>"$WORK/$t.log" &
     op=$!
@@ -66,20 +97,44 @@ PY
     sleep 1.5
     xdotool mousemove 175 372; xdotool mousemove 181 376; sleep 0.7
     import -window root "$WORK/$t.png"
+    # the menus: a tile's, its window submenu, then the glyphs'
+    # scene: button x crop-x crop-w [pointer x y to open a submenu]
+    n=0
+    parts=()
+    for scene in "3 120 0 300" "3 120 0 480 130 327" "1 870 700 300" \
+                 "1 903 700 300" "1 938 700 300"; do
+        set -- $scene
+        xdotool mousemove "$2" 374 click "$1"; sleep 0.8
+        [ $# -ge 6 ] && { xdotool mousemove "$5" "$6"; sleep 1.2; }
+        import -window root "$WORK/$t-menu$n.png"
+        convert "$WORK/$t-menu$n.png" -crop "$4"x400+"$3"+20 +repage \
+                "$WORK/$t-menu$n.png"
+        xdotool key Escape; sleep 0.3
+        parts+=("$WORK/$t-menu$n.png")
+        n=$((n + 1))
+    done
+    convert "${parts[@]}" +append "$WORK/$t-menus.png"
+    menus+=("$WORK/$t-menus.png")
     kill $op $xp 2>/dev/null; wait 2>/dev/null
 
     line=$(grep -m1 shelf-material "$WORK/$t.log")
-    c=$(sed -n 's/.* contrast=\([0-9.]*\) .*/\1/p' <<<"$line")
-    if [ -z "$c" ] || awk "BEGIN{exit !($c < 4.5)}"; then
-        echo "FAIL $t: text contrast ${c:-unknown}" >&2
+    val() { sed -n "s/.* $1=\([0-9.]*\).*/\1/p" <<<"$line"; }
+    c=$(val contrast); h=$(val hover_ink); a=$(val accent)
+    if [ -z "$c" ] || [ -z "$h" ] || [ -z "$a" ] ||
+       awk "BEGIN{exit !($c < 4.5 || $h < 3.0 || $a < 3.0)}"; then
+        echo "FAIL $t: text ${c:-?}:1 (>= 4.5), hover ${h:-?}:1 (>= 3)," \
+             "mark ${a:-?}:1 (>= 3)" >&2
         status=1
     else
-        echo "ok   $t: text contrast $c"
+        echo "ok   $t: text $c:1, hover $h:1, mark $a:1"
     fi
     shots+=("$WORK/$t.png")
 done
 
 montage -label '%t' "${shots[@]}" -tile 2x -geometry 900x+8+8 -pointsize 18 \
         -background '#1b1d21' -fill white "$OUT"
-echo "wrote $OUT"
+montage -label '%t' "${menus[@]/%-menus.png/-menus.png}" -tile 1x \
+        -geometry +8+8 -pointsize 18 -background '#1b1d21' -fill white \
+        "${OUT%.png}-menus.png"
+echo "wrote $OUT and ${OUT%.png}-menus.png"
 exit $status

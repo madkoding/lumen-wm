@@ -183,6 +183,11 @@
     <hover></hover>
     <accent></accent>
   </colors>
+  <!-- every menu: rounded corners and air, in pixels. With the shelf on they
+       default to 12 and 8 (drawn with cairo, with a shadow, when a compositor
+       runs); with it off, to 0 (upstream menus) -->
+  <!-- <menuRadius>12</menuRadius> -->
+  <!-- <menuPadding>8</menuPadding> -->
   <!-- empty: the system default (fontconfig "Sans"); or a family, e.g. Sansation -->
   <font></font>
   <!-- where a pin's icon given as a bare name is looked up (a folder of

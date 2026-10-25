@@ -37,8 +37,17 @@ With `<material>theme</material>` (the default) the shelf follows the Openbox th
 
 ![The shelf under each bundled Openbox theme](docs/screenshots/shelf-themes.png)
 
-*Regenerate it with [`tools/shelf-themes.sh`](tools/shelf-themes.sh), which also checks that the text reads on
-the islands in every theme. Every bundled theme with all the islands and the hover on the second tile, in a test environment (Xvfb, no compositor, sample data in the player and the weather).*
+*Regenerate it with [`tools/shelf-themes.sh`](tools/shelf-themes.sh), which also checks, for every theme, that the text reads on
+the islands (4.5:1) and on the hovered tile (3:1) and that the running mark shows (3:1). CI runs it
+([`shelf-themes.yml`](.github/workflows/shelf-themes.yml)). Every bundled theme with all the islands and the hover on the second tile, in a test environment (Xvfb, no compositor, sample data in the player and the weather).*
+
+Menus (a tile's and its window submenu, then the network's, the volume's and the power's) are Openbox's own,
+so they take the theme too; their info lines are menu titles, never selectable. With a compositor and a
+`<menuRadius>`, every menu is drawn with cairo: anti-aliased rounded corners, a rounded highlight, quiet titles
+and thin separators, with `<menuPadding>` of air and a soft shadow (without a compositor the corners are cut with a shape mask and the highlight is square).
+With the shelf on, both default to 12 and 8; with it off, menus stay as upstream draws them:
+
+![The shelf menus under each bundled Openbox theme](docs/screenshots/shelf-themes-menus.png)
 
 ### Enable and configure it
 
@@ -83,8 +92,8 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
     <item><name>Shut down</name><command>systemctl poweroff</command></item>
   </power>
   <battery>yes</battery>              <!-- shown only when the machine has one -->
-  <menuRadius>10</menuRadius>         <!-- rounded corners of every menu; 0 = square -->
-  <menuPadding>8</menuPadding>        <!-- air around and inside every menu, in pixels -->
+  <menuRadius>12</menuRadius>         <!-- rounded corners of every menu; 0 = square; 12 with the shelf on -->
+  <menuPadding>8</menuPadding>        <!-- air around and inside every menu, in pixels; 8 with the shelf on -->
 
   <media>
     <command>my-media-script</command>  <!-- prints what the island shows -->

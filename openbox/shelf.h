@@ -26,6 +26,23 @@
 /*! The space the shelf takes from the work area (bottom edge only) */
 extern StrutPartial shelf_strut;
 
+/*! The screen y a submenu should not go below so the shelf stays clear, or
+  -1 when the shelf is not shown */
+gint shelf_menu_limit(void);
+
+/*! When a compositor runs, the 32-bit visual and colormap a menu frame can use
+  to be drawn with real alpha: its rounded corners are then anti-aliased by
+  cairo instead of cut with a shape mask. FALSE when there is none. */
+gboolean shelf_menu_argb(Visual **visual, Colormap *cmap);
+
+struct _ObMenuFrame;
+
+/*! Paints a whole menu frame on its ARGB window with cairo: the rounded box
+  with the theme's border and background, then every entry (the selected one
+  on a rounded highlight, titles, separators, icons, submenu arrows). Its
+  entries' windows only take input. */
+void shelf_menu_paint(struct _ObMenuFrame *frame, Visual *visual);
+
 /*! The shelf is two floating islands at the bottom of the screen: a dock
   listing the running applications, and a clock with status glyphs. It is
   drawn by the window manager itself with cairo, and is off unless the
