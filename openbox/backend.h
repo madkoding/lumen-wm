@@ -31,6 +31,7 @@
 
 #include "geom.h"
 #include "misc.h"
+#include "mwm.h"
 
 #include <glib.h>
 
@@ -123,8 +124,19 @@ typedef struct _ObSurfaceInfo {
     gchar *app_id;          /*!< WM_CLASS class, or xdg app_id */
     gchar *instance;        /*!< WM_CLASS name; NULL on Wayland */
     gchar *role;            /*!< WM_WINDOW_ROLE; NULL on Wayland */
+    gboolean has_type;      /*!< FALSE: it named no type we know */
     ObSurfaceType type;
+    /*! it wants no decorations and no functions at all
+      (_KDE_NET_WM_WINDOW_TYPE_OVERRIDE) */
+    gboolean type_override;
+    /*! what it says about decorations and functions; flags 0 for nothing.
+      Motif hints on X11; a client-side xdg-decoration on Wayland is
+      decorations 0 */
+    ObMwmHints decor_hints;
+    gboolean has_parent;    /*!< it is transient for something */
     ObSurfaceId parent;     /*!< transient for, or xdg parent */
+    /*! transient for its whole group (WM_TRANSIENT_FOR the root, X11) */
+    gboolean parent_is_group;
     gboolean modal;
 
     /*! FALSE when it gave no size hints, or nonsense ones; the sizes below

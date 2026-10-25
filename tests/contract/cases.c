@@ -39,6 +39,18 @@ static void title_shown(void)
     ct_window_destroy(w);
 }
 
+/* A window that draws its own decorations gets none from the window
+   manager. */
+static void undecorated_request_honoured(void)
+{
+    ct_win *w = ct_window_new(CT_WIN_NORMAL, "undecorated", SMALL);
+    ct_window_set_undecorated(w);
+    ct_window_map(w);
+    CT_EVENTUALLY(ct_window_managed(w) && ct_window_viewable(w));
+    CT_EVENTUALLY(ct_rect_eq(ct_window_frame(w), ct_window_client(w)));
+    ct_window_destroy(w);
+}
+
 /* A destroyed window stops being managed. */
 static void destroy_unmanages(void)
 {
@@ -266,6 +278,7 @@ static void desktops_switch(void)
 const ct_case ct_cases[] = {
     { "map_manages", map_manages },
     { "title_shown", title_shown },
+    { "undecorated_request_honoured", undecorated_request_honoured },
     { "destroy_unmanages", destroy_unmanages },
     { "new_window_focused", new_window_focused },
     { "activate_focuses_and_raises", activate_focuses_and_raises },

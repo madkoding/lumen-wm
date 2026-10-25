@@ -25,6 +25,8 @@
 
 static const ObBackendEvents *events;
 
+static Window root(void);
+
 /* the outputs as output_count() last found them */
 static Rect *outputs;
 static guint n_outputs;
@@ -329,6 +331,77 @@ static void get_hints(Window w, ObSurfaceInfo *info)
     XFree(hints);
 }
 
+static void get_type(Window w, ObSurfaceInfo *info)
+{
+    static const struct { int atom; ObSurfaceType type; } types[] = {
+        { OBT_PROP_NET_WM_WINDOW_TYPE_DESKTOP, OB_SURFACE_TYPE_DESKTOP },
+        { OBT_PROP_NET_WM_WINDOW_TYPE_DOCK, OB_SURFACE_TYPE_DOCK },
+        { OBT_PROP_NET_WM_WINDOW_TYPE_TOOLBAR, OB_SURFACE_TYPE_TOOLBAR },
+        { OBT_PROP_NET_WM_WINDOW_TYPE_MENU, OB_SURFACE_TYPE_MENU },
+        { OBT_PROP_NET_WM_WINDOW_TYPE_UTILITY, OB_SURFACE_TYPE_UTILITY },
+        { OBT_PROP_NET_WM_WINDOW_TYPE_SPLASH, OB_SURFACE_TYPE_SPLASH },
+        { OBT_PROP_NET_WM_WINDOW_TYPE_DIALOG, OB_SURFACE_TYPE_DIALOG },
+        { OBT_PROP_NET_WM_WINDOW_TYPE_NORMAL, OB_SURFACE_TYPE_NORMAL },
+    };
+    guint num, i, j;
+    guint32 *val;
+
+    info->has_type = FALSE;
+    info->type_override = FALSE;
+
+    if (!OBT_PROP_GETA32(w, NET_WM_WINDOW_TYPE, ATOM, &val, &num))
+        return;
+
+    /* use the first value that we know about in the array */
+    for (i = 0; i < num && !info->has_type; ++i) {
+        if (val[i] == OBT_PROP_ATOM(KDE_NET_WM_WINDOW_TYPE_OVERRIDE))
+            info->type_override = TRUE;
+        for (j = 0; j < G_N_ELEMENTS(types); ++j)
+            if (val[i] == obt_prop_atom(types[j].atom)) {
+                info->has_type = TRUE;
+                info->type = types[j].type;
+                break;
+            }
+    }
+    g_free(val);
+}
+
+static void get_decor_hints(Window w, ObSurfaceInfo *info)
+{
+    guint num;
+    guint32 *hints;
+
+    info->decor_hints.flags = 0; /* default to none */
+
+    if (OBT_PROP_GETA32(w, MOTIF_WM_HINTS, MOTIF_WM_HINTS, &hints, &num)) {
+        if (num >= OB_MWM_ELEMENTS) {
+            info->decor_hints.flags = hints[0];
+            info->decor_hints.functions = hints[1];
+            info->decor_hints.decorations = hints[2];
+        }
+        g_free(hints);
+    }
+}
+
+static void get_parent(Window w, ObSurfaceInfo *info)
+{
+    Window t = None;
+
+    info->has_parent = XGetTransientForHint(obt_display, w, &t);
+    info->parent = OB_SURFACE_NONE;
+    info->parent_is_group = FALSE;
+    if (!info->has_parent)
+        return;
+
+    /* Setting the transient_for to Root is actually illegal, however
+       applications from time have done this to specify transient for
+       their group */
+    if (t == root())
+        info->parent_is_group = TRUE;
+    else if (t != w) /* can't be transient to itself! */
+        info->parent = (ObSurfaceId)t;
+}
+
 static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
                              ObSurfaceInfo *info)
 {
@@ -342,6 +415,12 @@ static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
         get_size_hints((Window)s, info);
     if (fields & OB_SURFACE_INFO_HINTS)
         get_hints((Window)s, info);
+    if (fields & OB_SURFACE_INFO_TYPE)
+        get_type((Window)s, info);
+    if (fields & OB_SURFACE_INFO_DECOR)
+        get_decor_hints((Window)s, info);
+    if (fields & OB_SURFACE_INFO_PARENT)
+        get_parent((Window)s, info);
 }
 
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)

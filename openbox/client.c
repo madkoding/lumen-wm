@@ -1419,13 +1419,15 @@ static void client_get_shaped(ObClient *self)
 
 void client_update_transient_for(ObClient *self)
 {
-    Window t = None;
+    ObSurfaceInfo info = { 0 };
     ObClient *target = NULL;
     gboolean trangroup = FALSE;
 
-    if (XGetTransientForHint(obt_display, self->window, &t)) {
-        if (t != self->window) { /* can't be transient to itself! */
-            ObWindow *tw = window_find(t);
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_PARENT, &info);
+
+    if (info.has_parent) {
+        if (info.parent) {
+            ObWindow *tw = window_find((Window)info.parent);
             /* if this happens then we need to check for it */
             g_assert(tw != CLIENT_AS_WINDOW(self));
             if (tw && WINDOW_IS_CLIENT(tw)) {
@@ -1435,10 +1437,8 @@ void client_update_transient_for(ObClient *self)
             }
         }
 
-        /* Setting the transient_for to Root is actually illegal, however
-           applications from time have done this to specify transient for
-           their group */
-        if (!target && self->group && t == obt_root(ob_screen))
+        /* transient for its whole group */
+        if (!target && self->group && info.parent_is_group)
             trangroup = TRUE;
     } else if (self->group && self->transient)
         trangroup = TRUE;
@@ -1574,67 +1574,43 @@ static void client_update_transient_tree(ObClient *self,
 
 void client_get_mwm_hints(ObClient *self)
 {
-    guint num;
-    guint32 *hints;
+    ObSurfaceInfo info = { 0 };
 
-    self->mwmhints.flags = 0; /* default to none */
-
-    if (OBT_PROP_GETA32(self->window, MOTIF_WM_HINTS, MOTIF_WM_HINTS,
-                        &hints, &num)) {
-        if (num >= OB_MWM_ELEMENTS) {
-            self->mwmhints.flags = hints[0];
-            self->mwmhints.functions = hints[1];
-            self->mwmhints.decorations = hints[2];
-        }
-        g_free(hints);
-    }
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_DECOR, &info);
+    self->mwmhints = info.decor_hints;
 }
 
 void client_get_type_and_transientness(ObClient *self)
 {
-    guint num, i;
-    guint32 *val;
-    Window t;
+    ObSurfaceInfo info = { 0 };
+
+    ob_backend->surface_info(self->window,
+                             OB_SURFACE_INFO_TYPE | OB_SURFACE_INFO_PARENT,
+                             &info);
 
     self->type = -1;
-    self->transient = FALSE;
-
-    if (OBT_PROP_GETA32(self->window, NET_WM_WINDOW_TYPE, ATOM, &val, &num)) {
-        /* use the first value that we know about in the array */
-        for (i = 0; i < num; ++i) {
-            if (val[i] == OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_DESKTOP))
-                self->type = OB_CLIENT_TYPE_DESKTOP;
-            else if (val[i] == OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_DOCK))
-                self->type = OB_CLIENT_TYPE_DOCK;
-            else if (val[i] == OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_TOOLBAR))
-                self->type = OB_CLIENT_TYPE_TOOLBAR;
-            else if (val[i] == OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_MENU))
-                self->type = OB_CLIENT_TYPE_MENU;
-            else if (val[i] == OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_UTILITY))
-                self->type = OB_CLIENT_TYPE_UTILITY;
-            else if (val[i] == OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_SPLASH))
-                self->type = OB_CLIENT_TYPE_SPLASH;
-            else if (val[i] == OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_DIALOG))
-                self->type = OB_CLIENT_TYPE_DIALOG;
-            else if (val[i] == OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_NORMAL))
-                self->type = OB_CLIENT_TYPE_NORMAL;
-            else if (val[i] == OBT_PROP_ATOM(KDE_NET_WM_WINDOW_TYPE_OVERRIDE))
-            {
-                /* prevent this window from getting any decor or
-                   functionality */
-                self->mwmhints.flags &= (OB_MWM_FLAG_FUNCTIONS |
-                                         OB_MWM_FLAG_DECORATIONS);
-                self->mwmhints.decorations = 0;
-                self->mwmhints.functions = 0;
-            }
-            if (self->type != (ObClientType) -1)
-                break; /* grab the first legit type */
+    if (info.has_type) {
+        switch (info.type) {
+        case OB_SURFACE_TYPE_DESKTOP: self->type = OB_CLIENT_TYPE_DESKTOP; break;
+        case OB_SURFACE_TYPE_DOCK:    self->type = OB_CLIENT_TYPE_DOCK; break;
+        case OB_SURFACE_TYPE_TOOLBAR: self->type = OB_CLIENT_TYPE_TOOLBAR; break;
+        case OB_SURFACE_TYPE_MENU:    self->type = OB_CLIENT_TYPE_MENU; break;
+        case OB_SURFACE_TYPE_UTILITY: self->type = OB_CLIENT_TYPE_UTILITY; break;
+        case OB_SURFACE_TYPE_SPLASH:  self->type = OB_CLIENT_TYPE_SPLASH; break;
+        case OB_SURFACE_TYPE_DIALOG:  self->type = OB_CLIENT_TYPE_DIALOG; break;
+        case OB_SURFACE_TYPE_NORMAL:  self->type = OB_CLIENT_TYPE_NORMAL; break;
         }
-        g_free(val);
     }
 
-    if (XGetTransientForHint(obt_display, self->window, &t))
-        self->transient = TRUE;
+    if (info.type_override) {
+        /* prevent this window from getting any decor or functionality */
+        self->mwmhints.flags &= (OB_MWM_FLAG_FUNCTIONS |
+                                 OB_MWM_FLAG_DECORATIONS);
+        self->mwmhints.decorations = 0;
+        self->mwmhints.functions = 0;
+    }
+
+    self->transient = info.has_parent;
 
     if (self->type == (ObClientType) -1) {
         /*the window type hint was not set, which means we either classify

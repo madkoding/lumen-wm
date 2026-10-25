@@ -51,6 +51,9 @@ ct_win *ct_window_new(ct_win_type type, const char *title, ct_rect want);
 void ct_window_set_min_size(ct_win *w, int minw, int minh);
 void ct_window_set_parent(ct_win *w, ct_win *parent);
 void ct_window_set_title(ct_win *w, const char *title);
+/* Ask for no decorations from the window manager (Motif hints on X11,
+   client-side xdg-decoration on Wayland). */
+void ct_window_set_undecorated(ct_win *w);
 /* Reserve this many pixels at the top of the screen (a dock). */
 void ct_window_set_strut(ct_win *w, int top);
 void ct_window_map(ct_win *w);
