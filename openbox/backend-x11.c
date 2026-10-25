@@ -19,9 +19,13 @@
    moves here one area at a time (docs/design/backends.md). */
 
 #include "backend.h"
+#include "openbox.h"
+#include "obrender/render.h"
 #include "obt/display.h"
 #include "obt/xqueue.h"
 #include "obt/prop.h"
+
+#include <string.h>
 
 static const ObBackendEvents *events;
 
@@ -468,6 +472,95 @@ static void get_ids(Window w, ObSurfaceInfo *info)
         info->pid = pid;
 }
 
+static void add_icon(ObSurfaceInfo *info, gint w, gint h, guint32 *argb)
+{
+    info->icons = g_renew(ObIcon, info->icons, info->n_icons + 1);
+    info->icons[info->n_icons].width = w;
+    info->icons[info->n_icons].height = h;
+    info->icons[info->n_icons].argb = argb;
+    ++info->n_icons;
+}
+
+static void get_icons(Window win, ObSurfaceInfo *info)
+{
+    guint num;
+    guint32 *data, *argb;
+    guint w, h, i, j;
+    XWMHints *hints;
+
+    for (i = 0; i < info->n_icons; ++i)
+        g_free(info->icons[i].argb);
+    g_free(info->icons);
+    info->icons = NULL;
+    info->n_icons = 0;
+
+    if (OBT_PROP_GETA32(win, NET_WM_ICON, CARDINAL, &data, &num)) {
+        /* figure out how many valid icons are in here */
+        i = 0;
+        while (i + 2 < num) { /* +2 is to make sure there is a w and h */
+            w = data[i++];
+            h = data[i++];
+            /* watch for the data being too small for the specified size,
+               or for zero sized icons. */
+            if (i + w*h > num || w == 0 || h == 0) {
+                i += w*h;
+                continue;
+            }
+            argb = g_new(guint32, w*h);
+            memcpy(argb, &data[i], w*h * sizeof(guint32));
+            add_icon(info, w, h, argb);
+            i += w*h;
+        }
+        g_free(data);
+    }
+
+    /* if we didn't find an image from the NET_WM_ICON stuff, then try the
+       legacy X hints */
+    if (info->n_icons == 0 && (hints = XGetWMHints(obt_display, win))) {
+        if (hints->flags & IconPixmapHint) {
+            gboolean xicon;
+            obt_display_ignore_errors(TRUE);
+            xicon = RrPixmapToRGBA(ob_rr_inst,
+                                   hints->icon_pixmap,
+                                   (hints->flags & IconMaskHint ?
+                                    hints->icon_mask : None),
+                                   (gint*)&w, (gint*)&h, &data);
+            obt_display_ignore_errors(FALSE);
+
+            if (xicon) {
+                if (w > 0 && h > 0) {
+                    /* from ObRender's bit order */
+                    for (j = 0; j < w*h; ++j)
+                        data[j] =
+                            (((data[j] >> RrDefaultAlphaOffset) & 0xff) << 24) +
+                            (((data[j] >> RrDefaultRedOffset) & 0xff) << 16) +
+                            (((data[j] >> RrDefaultGreenOffset) & 0xff) << 8) +
+                            (((data[j] >> RrDefaultBlueOffset) & 0xff) << 0);
+                    add_icon(info, w, h, data);
+                } else
+                    g_free(data);
+            }
+        }
+        XFree(hints);
+    }
+}
+
+static void get_icon_area(Window w, ObSurfaceInfo *info)
+{
+    guint num;
+    guint32 *data;
+
+    RECT_SET(info->icon_area, 0, 0, 0, 0);
+
+    if (OBT_PROP_GETA32(w, NET_WM_ICON_GEOMETRY, CARDINAL, &data, &num)) {
+        if (num == 4)
+            /* don't let them set it with an area < 0 */
+            RECT_SET(info->icon_area, data[0], data[1],
+                     MAX(data[2],0), MAX(data[3],0));
+        g_free(data);
+    }
+}
+
 static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
                              ObSurfaceInfo *info)
 {
@@ -489,6 +582,10 @@ static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
         get_decor_hints((Window)s, info);
     if (fields & OB_SURFACE_INFO_PARENT)
         get_parent((Window)s, info);
+    if (fields & OB_SURFACE_INFO_ICON)
+        get_icons((Window)s, info);
+    if (fields & OB_SURFACE_INFO_ICON_AREA)
+        get_icon_area((Window)s, info);
 }
 
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)
@@ -565,6 +662,20 @@ static void x11_publish_surface_desktop(ObSurfaceId s, guint desktop)
     OBT_PROP_SET32((Window)s, NET_WM_DESKTOP, CARDINAL, desktop);
 }
 
+static void x11_publish_surface_icon(ObSurfaceId s, const ObIcon *icon)
+{
+    gulong *ldata; /* use a long here to satisfy OBT_PROP_SETA32 */
+    gint i, n = icon->width * icon->height;
+
+    ldata = g_new(gulong, n + 2);
+    ldata[0] = icon->width;
+    ldata[1] = icon->height;
+    for (i = 0; i < n; ++i)
+        ldata[i+2] = icon->argb[i];
+    OBT_PROP_SETA32((Window)s, NET_WM_ICON, CARDINAL, ldata, n + 2);
+    g_free(ldata);
+}
+
 static void x11_publish_surface_titles(ObSurfaceId s, const gchar *title,
                                        const gchar *icon)
 {
@@ -620,6 +731,7 @@ const ObBackend ob_backend_x11 = {
     .publish_current_desktop = x11_publish_current_desktop,
     .publish_desktop_names = x11_publish_desktop_names,
     .publish_surface_desktop = x11_publish_surface_desktop,
+    .publish_surface_icon = x11_publish_surface_icon,
     .publish_surface_titles = x11_publish_surface_titles,
     .publish_workareas = x11_publish_workareas,
 };
