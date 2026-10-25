@@ -344,10 +344,12 @@ obt_obt_unittests_SOURCES = \
 
 tests_contract_contract_x11_CPPFLAGS = \
 	$(X_CFLAGS) \
-	$(XTEST_CFLAGS)
+	$(XTEST_CFLAGS) \
+	$(XSYNC_CFLAGS)
 tests_contract_contract_x11_CFLAGS = -std=gnu99
 tests_contract_contract_x11_LDADD = \
 	$(XTEST_LIBS) \
+	$(XSYNC_LIBS) \
 	$(X_LIBS)
 tests_contract_contract_x11_SOURCES = \
 	tests/contract/contract.h \

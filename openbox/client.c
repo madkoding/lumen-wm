@@ -1261,9 +1261,7 @@ static void client_get_all(ObClient *self, gboolean real)
             self->desktop = DESKTOP_ALL;
     }
 
-#ifdef SYNC
     client_update_sync_request_counter(self);
-#endif
 
     client_get_colormap(self);
     client_update_strut(self);
@@ -1643,32 +1641,20 @@ void client_update_protocols(ObClient *self)
        determine if it is still alive */
     if (info.can_ping)
         self->ping = TRUE;
-#ifdef SYNC
     /* if this protocol is requested, then resizing the window will be
        synchronized between the frame and the client */
     if (info.sync_resize)
         self->sync_request = TRUE;
-#endif
 }
 
-#ifdef SYNC
 void client_update_sync_request_counter(ObClient *self)
 {
-    guint32 i;
+    ObSurfaceInfo info = { 0 };
 
-    if (OBT_PROP_GET32(self->window, NET_WM_SYNC_REQUEST_COUNTER, CARDINAL,&i))
-    {
-        XSyncValue val;
-
-        self->sync_counter = i;
-
-        /* this must be set when managing a new window according to EWMH */
-        XSyncIntToValue(&val, 0);
-        XSyncSetCounter(obt_display, self->sync_counter, val);
-    } else
-        self->sync_counter = None;
+    /* the backend sets it back to 0 before each synced resize */
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_SYNC, &info);
+    self->sync_counter = info.sync_counter;
 }
-#endif
 
 static void client_get_colormap(ObClient *self)
 {

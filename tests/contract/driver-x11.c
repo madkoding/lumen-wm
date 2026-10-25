@@ -9,6 +9,9 @@
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#ifdef SYNC
+#include <X11/extensions/sync.h>
+#endif
 #ifdef CT_HAVE_XTEST
 #include <X11/keysym.h>
 #include <X11/extensions/XTest.h>
@@ -20,6 +23,8 @@
 struct ct_win {
     Window id;
     bool destroyed, closed, clicked;
+    unsigned long sync_counter; /* an XSyncCounter, or 0 */
+    int sync_requests;
     XSizeHints hints;
     ct_win *next;
 };
@@ -39,7 +44,8 @@ enum {
     NET_WM_WINDOW_TYPE, NET_WM_WINDOW_TYPE_NORMAL, NET_WM_WINDOW_TYPE_DOCK,
     NET_WM_WINDOW_TYPE_DIALOG, UTF8_STRING, NET_WM_VISIBLE_NAME,
     MOTIF_WM_HINTS, NET_RESTACK_WINDOW, NET_MOVERESIZE_WINDOW,
-    NET_WM_MOVERESIZE, NUM_ATOMS
+    NET_WM_MOVERESIZE, NET_WM_SYNC_REQUEST, NET_WM_SYNC_REQUEST_COUNTER,
+    NUM_ATOMS
 };
 
 static char *atom_names[NUM_ATOMS] = {
@@ -55,7 +61,8 @@ static char *atom_names[NUM_ATOMS] = {
     "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NORMAL",
     "_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_WINDOW_TYPE_DIALOG", "UTF8_STRING",
     "_NET_WM_VISIBLE_NAME", "_MOTIF_WM_HINTS", "_NET_RESTACK_WINDOW",
-    "_NET_MOVERESIZE_WINDOW", "_NET_WM_MOVERESIZE",
+    "_NET_MOVERESIZE_WINDOW", "_NET_WM_MOVERESIZE", "_NET_WM_SYNC_REQUEST",
+    "_NET_WM_SYNC_REQUEST_COUNTER",
 };
 
 static Atom atoms[NUM_ATOMS];
@@ -169,6 +176,9 @@ ct_caps ct_driver_caps(void)
 #ifdef CT_HAVE_XTEST
         | CT_CAP_INPUT
 #endif
+#ifdef SYNC
+        | CT_CAP_SYNC_RESIZE
+#endif
         ;
 }
 
@@ -181,6 +191,20 @@ void ct_pump(void)
         if (e.type == ButtonPress)
             for (ct_win *w = windows; w; w = w->next)
                 if (w->id == e.xbutton.window) w->clicked = true;
+#ifdef SYNC
+        if (e.type == ClientMessage &&
+            e.xclient.message_type == atoms[WM_PROTOCOLS] &&
+            (Atom)e.xclient.data.l[0] == atoms[NET_WM_SYNC_REQUEST])
+            for (ct_win *w = windows; w; w = w->next)
+                if (w->id == e.xclient.window && w->sync_counter) {
+                    /* "drawn": move the counter to the value asked for */
+                    XSyncValue v;
+                    XSyncIntsToValue(&v, (unsigned)e.xclient.data.l[2],
+                                     (int)e.xclient.data.l[3]);
+                    XSyncSetCounter(dpy, w->sync_counter, v);
+                    ++w->sync_requests;
+                }
+#endif
         if (e.type != ClientMessage ||
             e.xclient.message_type != atoms[WM_PROTOCOLS] ||
             (Atom)e.xclient.data.l[0] != atoms[WM_DELETE_WINDOW])
@@ -248,6 +272,33 @@ void ct_window_set_min_size(ct_win *w, int minw, int minh)
 void ct_window_set_parent(ct_win *w, ct_win *parent)
 {
     XSetTransientForHint(dpy, w->id, parent->id);
+}
+
+void ct_window_set_sync(ct_win *w)
+{
+#ifdef SYNC
+    Atom protocols[] = { atoms[WM_DELETE_WINDOW], atoms[NET_WM_SYNC_REQUEST] };
+    XSyncValue zero;
+    int ev, err;
+    unsigned long id;
+
+    if (!XSyncQueryExtension(dpy, &ev, &err)) return;
+    XSyncIntToValue(&zero, 0);
+    w->sync_counter = XSyncCreateCounter(dpy, zero);
+    id = w->sync_counter;
+    XChangeProperty(dpy, w->id, atoms[NET_WM_SYNC_REQUEST_COUNTER],
+                    XA_CARDINAL, 32, PropModeReplace,
+                    (unsigned char *)&id, 1);
+    XSetWMProtocols(dpy, w->id, protocols, 2);
+#else
+    (void)w;
+#endif
+}
+
+int ct_window_sync_requests(ct_win *w)
+{
+    ct_pump();
+    return w->sync_requests;
 }
 
 void ct_window_set_undecorated(ct_win *w)
@@ -673,6 +724,8 @@ void ct_input_client_drag(ct_win *w, ct_edge edge, int dx, int dy)
         XTestFakeMotionEvent(dpy, -1, x + dx * i / steps, y + dy * i / steps,
                              0);
         fake_sync();
+        /* a client keeps answering while it is dragged */
+        ct_pump();
     }
     XTestFakeButtonEvent(dpy, 1, False, 0);
     fake_sync();

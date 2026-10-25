@@ -30,6 +30,9 @@
 #include "obt/keyboard.h"
 
 #include <X11/Xatom.h>
+#ifdef SYNC
+#include <X11/extensions/sync.h>
+#endif
 #include <string.h>
 
 static const ObBackendEvents *events;
@@ -645,6 +648,15 @@ static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
         if (info->has_user_time)
             info->user_time = t;
     }
+    if (fields & OB_SURFACE_INFO_SYNC) {
+        guint32 c;
+        info->sync_counter = 0;
+#ifdef SYNC
+        if (OBT_PROP_GET32((Window)s, NET_WM_SYNC_REQUEST_COUNTER, CARDINAL,
+                           &c))
+            info->sync_counter = c;
+#endif
+    }
 }
 
 /* --- events --- */
@@ -695,6 +707,10 @@ static ObSurfaceInfoFields property_fields(Atom a)
     if (a == OBT_PROP_ATOM(NET_WM_ICON_GEOMETRY))
         return OB_SURFACE_INFO_ICON_AREA;
     if (a == OBT_PROP_ATOM(NET_WM_USER_TIME)) return OB_SURFACE_INFO_USER_TIME;
+#ifdef SYNC
+    if (a == OBT_PROP_ATOM(NET_WM_SYNC_REQUEST_COUNTER))
+        return OB_SURFACE_INFO_SYNC;
+#endif
     return 0;
 }
 
@@ -1116,6 +1132,114 @@ static void x11_pointer_warp(gint x, gint y, gboolean swallow)
     }
 }
 
+#ifdef SYNC
+/* the resize being synced: its window, counter, alarm and the value it
+   was last asked to reach */
+static Window sync_window = None;
+static XSyncCounter sync_counter = None;
+static XSyncAlarm sync_alarm = None;
+static gulong sync_value;
+#endif
+
+static gboolean x11_sync_start(ObSurfaceId s, guint32 counter)
+{
+#ifdef SYNC
+    XSyncValue val;
+    XSyncAlarmAttributes aa;
+
+    if (!obt_display_extension_sync || !counter) return FALSE;
+    if (sync_alarm != None) XSyncDestroyAlarm(obt_display, sync_alarm);
+
+    sync_window = (Window)s;
+    sync_counter = counter;
+
+    /* set the counter to an initial value */
+    XSyncIntToValue(&val, 0);
+    XSyncSetCounter(obt_display, sync_counter, val);
+
+    /* this will be incremented when we tell the client what we're
+       looking for */
+    sync_value = 0;
+
+    /* the next sequence we're waiting for with the alarm */
+    XSyncIntToValue(&val, 1);
+
+    /* set an alarm on the counter */
+    aa.trigger.counter = sync_counter;
+    aa.trigger.wait_value = val;
+    aa.trigger.value_type = XSyncAbsolute;
+    aa.trigger.test_type = XSyncPositiveTransition;
+    aa.events = True;
+    XSyncIntToValue(&aa.delta, 1);
+    sync_alarm = XSyncCreateAlarm(obt_display,
+                                  XSyncCACounter |
+                                  XSyncCAValue |
+                                  XSyncCAValueType |
+                                  XSyncCATestType |
+                                  XSyncCADelta |
+                                  XSyncCAEvents,
+                                  &aa);
+    return sync_alarm != None;
+#else
+    (void)s; (void)counter;
+    return FALSE;
+#endif
+}
+
+static void x11_sync_request(ObSurfaceId s, guint32 time)
+{
+#ifdef SYNC
+    XEvent ce;
+    XSyncValue val;
+
+    if ((Window)s != sync_window || sync_alarm == None) return;
+
+    /* increment the value we're waiting for */
+    ++sync_value;
+    XSyncIntToValue(&val, sync_value);
+
+    /* tell the client what we're waiting for */
+    ce.xclient.type = ClientMessage;
+    ce.xclient.message_type = OBT_PROP_ATOM(WM_PROTOCOLS);
+    ce.xclient.display = obt_display;
+    ce.xclient.window = sync_window;
+    ce.xclient.format = 32;
+    ce.xclient.data.l[0] = OBT_PROP_ATOM(NET_WM_SYNC_REQUEST);
+    ce.xclient.data.l[1] = time;
+    ce.xclient.data.l[2] = XSyncValueLow32(val);
+    ce.xclient.data.l[3] = XSyncValueHigh32(val);
+    ce.xclient.data.l[4] = 0l;
+    XSendEvent(obt_display, sync_window, FALSE, NoEventMask, &ce);
+#else
+    (void)s; (void)time;
+#endif
+}
+
+static void x11_sync_stop(void)
+{
+#ifdef SYNC
+    /* turn off the alarm */
+    if (sync_alarm != None) {
+        XSyncDestroyAlarm(obt_display, sync_alarm);
+        sync_alarm = None;
+    }
+    sync_window = None;
+    sync_counter = None;
+#endif
+}
+
+void backend_x11_sync_alarm(const XEvent *e)
+{
+#ifdef SYNC
+    const XSyncAlarmNotifyEvent *se = (const XSyncAlarmNotifyEvent*)e;
+
+    if (sync_alarm != None && se->alarm == sync_alarm)
+        events->surface_synced((ObSurfaceId)sync_window);
+#else
+    (void)e;
+#endif
+}
+
 static void x11_grab_server(gboolean grab)
 {
     if (grab) {
@@ -1147,6 +1271,9 @@ const ObBackend ob_backend_x11 = {
     .surface_kill = x11_surface_kill,
     .surface_set_states = x11_surface_set_states,
     .surface_ping = x11_surface_ping,
+    .sync_start = x11_sync_start,
+    .sync_request = x11_sync_request,
+    .sync_stop = x11_sync_stop,
     .surface_info = x11_surface_info,
 
     .restack = x11_restack,

@@ -698,9 +698,7 @@ static void event_process(const XEvent *ec, gpointer data)
     else if (obt_display_extension_sync &&
              e->type == obt_display_extension_sync_basep + XSyncAlarmNotify)
     {
-        XSyncAlarmNotifyEvent *se = (XSyncAlarmNotifyEvent*)e;
-        if (se->alarm == moveresize_alarm && moveresize_in_progress)
-            moveresize_event(e);
+        backend_x11_sync_alarm(e);
     }
 #endif
 
@@ -1175,17 +1173,6 @@ static void event_handle_client(ObClient *client, XEvent *e)
         if (msgtype == OBT_PROP_ATOM(NET_WM_WINDOW_OPACITY)) {
             client_update_opacity(client);
         }
-#ifdef SYNC
-        else if (msgtype == OBT_PROP_ATOM(NET_WM_SYNC_REQUEST_COUNTER)) {
-            /* if they are resizing right now this would cause weird behaviour.
-               if one day a user reports clients stop resizing, then handle
-               this better by resetting a new XSync alarm and stuff on the
-               new counter, but I expect it will never happen */
-            if (moveresize_client == client)
-                moveresize_end(FALSE);
-            client_update_sync_request_counter(client);
-        }
-#endif
         break;
     case ColormapNotify:
         client_update_colormap(client, e->xcolormap.colormap);
