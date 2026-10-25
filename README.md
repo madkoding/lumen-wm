@@ -326,6 +326,7 @@ the shelf already set up: the Sansation font, Lucide icons, pinned apps, and mus
   Design details are in [`doc/shelf.md`](doc/shelf.md).
 - [`tools/shelf-themes.sh`](tools/shelf-themes.sh) takes the screenshots above and checks that the text is
   readable in every theme. Add `COMPOSITOR=1` to try the cairo menus. CI runs it on every pull request.
+- Sharing screenshots (README, r/unixporn): see [`doc/screenshots.md`](doc/screenshots.md).
 - Building from git: see [`README.GIT`](README.GIT).
 
 ## License and credits
