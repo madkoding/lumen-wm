@@ -2591,35 +2591,21 @@ static void client_change_wm_state(ObClient *self)
 
 static void client_change_state(ObClient *self)
 {
-    gulong netstate[12];
-    guint num;
+    ObSurfaceStates s = 0;
 
-    num = 0;
-    if (self->modal)
-        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_MODAL);
-    if (self->shaded)
-        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_SHADED);
-    if (self->iconic)
-        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_HIDDEN);
-    if (self->skip_taskbar)
-        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_SKIP_TASKBAR);
-    if (self->skip_pager)
-        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_SKIP_PAGER);
-    if (self->fullscreen)
-        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_FULLSCREEN);
-    if (self->max_vert)
-        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_VERT);
-    if (self->max_horz)
-        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_HORZ);
-    if (self->above)
-        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_ABOVE);
-    if (self->below)
-        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_BELOW);
-    if (self->demands_attention)
-        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_DEMANDS_ATTENTION);
-    if (self->undecorated)
-        netstate[num++] = OBT_PROP_ATOM(OB_WM_STATE_UNDECORATED);
-    OBT_PROP_SETA32(self->window, NET_WM_STATE, ATOM, netstate, num);
+    if (self->modal)             s |= OB_SURFACE_STATE_MODAL;
+    if (self->shaded)            s |= OB_SURFACE_STATE_SHADED;
+    if (self->iconic)            s |= OB_SURFACE_STATE_ICONIC;
+    if (self->skip_taskbar)      s |= OB_SURFACE_STATE_SKIP_TASKBAR;
+    if (self->skip_pager)        s |= OB_SURFACE_STATE_SKIP_PAGER;
+    if (self->fullscreen)        s |= OB_SURFACE_STATE_FULLSCREEN;
+    if (self->max_vert)          s |= OB_SURFACE_STATE_MAXIMIZED_VERT;
+    if (self->max_horz)          s |= OB_SURFACE_STATE_MAXIMIZED_HORZ;
+    if (self->above)             s |= OB_SURFACE_STATE_ABOVE;
+    if (self->below)             s |= OB_SURFACE_STATE_BELOW;
+    if (self->demands_attention) s |= OB_SURFACE_STATE_URGENT;
+    if (self->undecorated)       s |= OB_SURFACE_STATE_UNDECORATED;
+    ob_backend->surface_set_states(self->window, s);
 
     if (self->frame)
         frame_adjust_state(self->frame);
@@ -3656,12 +3642,10 @@ void client_close(ObClient *self)
     if (!self->delete_window)
         /* don't use client_kill(), we should only kill based on PID in
            response to a lack of PING replies */
-        XKillClient(obt_display, self->window);
+        ob_backend->surface_kill(self->window);
     else {
         /* request the client to close with WM_DELETE_WINDOW */
-        OBT_PROP_MSG_TO(self->window, self->window, WM_PROTOCOLS,
-                        OBT_PROP_ATOM(WM_DELETE_WINDOW), event_time(),
-                        0, 0, 0, NoEventMask);
+        ob_backend->surface_close(self->window, event_time());
 
         /* we're trying to close the window, so see if it is responding. if it
            is not, then we will let them kill the window */
@@ -3776,7 +3760,7 @@ void client_kill(ObClient *self)
     }
     else {
         /* running on a remote host */
-        XKillClient(obt_display, self->window);
+        ob_backend->surface_kill(self->window);
     }
 }
 
@@ -4120,35 +4104,8 @@ gboolean client_focus(ObClient *self)
        go moving on us */
     event_halt_focus_delay();
 
-    obt_display_ignore_errors(TRUE);
-
-    if (self->can_focus) {
-        /* This can cause a BadMatch error with CurrentTime, or if an app
-           passed in a bad time for _NET_WM_ACTIVE_WINDOW. */
-        XSetInputFocus(obt_display, self->window, RevertToPointerRoot,
-                       event_time());
-    }
-
-    if (self->focus_notify) {
-        XEvent ce;
-        ce.xclient.type = ClientMessage;
-        ce.xclient.message_type = OBT_PROP_ATOM(WM_PROTOCOLS);
-        ce.xclient.display = obt_display;
-        ce.xclient.window = self->window;
-        ce.xclient.format = 32;
-        ce.xclient.data.l[0] = OBT_PROP_ATOM(WM_TAKE_FOCUS);
-        ce.xclient.data.l[1] = event_time();
-        ce.xclient.data.l[2] = 0l;
-        ce.xclient.data.l[3] = 0l;
-        ce.xclient.data.l[4] = 0l;
-        XSendEvent(obt_display, self->window, FALSE, NoEventMask, &ce);
-    }
-
-    obt_display_ignore_errors(FALSE);
-
-    ob_debug_type(OB_DEBUG_FOCUS, "Error focusing? %d",
-                  obt_display_error_occured);
-    return !obt_display_error_occured;
+    return ob_backend->surface_focus(self->window, event_time(),
+                                     self->can_focus, self->focus_notify);
 }
 
 static void client_present(ObClient *self, gboolean here, gboolean raise,

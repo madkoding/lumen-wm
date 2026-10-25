@@ -88,7 +88,10 @@ typedef enum {
     OB_SURFACE_STATE_URGENT         = 1 << 8,
     OB_SURFACE_STATE_FOCUSED        = 1 << 9,
     OB_SURFACE_STATE_SKIP_TASKBAR   = 1 << 10,
-    OB_SURFACE_STATE_SKIP_PAGER     = 1 << 11
+    OB_SURFACE_STATE_SKIP_PAGER     = 1 << 11,
+    OB_SURFACE_STATE_MODAL          = 1 << 12,
+    /*! the core is drawing no decorations for it */
+    OB_SURFACE_STATE_UNDECORATED    = 1 << 13
 } ObSurfaceStates;
 
 /*! Who asked, so focus stealing prevention can weigh it. */
@@ -189,12 +192,16 @@ struct _ObBackend {
       size. The frame around it is placed with canvas_place(). */
     void (*surface_configure)(ObSurfaceId s, const Rect *area);
     void (*surface_show)(ObSurfaceId s, gboolean show);
-    /*! Give it the keyboard. Returns FALSE when it can't take it. */
-    gboolean (*surface_focus)(ObSurfaceId s, guint32 time);
+    /*! Give it the keyboard. input: hand it the keyboard focus; take_focus:
+      tell it to take the focus itself (ICCCM WM_TAKE_FOCUS, X11 only).
+      Returns FALSE when it couldn't be focused. */
+    gboolean (*surface_focus)(ObSurfaceId s, guint32 time, gboolean input,
+                              gboolean take_focus);
     /*! Ask it to close; it may refuse or hang. */
     void (*surface_close)(ObSurfaceId s, guint32 time);
     /*! Disconnect its client. */
     void (*surface_kill)(ObSurfaceId s);
+    /*! Tell it every state it is in now. */
     void (*surface_set_states)(ObSurfaceId s, ObSurfaceStates states);
     /*! Ask whether it still answers; the answer comes as pong(). */
     void (*surface_ping)(ObSurfaceId s, guint32 serial);

@@ -89,6 +89,88 @@ static void x11_output_area(guint output, Rect *area)
     *area = outputs[output];
 }
 
+/* managed surfaces */
+
+static gboolean x11_surface_focus(ObSurfaceId s, guint32 time,
+                                  gboolean input, gboolean take_focus)
+{
+    obt_display_ignore_errors(TRUE);
+
+    if (input)
+        /* This can cause a BadMatch error with CurrentTime, or if an app
+           passed in a bad time for _NET_WM_ACTIVE_WINDOW. */
+        XSetInputFocus(obt_display, (Window)s, RevertToPointerRoot, time);
+
+    if (take_focus) {
+        XEvent ce;
+        ce.xclient.type = ClientMessage;
+        ce.xclient.message_type = OBT_PROP_ATOM(WM_PROTOCOLS);
+        ce.xclient.display = obt_display;
+        ce.xclient.window = (Window)s;
+        ce.xclient.format = 32;
+        ce.xclient.data.l[0] = OBT_PROP_ATOM(WM_TAKE_FOCUS);
+        ce.xclient.data.l[1] = time;
+        ce.xclient.data.l[2] = 0l;
+        ce.xclient.data.l[3] = 0l;
+        ce.xclient.data.l[4] = 0l;
+        XSendEvent(obt_display, (Window)s, FALSE, NoEventMask, &ce);
+    }
+
+    obt_display_ignore_errors(FALSE);
+    return !obt_display_error_occured;
+}
+
+static void x11_surface_close(ObSurfaceId s, guint32 time)
+{
+    OBT_PROP_MSG_TO((Window)s, (Window)s, WM_PROTOCOLS,
+                    OBT_PROP_ATOM(WM_DELETE_WINDOW), time, 0, 0, 0,
+                    NoEventMask);
+}
+
+static void x11_surface_kill(ObSurfaceId s)
+{
+    XKillClient(obt_display, (Window)s);
+}
+
+static void x11_surface_set_states(ObSurfaceId s, ObSurfaceStates st)
+{
+    gulong netstate[12];
+    guint num = 0;
+
+    if (st & OB_SURFACE_STATE_MODAL)
+        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_MODAL);
+    if (st & OB_SURFACE_STATE_SHADED)
+        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_SHADED);
+    if (st & OB_SURFACE_STATE_ICONIC)
+        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_HIDDEN);
+    if (st & OB_SURFACE_STATE_SKIP_TASKBAR)
+        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_SKIP_TASKBAR);
+    if (st & OB_SURFACE_STATE_SKIP_PAGER)
+        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_SKIP_PAGER);
+    if (st & OB_SURFACE_STATE_FULLSCREEN)
+        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_FULLSCREEN);
+    if (st & OB_SURFACE_STATE_MAXIMIZED_VERT)
+        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_VERT);
+    if (st & OB_SURFACE_STATE_MAXIMIZED_HORZ)
+        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_HORZ);
+    if (st & OB_SURFACE_STATE_ABOVE)
+        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_ABOVE);
+    if (st & OB_SURFACE_STATE_BELOW)
+        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_BELOW);
+    if (st & OB_SURFACE_STATE_URGENT)
+        netstate[num++] = OBT_PROP_ATOM(NET_WM_STATE_DEMANDS_ATTENTION);
+    if (st & OB_SURFACE_STATE_UNDECORATED)
+        netstate[num++] = OBT_PROP_ATOM(OB_WM_STATE_UNDECORATED);
+    OBT_PROP_SETA32((Window)s, NET_WM_STATE, ATOM, netstate, num);
+}
+
+static void x11_surface_ping(ObSurfaceId s, guint32 serial)
+{
+    OBT_PROP_MSG_TO((Window)s, (Window)s, WM_PROTOCOLS,
+                    OBT_PROP_ATOM(NET_WM_PING), serial, (Window)s, 0, 0,
+                    NoEventMask);
+}
+
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)
 {
     Window *win = g_new(Window, n + 1);
@@ -192,6 +274,12 @@ const ObBackend ob_backend_x11 = {
 
     .output_count = x11_output_count,
     .output_area = x11_output_area,
+
+    .surface_focus = x11_surface_focus,
+    .surface_close = x11_surface_close,
+    .surface_kill = x11_surface_kill,
+    .surface_set_states = x11_surface_set_states,
+    .surface_ping = x11_surface_ping,
 
     .restack = x11_restack,
 

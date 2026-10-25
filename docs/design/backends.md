@@ -105,7 +105,10 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       published separately, at the points where the core changes each.
    4. Stacking: `restack` replaces XRestackWindows (done). It keeps X's shape: a reference window and the
       windows to put below it, top first, so the core still restacks one layer at a time.
-   5. Surfaces: `surface_*` replaces the XSetInputFocus, WM_PROTOCOLS and kill calls in `client.c`.
+   5. Surfaces: `surface_*` replaces the XSetInputFocus, WM_PROTOCOLS and kill calls in `client.c` (done for
+      focus, close, kill, `_NET_WM_STATE` and ping). `surface_configure` and `surface_show` come with the frames,
+      which still reparent and map the client themselves, and focusing nothing (`focus.c`'s fallback to the
+      support window) comes with the support window.
    6. Client info: property reading in `client.c` becomes `ObSurfaceInfo`, filled by the backend.
    7. Requests: `event.c` splits in two. The X11 half turns XEvents into `ObBackendEvents`, and the core half
       handles them.
