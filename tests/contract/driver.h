@@ -25,6 +25,7 @@ typedef enum {
     CT_CAP_STACKING        = 1 << 3, /* the full stacking order is visible */
     CT_CAP_CLIENT_FOCUS    = 1 << 4, /* a client can take the focus itself */
     CT_CAP_INPUT           = 1 << 5, /* the driver can type and click */
+    CT_CAP_SYNC_RESIZE     = 1 << 6, /* clients can sync resizes (XSync) */
 } ct_caps;
 
 typedef enum {
@@ -65,6 +66,9 @@ void ct_window_set_strut(ct_win *w, int top);
 /* Before mapping: ask to show up in this state, or on this desktop. */
 void ct_window_set_initial_state(ct_win *w, ct_state s);
 void ct_window_set_initial_desktop(ct_win *w, int d);
+/* Before mapping: the client draws each size the window manager asks for
+   and says when it is done (CT_CAP_SYNC_RESIZE), as toolkits do. */
+void ct_window_set_sync(ct_win *w);
 void ct_window_map(ct_win *w);
 /* The client gives itself the focus (CT_CAP_CLIENT_FOCUS). */
 void ct_window_take_focus(ct_win *w);
@@ -128,6 +132,9 @@ void ct_input_client_drag(ct_win *w, ct_edge edge, int dx, int dy);
 void ct_request_keyboard_move(ct_win *w);
 /* Click the first button at x, y in the window. */
 void ct_input_click(ct_win *w, int x, int y);
+/* How many times the window manager asked a syncing client to tell it
+   when it has drawn a new size. */
+int ct_window_sync_requests(ct_win *w);
 /* Whether the client saw a click since it was made. */
 bool ct_window_clicked(ct_win *w);
 

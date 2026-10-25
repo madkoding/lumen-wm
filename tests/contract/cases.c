@@ -532,6 +532,24 @@ static void client_resize_follows_pointer(void)
     ct_window_destroy(w);
 }
 
+/* A client that syncs its resizes is asked to, and still ends up at the
+   size it was dragged to. */
+static void synced_resize_follows_pointer(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT | CT_CAP_SYNC_RESIZE);
+    ct_win *w = ct_window_new(CT_WIN_NORMAL, "synced resize", SMALL);
+    ct_window_set_sync(w);
+    ct_window_map(w);
+    CT_EVENTUALLY(ct_window_managed(w) && ct_window_viewable(w));
+    ct_settle();
+
+    ct_input_client_drag(w, CT_EDGE_BOTTOM_RIGHT, 70, 40);
+    CT_EVENTUALLY(ct_window_client(w).w == SMALL.w + 70 &&
+                  ct_window_client(w).h == SMALL.h + 40);
+    CT_CHECK(ct_window_sync_requests(w) > 0);
+    ct_window_destroy(w);
+}
+
 /* A keyboard move goes a step for each arrow key, and Return ends it. */
 static void keyboard_move_steps(void)
 {
@@ -610,6 +628,7 @@ const ct_case ct_cases[] = {
     { "alt_drag_moves", alt_drag_moves },
     { "client_move_follows_pointer", client_move_follows_pointer },
     { "client_resize_follows_pointer", client_resize_follows_pointer },
+    { "synced_resize_follows_pointer", synced_resize_follows_pointer },
     { "keyboard_move_steps", keyboard_move_steps },
     { NULL, NULL }
 };
