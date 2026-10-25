@@ -25,6 +25,8 @@
 #include "screen.h"
 #include "obt/display.h"
 #include "obrender/render.h"
+#include "obrender/font.h"
+#include "obrender/theme.h"
 
 #include <X11/extensions/shape.h>
 #include <cairo.h>
@@ -2028,6 +2030,214 @@ gint shelf_menu_limit(void)
 {
     if (!S.win || !S.shown) return -1;
     return S.wy + S.island_y - 8;
+}
+
+gboolean shelf_menu_argb(Visual **visual, Colormap *cmap)
+{
+    static Colormap menu_cmap;
+    Display *d = obt_display;
+    XVisualInfo vi;
+    gchar *cm = g_strdup_printf("_NET_WM_CM_S%d", ob_screen);
+    gboolean ok = XGetSelectionOwner(d, XInternAtom(d, cm, False)) != None &&
+                  XMatchVisualInfo(d, ob_screen, 32, TrueColor, &vi);
+
+    g_free(cm);
+    if (!ok) return FALSE;
+    if (!menu_cmap)
+        menu_cmap = XCreateColormap(d, obt_root(ob_screen), vi.visual,
+                                    AllocNone);
+    if (visual) *visual = vi.visual;
+    if (cmap) *cmap = menu_cmap;
+    return TRUE;
+}
+
+/* the text of a menu entry, in the theme's font, laid out in a box */
+static void menu_text(cairo_t *cr, const gchar *text, const RrFont *font,
+                      RrJustify justify, gdouble x, gdouble y, gdouble w,
+                      gdouble h, Rgb c, gdouble alpha)
+{
+    PangoLayout *l;
+    gint lw, lh;
+
+    if (!text || !*text || w <= 0) return;
+    l = pango_cairo_create_layout(cr);
+    pango_layout_set_font_description(l, font->font_desc);
+    pango_layout_set_text(l, text, -1);
+    pango_layout_set_ellipsize(l, PANGO_ELLIPSIZE_END);
+    pango_layout_set_width(l, (gint)(w * PANGO_SCALE));
+    pango_layout_set_alignment(l, justify == RR_JUSTIFY_CENTER ?
+                               PANGO_ALIGN_CENTER : justify == RR_JUSTIFY_RIGHT ?
+                               PANGO_ALIGN_RIGHT : PANGO_ALIGN_LEFT);
+    pango_layout_get_pixel_size(l, &lw, &lh);
+    set_rgb(cr, c, alpha);
+    cairo_move_to(cr, x, y + floor((h - lh) / 2.0));
+    pango_cairo_show_layout(cr, l);
+    g_object_unref(l);
+}
+
+/* a 1-bit mask of the theme (the client menu's glyphs), centred in a box */
+static void menu_mask(cairo_t *cr, const RrPixmapMask *m, gdouble x,
+                      gdouble y, gdouble size, Rgb c, gdouble alpha)
+{
+    gint i, j, stride;
+    gdouble ox, oy;
+
+    if (!m || !m->data) return;
+    stride = (m->width + 7) / 8;
+    ox = floor(x + (size - m->width) / 2.0);
+    oy = floor(y + (size - m->height) / 2.0);
+    set_rgb(cr, c, alpha);
+    for (j = 0; j < m->height; ++j)
+        for (i = 0; i < m->width; ++i)
+            if (m->data[j * stride + i / 8] & (1 << (i % 8)))
+                cairo_rectangle(cr, ox + i, oy + j, 1, 1);
+    cairo_fill(cr);
+}
+
+void shelf_menu_paint(ObMenuFrame *f, Visual *visual)
+{
+    const RrTheme *t = ob_rr_theme;
+    gint w = f->area.width, h = f->area.height, b = t->mbwidth;
+    gint pad = MENU_ITEM_PADDING;
+    gdouble r = MIN(config_shelf_menu_radius, MIN(w, h) / 2.0);
+    gdouble ir = CLAMP(r - config_shelf_menu_padding, 4, 8);
+    Fill bg = rr_fill(t->a_menu), sel = rr_fill(t->a_menu_selected);
+    Rgb bgm = fill_mean(&bg), selm = fill_mean(&sel);
+    Rgb ink = readable(rr_rgb(t->menu_color), bgm, 4.5);
+    Pixmap pm;
+    cairo_surface_t *dst;
+    cairo_t *cr;
+    GList *it;
+
+    if (w <= 0 || h <= 0) return;
+    /* drawn into the window's background pixmap, as RrPaint does, so the
+       server repaints it when the menu is mapped or exposed */
+    pm = XCreatePixmap(obt_display, f->window, w, h, 32);
+    dst = cairo_xlib_surface_create(obt_display, pm, visual, w, h);
+    cr = cairo_create(dst);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_BEST);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    /* the box: the border, then the background inside it; the background
+       has the size of the items' own, so gradients line up */
+    if (b > 0) {
+        rrect(cr, 0, 0, w, h, r);
+        set_rgb(cr, rr_rgb(t->menu_border_color), 1);
+        cairo_fill(cr);
+    }
+    rrect(cr, b, b, w - 2 * b, h - 2 * b, MAX(r - b, 0));
+    fill_source(cr, &bg, b, b, w - 2 * b, h - 2 * b, 1);
+    cairo_fill(cr);
+    if (b == 0) {
+        rrect(cr, 0.5, 0.5, w - 1, h - 1, MAX(r - 0.5, 0));
+        cairo_set_line_width(cr, 1);
+        set_rgb(cr, ink, 0.12);
+        cairo_stroke(cr);
+    }
+
+    for (it = f->entries; it; it = g_list_next(it)) {
+        ObMenuEntryFrame *e = it->data;
+        ObMenuEntry *me = e->entry;
+        gdouble ex = b + e->area.x, ey = b + e->area.y;
+        gdouble ew = e->area.width, eh = e->area.height;
+        gboolean selected = e == f->selected, enabled = TRUE;
+        const gchar *label = NULL;
+        Rgb c;
+        gdouble isz, calpha;
+
+        if (me->type == OB_MENU_ENTRY_TYPE_SEPARATOR) {
+            if (me->data.separator.label) {
+                /* a title: quiet text on the menu, not a box */
+                menu_text(cr, me->data.separator.label, t->menu_title_font,
+                          t->a_menu_text_title->texture[0].data.text.justify,
+                          ex + pad + 2, ey, ew - 2 * pad - 4, eh, ink, 0.55);
+            } else {
+                cairo_rectangle(cr, ex + pad + 2, floor(ey + eh / 2.0),
+                                ew - 2 * pad - 4, 1);
+                set_rgb(cr, ink, 0.14);
+                cairo_fill(cr);
+            }
+            continue;
+        }
+
+        if (me->type == OB_MENU_ENTRY_TYPE_NORMAL) {
+            enabled = me->data.normal.enabled;
+            label = me->data.normal.label;
+        } else if (me->data.submenu.submenu) {
+            label = me->data.submenu.submenu->title;
+        }
+        if (selected && enabled) {
+            rrect(cr, ex, ey, ew, eh, MIN(ir, eh / 2.0));
+            fill_source(cr, &sel, ex, ey, ew, eh, 1);
+            cairo_fill(cr);
+        }
+        /* the theme's colours, as long as they read on what is under them;
+           a disabled entry that would vanish is the text, dimmed */
+        {
+            gdouble alpha = 1;
+            if (!enabled) {
+                c = rr_rgb(t->menu_disabled_color);
+                if (contrast(c, bgm) < 3.0) { c = ink; alpha = 0.45; }
+            } else if (selected) {
+                c = readable(rr_rgb(t->menu_selected_color), selm, 4.5);
+            } else {
+                c = ink;
+            }
+            calpha = alpha;
+        }
+
+        isz = eh - f->item_margin.top - f->item_margin.bottom;
+        if (me->data.normal.icon) {
+            cairo_surface_t *ic = icon_surface(me->data.normal.icon);
+            if (ic) {
+                gint iw = cairo_image_surface_get_width(ic);
+                gint ih = cairo_image_surface_get_height(ic);
+                cairo_save(cr);
+                cairo_translate(cr, ex + pad, ey + f->item_margin.top);
+                cairo_scale(cr, isz / iw, isz / ih);
+                cairo_set_source_surface(cr, ic, 0, 0);
+                cairo_pattern_set_filter(cairo_get_source(cr),
+                                         CAIRO_FILTER_BEST);
+                cairo_paint_with_alpha(cr, enabled ?
+                                       me->data.normal.icon_alpha / 255.0 :
+                                       0.5);
+                cairo_restore(cr);
+                cairo_surface_destroy(ic);
+            }
+        } else if (me->type == OB_MENU_ENTRY_TYPE_NORMAL &&
+                   me->data.normal.mask) {
+            menu_mask(cr, me->data.normal.mask, ex + pad,
+                      ey + f->item_margin.top, isz, c, calpha);
+        }
+
+        menu_text(cr, label, t->menu_font, RR_JUSTIFY_LEFT, ex + f->text_x,
+                  ey, f->text_w - (me->type == OB_MENU_ENTRY_TYPE_SUBMENU ?
+                                   eh : 0), eh, c, calpha);
+
+        if (me->type == OB_MENU_ENTRY_TYPE_SUBMENU) {
+            /* the arrow: a small chevron at the right end */
+            gdouble ax = ex + ew - pad - 6, ay = ey + eh / 2.0;
+            cairo_new_path(cr);
+            cairo_move_to(cr, ax - 2.5, ay - 4.5);
+            cairo_line_to(cr, ax + 2, ay);
+            cairo_line_to(cr, ax - 2.5, ay + 4.5);
+            cairo_set_line_width(cr, 1.6);
+            cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+            cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+            set_rgb(cr, c, 0.8 * calpha);
+            cairo_stroke(cr);
+        }
+    }
+
+    cairo_destroy(cr);
+    cairo_surface_flush(dst);
+    cairo_surface_destroy(dst);
+    XSetWindowBackgroundPixmap(obt_display, f->window, pm);
+    XClearWindow(obt_display, f->window);
+    XFreePixmap(obt_display, pm);
 }
 
 void shelf_menu_startup(void)

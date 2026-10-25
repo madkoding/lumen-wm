@@ -8,7 +8,9 @@
 # PREFIX is where Openbox is installed (default /usr/local); OUTPUT defaults to
 # docs/screenshots/shelf-themes.png; the menus (a tile's with its window submenu,
 # the network's, the volume's and the power's) go to the same name ending in -menus.png. ONLY=Onyx limits it to
-# one theme. Needs Xvfb, xdotool, xterm and ImageMagick.
+# one theme, COMPOSITOR=1 runs picom (the menus are then drawn with cairo:
+# anti-aliased corners and highlight; needs picom and hsetroot), RADIUS and PADDING set <menuRadius> and <menuPadding>.
+# Needs Xvfb, xdotool, xterm and ImageMagick.
 # Exits non-zero when a theme fails the contrast check.
 set -u
 PREFIX=${1:-/usr/local}
@@ -46,9 +48,9 @@ for dir in "$ROOT"/themes/${ONLY:-*}/; do
     mkdir -p "$home/.config/openbox" "$home/.themes"
     cp -r "$ROOT"/themes/* "$home/.themes/"
     python3 - "$ROOT/data/rc.xml" "$home/.config/openbox/rc.xml" "$t" \
-              "$WORK" <<'PY'
+              "$WORK" "${RADIUS:-12}" "${PADDING:-8}" <<'PY'
 import re, sys
-src, dst, theme, work = sys.argv[1:5]
+src, dst, theme, work, radius, padding = sys.argv[1:7]
 s = open(src).read()
 s = re.sub(r'(<theme>\s*<name>)[^<]*', r'\g<1>' + theme, s, count=1)
 s = s.replace('<enabled>no</enabled>', '<enabled>yes</enabled>', 1)
@@ -65,16 +67,27 @@ s = s.replace('</shelf>',
               '<secured>true</secured><password>true</password></network>'
               '<volume><level>%s/level</level><up>true</up><down>true</down>'
               '<toggle>true</toggle></volume>'
+              '<menuRadius>%s</menuRadius><menuPadding>%s</menuPadding>'
               '<power><item><name>Log out</name><command>true</command></item>'
               '<item><name>Shut down</name><command>true</command></item>'
-              '</power></shelf>' % (work, work, work, work), 1)
+              '</power></shelf>' % (work, work, work, work,
+                                   radius, padding), 1)
 open(dst, 'w').write(s)
 PY
     Xvfb $DISP -screen 0 1000x420x24 >/dev/null 2>&1 &
     xp=$!
     sleep 1
     export DISPLAY=$DISP
-    display -window root -size 1000x420 gradient:'#6d8fb5-#3b5173' &
+    if [ -n "${COMPOSITOR:-}" ]; then
+        # the compositor paints the wallpaper from _XROOTPMAP_ID
+        [ -f "$WORK/wall.png" ] ||
+            convert -size 1000x420 gradient:'#6d8fb5-#3b5173' "$WORK/wall.png"
+        hsetroot -fill "$WORK/wall.png" >/dev/null
+        picom --backend xrender --no-fading-openclose 2>/dev/null &
+        sleep 0.5
+    else
+        display -window root -size 1000x420 gradient:'#6d8fb5-#3b5173' &
+    fi
     HOME=$home OB_SHELF_DEBUG=1 "$PREFIX/bin/openbox" \
         --config-file "$home/.config/openbox/rc.xml" 2>"$WORK/$t.log" &
     op=$!
@@ -94,7 +107,7 @@ PY
         xdotool mousemove "$2" 374 click "$1"; sleep 0.8
         [ $# -ge 6 ] && { xdotool mousemove "$5" "$6"; sleep 1.2; }
         import -window root "$WORK/$t-menu$n.png"
-        convert "$WORK/$t-menu$n.png" -crop "$4"x270+"$3"+150 +repage \
+        convert "$WORK/$t-menu$n.png" -crop "$4"x400+"$3"+20 +repage \
                 "$WORK/$t-menu$n.png"
         xdotool key Escape; sleep 0.3
         parts+=("$WORK/$t-menu$n.png")

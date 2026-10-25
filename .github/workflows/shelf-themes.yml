@@ -21,7 +21,7 @@ jobs:
             libpango1.0-dev libcairo2-dev libx11-dev libxext-dev \
             libxcursor-dev libxrandr-dev libxinerama-dev libxkbcommon-dev \
             libimlib2-dev libsm-dev libice-dev \
-            xvfb xdotool xterm imagemagick fonts-dejavu-core
+            xvfb xdotool xterm imagemagick fonts-dejavu-core picom hsetroot
       - name: Build and install
         run: |
           ./bootstrap
@@ -30,6 +30,9 @@ jobs:
           make -j"$(nproc)"
           make install
       - name: Shoot the themes
+        # with a compositor, so the menus take the cairo path
+        env:
+          COMPOSITOR: 1
         run: tools/shelf-themes.sh "$HOME/ob" "$RUNNER_TEMP/shelf-themes.png"
       - uses: actions/upload-artifact@v4
         if: always()

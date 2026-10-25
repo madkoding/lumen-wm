@@ -36,6 +36,9 @@ typedef struct _ObMenuEntryFrame ObMenuEntryFrame;
 
 extern GList *menu_frame_visible;
 
+/*! The air inside a menu item, from <menuPadding> */
+#define MENU_ITEM_PADDING (2 + config_shelf_menu_padding / 2)
+
 struct _ObMenuFrame
 {
     /* stuff to be an ObWindow */
@@ -70,6 +73,10 @@ struct _ObMenuFrame
     gint text_x;  /* offset at which the text appears in the items */
     gint text_w;  /* width of the text area in the items */
     gint text_h;  /* height of the items */
+
+    /* drawn with cairo on a 32-bit window (a compositor runs): anti-aliased
+       rounded corners, and the border is painted, not a window border */
+    gboolean argb;
 
     gint monitor; /* monitor on which to show the menu in xinerama */
 
