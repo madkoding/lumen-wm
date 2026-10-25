@@ -12,10 +12,10 @@ else
 fi
 
 # get the version from configure.ac
-VERSION=$(grep AC_INIT\(\\\[openbox\\] configure.ac|cut -d [ -f 3-|cut -d ] -f 1)
+VERSION=$(grep AC_INIT\(\\\[lumen-wm\\] configure.ac|cut -d [ -f 3-|cut -d ] -f 1)
 
 echo
-echo "Building deb for openbox-$VERSION-0$APPEND"
+echo "Building deb for lumen-wm-$VERSION-0$APPEND"
 echo
 
 TIME="$(date '+%a, %d %B %Y %T %z')"

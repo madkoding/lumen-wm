@@ -1,5 +1,5 @@
 AC_PREREQ([2.54])
-AC_INIT([openbox], [3.7], [http://bugzilla.icculus.org])
+AC_INIT([lumen-wm], [3.7], [http://bugzilla.icculus.org])
 AC_CONFIG_SRCDIR([openbox/openbox.c])
 
 AM_INIT_AUTOMAKE([foreign])
@@ -95,6 +95,7 @@ AC_SUBST(LIBTOOL_DEPS)
 LIBTOOL="$LIBTOOL --silent"
 
 AC_PROG_INSTALL
+AC_PROG_LN_S
 
 AM_GNU_GETTEXT_VERSION(0.15)
 AM_GNU_GETTEXT([external])

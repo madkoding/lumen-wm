@@ -36,6 +36,7 @@ m4/*.m4
 *.la
 missing
 .dirstamp
+openbox/lumen-wm
 openbox/openbox
 parser/obparser-4.0.pc
 po/Makefile.in.in

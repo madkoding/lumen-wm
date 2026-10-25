@@ -39,6 +39,12 @@ gboolean obt_xml_load_config_file(ObtXmlInst *inst,
                                   const gchar *domain,
                                   const gchar *filename,
                                   const gchar *root_node);
+/*! Like obt_xml_load_config_file, but tries each of @domains (NULL-terminated)
+  in every config directory before moving on to the next directory. */
+gboolean obt_xml_load_config_file_domains(ObtXmlInst *inst,
+                                          const gchar *const *domains,
+                                          const gchar *filename,
+                                          const gchar *root_node);
 gboolean obt_xml_load_data_file(ObtXmlInst *inst,
                                 const gchar *domain,
                                 const gchar *filename,
