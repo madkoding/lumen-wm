@@ -84,6 +84,8 @@ guint           config_dock_hide_delay;
 gboolean        config_shelf_enabled;
 gchar          *config_shelf_material;
 gchar          *config_shelf_font;
+gchar          *config_shelf_icon_theme;
+GSList         *config_shelf_pins;
 guint           config_dock_show_delay;
 guint           config_dock_app_move_button;
 guint           config_dock_app_move_modifiers;
@@ -964,6 +966,40 @@ static void parse_dock(xmlNodePtr node, gpointer d)
     }
 }
 
+static void free_shelf_pins(void)
+{
+    GSList *it;
+    for (it = config_shelf_pins; it; it = g_slist_next(it)) {
+        ObShelfPin *p = it->data;
+        g_free(p->name);
+        g_free(p->icon);
+        g_free(p->command);
+        g_free(p->wmclass);
+        g_slice_free(ObShelfPin, p);
+    }
+    g_slist_free(config_shelf_pins);
+    config_shelf_pins = NULL;
+}
+
+static void parse_shelf_pin(xmlNodePtr node, gpointer d)
+{
+    xmlNodePtr n;
+    ObShelfPin *p;
+
+    node = node->children;
+    if (!(n = obt_xml_find_node(node, "command"))) return;
+
+    p = g_slice_new0(ObShelfPin);
+    p->command = obt_xml_node_string(n);
+    if ((n = obt_xml_find_node(node, "name")))
+        p->name = obt_xml_node_string(n);
+    if ((n = obt_xml_find_node(node, "icon")))
+        p->icon = obt_xml_node_string(n);
+    if ((n = obt_xml_find_node(node, "class")))
+        p->wmclass = obt_xml_node_string(n);
+    config_shelf_pins = g_slist_append(config_shelf_pins, p);
+}
+
 static void parse_shelf(xmlNodePtr node, gpointer d)
 {
     xmlNodePtr n;
@@ -979,6 +1015,16 @@ static void parse_shelf(xmlNodePtr node, gpointer d)
     if ((n = obt_xml_find_node(node, "font"))) {
         g_free(config_shelf_font);
         config_shelf_font = obt_xml_node_string(n);
+    }
+    if ((n = obt_xml_find_node(node, "iconTheme"))) {
+        g_free(config_shelf_icon_theme);
+        config_shelf_icon_theme = obt_xml_node_string(n);
+    }
+    if ((n = obt_xml_find_node(node, "pins"))) {
+        free_shelf_pins();
+        for (n = obt_xml_find_node(n->children, "pin"); n;
+             n = obt_xml_find_node(n->next, "pin"))
+            parse_shelf_pin(n, d);
     }
 }
 
@@ -1188,6 +1234,9 @@ void config_startup(ObtXmlInst *i)
     config_shelf_material = g_strdup("dark");
     g_free(config_shelf_font);
     config_shelf_font = g_strdup("");
+    g_free(config_shelf_icon_theme);
+    config_shelf_icon_theme = g_strdup("");
+    free_shelf_pins();
     config_dock_show_delay = 300;
     config_dock_app_move_button = 2; /* middle */
     config_dock_app_move_modifiers = 0;

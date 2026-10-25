@@ -177,6 +177,23 @@
   <material>dark</material><!-- dark | light -->
   <!-- empty: the system default (fontconfig "Sans"); or a family, e.g. Sansation -->
   <font></font>
+  <!-- where a pin's icon given as a bare name is looked up (a folder of
+       /usr/share/icons); a pin's icon may also be a file path -->
+  <iconTheme></iconTheme>
+  <!-- applications pinned to the dock, before the open windows. A pin shows
+       the running mark while a window of its class is open; clicking it
+       starts the application, or focuses its window (or minimises it when it
+       already has the focus). class defaults to the command's first word. -->
+  <pins>
+    <!--
+    <pin>
+      <name>Terminal</name>
+      <icon>utilities-terminal</icon>
+      <command>xterm</command>
+      <class>XTerm</class>
+    </pin>
+    -->
+  </pins>
 </shelf>
 
 <dock>

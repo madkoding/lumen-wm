@@ -88,8 +88,10 @@ static const Material mat_light = {
 };
 
 typedef struct {
-    ObClient *client;
-    gint      x;         /* in window coordinates */
+    ObShelfPin *pin;     /* the pinned application, or NULL */
+    RrImage    *pin_icon;
+    ObClient   *client;  /* its window; NULL for a pin that is not running */
+    gint        x;       /* in window coordinates */
 } Tile;
 
 static struct {
@@ -101,6 +103,7 @@ static struct {
     gint             wx, wy, ww, wh;
     gint             dock_x, dock_w, status_x, status_w, island_y;
     GArray          *tiles;      /* Tile, the dock's app tiles */
+    GHashTable      *pin_icons;  /* ObShelfPin* -> RrImage* (or NULL) */
     gint             hover;      /* -1 nothing, 0 the apps tile, n the nth app */
     gchar           *sig;
     guint            tick_id;
@@ -281,7 +284,7 @@ static void glyph_apps(cairo_t *cr, gdouble cx, gdouble cy, Rgb ink)
 }
 
 /* The best picture of a client's icon as a premultiplied cairo surface. */
-static cairo_surface_t *icon_surface(ObClient *c)
+static cairo_surface_t *icon_surface(RrImage *image)
 {
     RrImagePic *best = NULL;
     RrImageSet *set;
@@ -289,7 +292,7 @@ static cairo_surface_t *icon_surface(ObClient *c)
     guint32 *dst;
     gint i, n;
 
-    if (!c->icon_set || !(set = c->icon_set->set)) return NULL;
+    if (!image || !(set = image->set)) return NULL;
     for (i = 0; i < set->n_original; ++i) {
         RrImagePic *p = set->original[i];
         if (!best ||
@@ -314,10 +317,22 @@ static cairo_surface_t *icon_surface(ObClient *c)
     return s;
 }
 
-static void draw_tile(cairo_t *cr, ObClient *c, gdouble x, gdouble y,
+/* The label's first letter, for a tile without a picture */
+static const gchar *tile_label(const Tile *t)
+{
+    ObClient *c = t->client;
+    if (t->pin && t->pin->name && *t->pin->name) return t->pin->name;
+    if (c) return c->class && *c->class ? c->class : c->name;
+    return t->pin ? t->pin->command : NULL;
+}
+
+static void draw_tile(cairo_t *cr, const Tile *t, gdouble x, gdouble y,
                       const Material *m)
 {
-    cairo_surface_t *ic = icon_surface(c);
+    ObClient *c = t->client;
+    gboolean iconic = c && c->iconic;
+    cairo_surface_t *ic = icon_surface(t->pin_icon ? t->pin_icon :
+                                       c ? c->icon_set : NULL);
 
     cairo_save(cr);
     rrect(cr, x, y, TILE, TILE, TILE_RADIUS);
@@ -328,10 +343,10 @@ static void draw_tile(cairo_t *cr, ObClient *c, gdouble x, gdouble y,
         cairo_scale(cr, (gdouble)TILE / w, (gdouble)TILE / h);
         cairo_set_source_surface(cr, ic, x * w / TILE, y * h / TILE);
         cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
-        cairo_paint_with_alpha(cr, c->iconic ? 0.5 : 1.0);
+        cairo_paint_with_alpha(cr, iconic ? 0.5 : 1.0);
     } else {
         gchar init[8] = "?";
-        const gchar *name = c->class && *c->class ? c->class : c->name;
+        const gchar *name = tile_label(t);
         if (name && *name)
             g_unichar_to_utf8(g_unichar_toupper(g_utf8_get_char(name)), init),
             init[g_utf8_next_char(name) - name] = 0;
@@ -340,7 +355,7 @@ static void draw_tile(cairo_t *cr, ObClient *c, gdouble x, gdouble y,
         cairo_restore(cr);
         cairo_save(cr);
         centred_text(cr, init, 20, PANGO_WEIGHT_SEMIBOLD, x + TILE / 2.0,
-                     y + TILE / 2.0, m->ink, c->iconic ? 0.5 : 1);
+                     y + TILE / 2.0, m->ink, iconic ? 0.5 : 1);
     }
     cairo_restore(cr);
     if (ic) cairo_surface_destroy(ic);
@@ -361,18 +376,64 @@ static gboolean covered_by_fullscreen(void)
             focus_client->desktop == screen_desktop);
 }
 
+/* The pin's window class: named in rc.xml, else the command's first word */
+static gboolean pin_matches(const ObShelfPin *p, const ObClient *c)
+{
+    gchar *word = NULL;
+    const gchar *want = p->wmclass;
+    gboolean ok;
+
+    if (!want || !*want) {
+        const gchar *sp = strpbrk(p->command, " \t");
+        gchar *first = sp ? g_strndup(p->command, sp - p->command) :
+                       g_strdup(p->command);
+        word = g_path_get_basename(first);
+        g_free(first);
+        want = word;
+    }
+    ok = (c->class && !g_ascii_strcasecmp(c->class, want)) ||
+         (c->name && !g_ascii_strcasecmp(c->name, want));
+    g_free(word);
+    return ok;
+}
+
+static gboolean pinned(const ObClient *c)
+{
+    GSList *it;
+    for (it = config_shelf_pins; it; it = g_slist_next(it))
+        if (pin_matches(it->data, c)) return TRUE;
+    return FALSE;
+}
+
 static void layout(void)
 {
     const Rect *mon = screen_physical_area_monitor(screen_monitor_primary(FALSE));
     GList *it;
+    GSList *is;
     gint n = 0, row_w, row_x, bottom, x;
 
     if (S.tiles) g_array_set_size(S.tiles, 0);
     else S.tiles = g_array_new(FALSE, TRUE, sizeof(Tile));
 
+    /* the pins, each with its most recently focused window if it has one */
+    for (is = config_shelf_pins; is; is = g_slist_next(is)) {
+        Tile t = { is->data, g_hash_table_lookup(S.pin_icons, is->data),
+                   NULL, 0 };
+        for (it = focus_order; it; it = g_list_next(it))
+            if (listed(it->data) && pin_matches(t.pin, it->data)) {
+                t.client = it->data;
+                break;
+            }
+        g_array_append_val(S.tiles, t);
+        ++n;
+    }
+    /* then the windows no pin claims */
     for (it = client_list; it; it = g_list_next(it)) {
-        Tile t = { it->data, 0 };
-        if (listed(t.client)) { g_array_append_val(S.tiles, t); ++n; }
+        Tile t = { NULL, NULL, it->data, 0 };
+        if (listed(t.client) && !pinned(t.client)) {
+            g_array_append_val(S.tiles, t);
+            ++n;
+        }
     }
 
     S.dock_w = 2 * PAD + TILE;
@@ -471,15 +532,17 @@ static void paint(void)
         for (i = 0; i < (gint)S.tiles->len; ++i) {
             Tile *t = &g_array_index(S.tiles, Tile, i);
             gdouble tx = t->x, ty = y + PAD;
-            gboolean focused = (t->client == focus_client);
+            gboolean focused = (t->client && t->client == focus_client);
 
             if (S.hover == i + 1) {
                 rrect(cr, tx, ty, TILE, TILE, TILE_RADIUS);
                 set_rgb(cr, m->hover, m->hover_a);
                 cairo_fill(cr);
             }
-            draw_tile(cr, t->client, tx, ty, m);
-            /* the running mark: 18x3 on the island's lower edge */
+            draw_tile(cr, t, tx, ty, m);
+            /* the running mark: 18x3 on the island's lower edge; a pin that
+               is not running has none */
+            if (!t->client) continue;
             cairo_new_path(cr);
             cairo_move_to(cr, tx + TILE / 2.0 - 9, y + ISLAND_H);
             cairo_line_to(cr, tx + TILE / 2.0 - 9, y + ISLAND_H - 1);
@@ -646,6 +709,87 @@ static gboolean tick(gpointer data)
     return TRUE;
 }
 
+/* A pin's icon: a file, or a name found under the icon theme's folders
+   (scalable first, then the sizes, in any context directory). */
+static gchar *find_icon_file(const gchar *icon)
+{
+    static const gchar *sizes[] = { "scalable", "48x48", "64x64", "32x32",
+                                    "small", NULL };
+    static const gchar *exts[] = { "svg", "png", NULL };
+    const gchar * const *dirs = g_get_system_data_dirs();
+    gint d, z, e;
+
+    if (!icon || !*icon) return NULL;
+    if (g_path_is_absolute(icon))
+        return g_file_test(icon, G_FILE_TEST_IS_REGULAR) ?
+               g_strdup(icon) : NULL;
+    if (!config_shelf_icon_theme || !*config_shelf_icon_theme) return NULL;
+
+    for (d = 0; dirs[d]; ++d)
+        for (z = 0; sizes[z]; ++z) {
+            gchar *base = g_build_filename(dirs[d], "icons",
+                                           config_shelf_icon_theme,
+                                           sizes[z], NULL);
+            GDir *dir = g_dir_open(base, 0, NULL);
+            const gchar *ctx;
+            while (dir && (ctx = g_dir_read_name(dir)))
+                for (e = 0; exts[e]; ++e) {
+                    gchar *f = g_strdup_printf("%s/%s/%s.%s", base, ctx,
+                                               icon, exts[e]);
+                    if (g_file_test(f, G_FILE_TEST_IS_REGULAR)) {
+                        if (dir) g_dir_close(dir);
+                        g_free(base);
+                        return f;
+                    }
+                    g_free(f);
+                }
+            if (dir) g_dir_close(dir);
+            g_free(base);
+        }
+    return NULL;
+}
+
+static void load_pin_icons(void)
+{
+    GSList *it;
+
+    S.pin_icons = g_hash_table_new(g_direct_hash, g_direct_equal);
+    for (it = config_shelf_pins; it; it = g_slist_next(it)) {
+        ObShelfPin *p = it->data;
+        gchar *file = find_icon_file(p->icon);
+        RrImage *im = file ? RrImageNewFromName(ob_rr_icons, file) : NULL;
+        g_free(file);
+        g_hash_table_insert(S.pin_icons, p, im);
+    }
+}
+
+static void unload_pin_icons(void)
+{
+    GHashTableIter it;
+    gpointer k, v;
+
+    if (!S.pin_icons) return;
+    g_hash_table_iter_init(&it, S.pin_icons);
+    while (g_hash_table_iter_next(&it, &k, &v))
+        if (v) RrImageUnref(v);
+    g_hash_table_destroy(S.pin_icons);
+    S.pin_icons = NULL;
+}
+
+static void launch(const gchar *command)
+{
+    gchar *argv[] = { "/bin/sh", "-c", (gchar*)command, NULL };
+    GError *err = NULL;
+
+    if (!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH |
+                       G_SPAWN_STDOUT_TO_DEV_NULL |
+                       G_SPAWN_STDERR_TO_DEV_NULL, NULL, NULL, NULL, &err)) {
+        g_message("Failed to run shelf pin \"%s\": %s", command,
+                  err->message);
+        g_error_free(err);
+    }
+}
+
 void shelf_startup(gboolean reconfig)
 {
     XSetWindowAttributes attr;
@@ -677,11 +821,13 @@ void shelf_startup(gboolean reconfig)
         S.cmap = XCreateColormap(d, obt_root(ob_screen), vi.visual, AllocNone);
         attr.colormap = S.cmap;
         mask |= CWColormap;
+        load_pin_icons();
         layout();
         S.win = XCreateWindow(d, obt_root(ob_screen), S.wx, S.wy, S.ww, S.wh,
                               0, 32, InputOutput, vi.visual, mask, &attr);
     } else {
         S.visual = DefaultVisual(d, ob_screen);
+        load_pin_icons();
         layout();
         S.win = XCreateWindow(d, obt_root(ob_screen), S.wx, S.wy, S.ww, S.wh,
                               0, CopyFromParent, InputOutput, CopyFromParent,
@@ -703,6 +849,7 @@ void shelf_shutdown(gboolean reconfig)
     if (S.cmap) XFreeColormap(obt_display, S.cmap);
     if (S.bg) cairo_surface_destroy(S.bg);
     if (S.tiles) g_array_free(S.tiles, TRUE);
+    unload_pin_icons();
     g_free(S.sig);
     STRUT_PARTIAL_SET(shelf_strut, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     memset(&S, 0, sizeof S);
@@ -754,7 +901,14 @@ gboolean shelf_event(const XEvent *e)
             show_menu("root-menu", e->xbutton.x_root,
                       S.wy + S.island_y - 4, NULL);
         } else if (h > 0) {
-            ObClient *c = g_array_index(S.tiles, Tile, h - 1).client;
+            Tile *t = &g_array_index(S.tiles, Tile, h - 1);
+            ObClient *c = t->client;
+            if (!c) {
+                /* a pin that is not running: left click starts it */
+                if (t->pin && e->xbutton.button == 1)
+                    launch(t->pin->command);
+                break;
+            }
             if (!g_list_find(client_list, c)) break;
             if (e->xbutton.button == 1) {
                 if (c == focus_client && !c->iconic)
