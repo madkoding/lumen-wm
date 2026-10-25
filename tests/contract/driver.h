@@ -23,6 +23,7 @@ typedef enum {
     CT_CAP_DESKTOPS        = 1 << 1, /* virtual desktops (workspaces) */
     CT_CAP_STRUTS          = 1 << 2, /* docks that reserve screen edges */
     CT_CAP_STACKING        = 1 << 3, /* the full stacking order is visible */
+    CT_CAP_CLIENT_FOCUS    = 1 << 4, /* a client can take the focus itself */
 } ct_caps;
 
 typedef enum {
@@ -36,6 +37,7 @@ typedef enum {
     CT_WIN_NORMAL,
     CT_WIN_DOCK,   /* a panel; give it a strut with ct_window_set_strut() */
     CT_WIN_DIALOG, /* give it a parent with ct_window_set_parent() */
+    CT_WIN_POPUP,  /* not managed: a menu or tooltip that places itself */
 } ct_win_type;
 
 /* Connect to the running window manager. Returns false when there is none. */
@@ -63,6 +65,8 @@ void ct_window_set_strut(ct_win *w, int top);
 void ct_window_set_initial_state(ct_win *w, ct_state s);
 void ct_window_set_initial_desktop(ct_win *w, int d);
 void ct_window_map(ct_win *w);
+/* The client gives itself the focus (CT_CAP_CLIENT_FOCUS). */
+void ct_window_take_focus(ct_win *w);
 /* The client hides the window by itself (ICCCM withdraw). */
 void ct_window_withdraw(ct_win *w);
 /* The handle stays valid, to ask what the window manager did. */

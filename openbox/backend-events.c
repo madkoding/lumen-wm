@@ -545,6 +545,35 @@ static void request_restack(ObSurfaceId s, guintptr sibling_id,
     client_reconfigure(client, TRUE);
 }
 
+static void focus_changed(ObSurfaceId s)
+{
+    ObClient *client = s ? client_of(s) : NULL;
+
+    if (!client) {
+        focus_set_client(NULL);
+        return;
+    }
+    if (client == focus_client) return;
+
+    frame_adjust_focus(client->frame, TRUE);
+    focus_set_client(client);
+    client_calc_layer(client);
+    client_bring_helper_windows(client);
+}
+
+static void focus_left(ObSurfaceId s)
+{
+    ObClient *client = client_of(s);
+
+    if (client && client != focus_client)
+        frame_adjust_focus(client->frame, FALSE);
+}
+
+static void focus_lost(gboolean refocus)
+{
+    focus_fallback(refocus, config_focus_under_mouse, TRUE, TRUE);
+}
+
 const ObBackendEvents ob_backend_events = {
     .surface_new = surface_new,
     .surface_gone = surface_gone,
@@ -558,4 +587,7 @@ const ObBackendEvents ob_backend_events = {
     .request_configure = request_configure,
     .request_geometry = request_geometry,
     .request_restack = request_restack,
+    .focus_changed = focus_changed,
+    .focus_left = focus_left,
+    .focus_lost = focus_lost,
 };

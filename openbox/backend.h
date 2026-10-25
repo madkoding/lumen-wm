@@ -437,8 +437,16 @@ struct _ObBackendEvents {
     /*! desktop is DESKTOP_ALL for every desktop; it may be out of range. */
     void (*request_surface_desktop)(ObSurfaceId s, guint desktop);
 
-    /*! Another surface took the focus by itself (X11 only). */
+    /*! The focus moved by itself (X11 only: a client took it, or it
+      reverted). s has it now, or 0 when nothing the core manages has it. */
     void (*focus_changed)(ObSurfaceId s);
+    /*! s lost the focus; the core stops showing it as focused unless it is
+      the focused one again. */
+    void (*focus_left)(ObSurfaceId s);
+    /*! The focus went nowhere (X11: it reverted to the root or to a window
+      that isn't managed); the core gives it to a window. refocus: the one
+      that had it may get it back. */
+    void (*focus_lost)(gboolean refocus);
     void (*key)(guint32 keysym, guint mods, gboolean press, guint32 time);
     /*! over: the canvas or surface under the pointer, x and y relative to
       it. */
