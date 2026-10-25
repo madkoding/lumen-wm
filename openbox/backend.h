@@ -267,6 +267,29 @@ typedef enum {
     OB_CANVAS_OVERLAY       /*!< above everything: move/resize outlines */
 } ObCanvasLayer;
 
+typedef enum {
+    OB_INPUT_KEY_PRESS,
+    OB_INPUT_KEY_RELEASE,
+    OB_INPUT_BUTTON_PRESS,
+    OB_INPUT_BUTTON_RELEASE,
+    OB_INPUT_MOTION
+} ObInputType;
+
+/*! Something the user did, as the core's input handlers (move/resize,
+  bindings, menus) see it. The backend's key, button and motion events
+  carry the same. */
+typedef struct _ObInputEvent {
+    ObInputType type;
+    guint32 time;
+    /*! the modifiers held before it, as bind_key's masks */
+    guint mods;
+    guint keycode;          /*!< keys: xkb's (X11: the server's) */
+    guint32 keysym;         /*!< keys: what it types, an xkb keysym */
+    guint button;           /*!< buttons */
+    /*! where the pointer is, in layout coordinates */
+    gint root_x, root_y;
+} ObInputEvent;
+
 /*! A picture the core drew, in premultiplied ARGB32 (cairo's
   CAIRO_FORMAT_ARGB32), to show in a canvas. */
 typedef struct _ObImage {
@@ -415,6 +438,9 @@ struct _ObBackend {
     /*! Move the pointer there. swallow: drop the motion this makes, so the
       core doesn't take it for the user's. */
     void (*pointer_warp)(gint x, gint y, gboolean swallow);
+    /*! Send what the core asked for so far and wait until it is done
+      (X11 XSync), so the screen keeps up with the pointer. */
+    void (*flush)(void);
     void (*set_cursor)(ObCanvasId c, ObCursor cursor);
 
     /* --- state for pagers and taskbars --- */

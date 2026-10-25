@@ -34,7 +34,6 @@
 #include "obrender/render.h"
 #include "obrender/theme.h"
 #include "obt/display.h"
-#include "obt/xqueue.h"
 #include "obt/prop.h"
 #include "obt/keyboard.h"
 
@@ -860,83 +859,71 @@ static void resize_with_keys(KeySym sym, guint state)
 
 }
 
-gboolean moveresize_event(XEvent *e)
+gboolean moveresize_event(const ObInputEvent *e)
 {
     gboolean used = FALSE;
 
     if (!moveresize_in_progress) return FALSE;
 
-    if (e->type == ButtonPress) {
+    if (e->type == OB_INPUT_BUTTON_PRESS) {
         if (!button) {
-            start_x = e->xbutton.x_root;
-            start_y = e->xbutton.y_root;
-            button = e->xbutton.button; /* this will end it now */
+            start_x = e->root_x;
+            start_y = e->root_y;
+            button = e->button; /* this will end it now */
         }
-        used = e->xbutton.button == button;
-    } else if (e->type == ButtonRelease) {
-        if (!button || e->xbutton.button == button) {
+        used = e->button == button;
+    } else if (e->type == OB_INPUT_BUTTON_RELEASE) {
+        if (!button || e->button == button) {
             moveresize_end(FALSE);
             used = TRUE;
         }
-    } else if (e->type == MotionNotify) {
+    } else if (e->type == OB_INPUT_MOTION) {
         if (moving) {
-            XEvent ce;
-            ObtXQueueWindowType wt;
-
-            wt.window = e->xmotion.window;
-            wt.type = MotionNotify;
-            while (xqueue_remove_local(&ce, xqueue_match_window_type, &wt)) {
-                e->xmotion.x = ce.xmotion.x;
-                e->xmotion.y = ce.xmotion.y;
-                e->xmotion.x_root = ce.xmotion.x_root;
-                e->xmotion.y_root = ce.xmotion.y_root;
-            }
-
-            cur_x = start_cx + e->xmotion.x_root - start_x;
-            cur_y = start_cy + e->xmotion.y_root - start_y;
+            cur_x = start_cx + e->root_x - start_x;
+            cur_y = start_cy + e->root_y - start_y;
             do_move(FALSE, 0);
-            XSync(obt_display, FALSE);
-            do_edge_warp(e->xmotion.x_root, e->xmotion.y_root);
+            (*ob_backend->flush)();
+            do_edge_warp(e->root_x, e->root_y);
         } else {
             gint dw, dh;
             ObDirection dir;
 
             if (corner == OB_MOVERESIZE_SIZE_TOPLEFT) {
-                dw = -(e->xmotion.x_root - start_x);
-                dh = -(e->xmotion.y_root - start_y);
+                dw = -(e->root_x - start_x);
+                dh = -(e->root_y - start_y);
                 dir = OB_DIRECTION_NORTHWEST;
             } else if (corner == OB_MOVERESIZE_SIZE_TOP) {
                 dw = 0;
-                dh = -(e->xmotion.y_root - start_y);
+                dh = -(e->root_y - start_y);
                 dir = OB_DIRECTION_NORTH;
             } else if (corner == OB_MOVERESIZE_SIZE_TOPRIGHT) {
-                dw = (e->xmotion.x_root - start_x);
-                dh = -(e->xmotion.y_root - start_y);
+                dw = (e->root_x - start_x);
+                dh = -(e->root_y - start_y);
                 dir = OB_DIRECTION_NORTHEAST;
             } else if (corner == OB_MOVERESIZE_SIZE_RIGHT) {
-                dw = (e->xmotion.x_root - start_x);
+                dw = (e->root_x - start_x);
                 dh = 0;
                 dir = OB_DIRECTION_EAST;
             } else if (corner == OB_MOVERESIZE_SIZE_BOTTOMRIGHT) {
-                dw = (e->xmotion.x_root - start_x);
-                dh = (e->xmotion.y_root - start_y);
+                dw = (e->root_x - start_x);
+                dh = (e->root_y - start_y);
                 dir = OB_DIRECTION_SOUTHEAST;
             } else if (corner == OB_MOVERESIZE_SIZE_BOTTOM)
             {
                 dw = 0;
-                dh = (e->xmotion.y_root - start_y);
+                dh = (e->root_y - start_y);
                 dir = OB_DIRECTION_SOUTH;
             } else if (corner == OB_MOVERESIZE_SIZE_BOTTOMLEFT) {
-                dw = -(e->xmotion.x_root - start_x);
-                dh = (e->xmotion.y_root - start_y);
+                dw = -(e->root_x - start_x);
+                dh = (e->root_y - start_y);
                 dir = OB_DIRECTION_SOUTHWEST;
             } else if (corner == OB_MOVERESIZE_SIZE_LEFT) {
-                dw = -(e->xmotion.x_root - start_x);
+                dw = -(e->root_x - start_x);
                 dh = 0;
                 dir = OB_DIRECTION_WEST;
             } else if (corner == OB_MOVERESIZE_SIZE_KEYBOARD) {
-                dw = (e->xmotion.x_root - start_x);
-                dh = (e->xmotion.y_root - start_y);
+                dw = (e->root_x - start_x);
+                dh = (e->root_y - start_y);
                 dir = OB_DIRECTION_SOUTHEAST;
             } else
                 g_assert_not_reached();
@@ -1004,8 +991,8 @@ gboolean moveresize_event(XEvent *e)
             do_resize();
         }
         used = TRUE;
-    } else if (e->type == KeyPress) {
-        KeySym sym = obt_keyboard_keypress_to_keysym(e);
+    } else if (e->type == OB_INPUT_KEY_PRESS) {
+        KeySym sym = e->keysym;
 
         if (sym == XK_Escape) {
             moveresize_end(TRUE);
@@ -1017,11 +1004,11 @@ gboolean moveresize_event(XEvent *e)
                    sym == XK_Up || sym == XK_Down)
         {
             if (corner == OB_MOVERESIZE_SIZE_KEYBOARD) {
-                resize_with_keys(sym, e->xkey.state);
+                resize_with_keys(sym, e->mods);
                 used = TRUE;
             } else if (corner == OB_MOVERESIZE_MOVE_KEYBOARD)
             {
-                move_with_keys(sym, e->xkey.state);
+                move_with_keys(sym, e->mods);
                 used = TRUE;
             }
         }
@@ -1031,4 +1018,10 @@ gboolean moveresize_event(XEvent *e)
         event_update_user_time();
 
     return used;
+}
+
+gboolean moveresize_latest_motion(void)
+{
+    /* a move only needs where the pointer is now */
+    return moveresize_in_progress && moving;
 }

@@ -121,6 +121,63 @@ static gboolean find_timestamp(XEvent *e, gpointer data)
     return *t != CurrentTime;
 }
 
+gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
+                                 ObInputEvent *out)
+{
+    switch (e->type) {
+    case KeyPress:
+    case KeyRelease:
+        out->type = e->type == KeyPress ? OB_INPUT_KEY_PRESS
+                                        : OB_INPUT_KEY_RELEASE;
+        out->time = e->xkey.time;
+        out->mods = e->xkey.state;
+        out->keycode = e->xkey.keycode;
+        out->keysym = e->type == KeyPress ?
+            obt_keyboard_keypress_to_keysym(e) : NoSymbol;
+        out->button = 0;
+        out->root_x = e->xkey.x_root;
+        out->root_y = e->xkey.y_root;
+        return TRUE;
+    case ButtonPress:
+    case ButtonRelease:
+        out->type = e->type == ButtonPress ? OB_INPUT_BUTTON_PRESS
+                                           : OB_INPUT_BUTTON_RELEASE;
+        out->time = e->xbutton.time;
+        out->mods = e->xbutton.state;
+        out->keycode = 0;
+        out->keysym = NoSymbol;
+        out->button = e->xbutton.button;
+        out->root_x = e->xbutton.x_root;
+        out->root_y = e->xbutton.y_root;
+        return TRUE;
+    case MotionNotify:
+        if (latest_motion) {
+            XEvent ce;
+            ObtXQueueWindowType wt;
+
+            wt.window = e->xmotion.window;
+            wt.type = MotionNotify;
+            while (xqueue_remove_local(&ce, xqueue_match_window_type, &wt)) {
+                e->xmotion.x = ce.xmotion.x;
+                e->xmotion.y = ce.xmotion.y;
+                e->xmotion.x_root = ce.xmotion.x_root;
+                e->xmotion.y_root = ce.xmotion.y_root;
+            }
+        }
+        out->type = OB_INPUT_MOTION;
+        out->time = e->xmotion.time;
+        out->mods = e->xmotion.state;
+        out->keycode = 0;
+        out->keysym = NoSymbol;
+        out->button = 0;
+        out->root_x = e->xmotion.x_root;
+        out->root_y = e->xmotion.y_root;
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+
 static guint32 x11_time(void)
 {
     Time t = CurrentTime;
@@ -1243,6 +1300,11 @@ static void x11_canvas_set_opacity(ObCanvasId c, gboolean set,
         OBT_PROP_ERASE((Window)c, NET_WM_WINDOW_OPACITY);
 }
 
+static void x11_flush(void)
+{
+    XSync(obt_display, FALSE);
+}
+
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)
 {
     Window *win = g_new(Window, n + 1);
@@ -1635,6 +1697,7 @@ const ObBackend ob_backend_x11 = {
     .surface_info = x11_surface_info,
 
     .restack = x11_restack,
+    .flush = x11_flush,
 
     .canvas_set_opacity = x11_canvas_set_opacity,
 

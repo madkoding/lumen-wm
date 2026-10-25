@@ -1478,6 +1478,8 @@ static void event_handle_menu(ObMenuFrame *frame, XEvent *ev)
 
 static gboolean event_handle_user_input(ObClient *client, XEvent *e)
 {
+    ObInputEvent input;
+
     g_assert(e->type == ButtonPress || e->type == ButtonRelease ||
              e->type == MotionNotify || e->type == KeyPress ||
              e->type == KeyRelease);
@@ -1492,7 +1494,11 @@ static gboolean event_handle_user_input(ObClient *client, XEvent *e)
 
     /* if the keyboard interactive action uses the event then dont
        use it for bindings. likewise is moveresize uses the event. */
-    if (actions_interactive_input_event(e) || moveresize_event(e))
+    if (actions_interactive_input_event(e))
+        return TRUE;
+    if (moveresize_in_progress &&
+        backend_x11_input_event(e, moveresize_latest_motion(), &input) &&
+        moveresize_event(&input))
         return TRUE;
 
     if (moveresize_in_progress)
