@@ -2,8 +2,8 @@
 
 ## Repository
 
-- This is a fork: `madkoding/openbox`. Branches, pushes and pull requests always target
-  `madkoding/openbox` (base `main`), **never** the upstream Openbox repository.
+- This is a fork (formerly `madkoding/openbox`): `madkoding/lumen-wm`. Branches, pushes and pull requests always target
+  `madkoding/lumen-wm` (base `main`), **never** the upstream Openbox repository.
 - The project is **Lumen Window Manager** ("Lumen" for short), based on Openbox. It installs as `lumen-wm` (package
   and binary) with an `openbox` symlink, and reads `~/.config/lumen` before `~/.config/openbox`. Source dirs,
   theme dirs (`openbox-3`), XML root nodes and X properties keep the Openbox names.

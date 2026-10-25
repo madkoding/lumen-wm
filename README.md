@@ -41,8 +41,8 @@ sudo apt-get install build-essential autoconf automake libtool pkg-config gettex
   libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev libx11-dev libxft-dev \
   libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev libimlib2-dev
 
-git clone https://github.com/madkoding/openbox lumen
-cd lumen
+git clone https://github.com/madkoding/lumen-wm
+cd lumen-wm
 ./bootstrap
 ./configure --prefix=/usr --sysconfdir=/etc
 make
