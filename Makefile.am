@@ -24,7 +24,8 @@ ACLOCAL_AMFLAGS = -I m4
 INCLUDES = -I.
 
 check_PROGRAMS = \
-	obrender/rendertest
+	obrender/rendertest \
+	tests/contract/contract-x11
 
 lib_LTLIBRARIES = \
 	obt/libobt.la \
@@ -334,6 +335,20 @@ obt_obt_unittests_SOURCES = \
 	obt/unittest_base.c \
 	obt/bsearch_unittest.c
 
+## contract tests ##
+
+tests_contract_contract_x11_CPPFLAGS = \
+	$(X_CFLAGS)
+tests_contract_contract_x11_CFLAGS = -std=gnu99
+tests_contract_contract_x11_LDADD = \
+	$(X_LIBS)
+tests_contract_contract_x11_SOURCES = \
+	tests/contract/contract.h \
+	tests/contract/contract.c \
+	tests/contract/cases.c \
+	tests/contract/driver.h \
+	tests/contract/driver-x11.c
+
 ## gnome-panel-control ##
 
 tools_gnome_panel_control_gnome_panel_control_CPPFLAGS = \
@@ -575,6 +590,8 @@ dist_noinst_DATA = \
 	obt/obt-3.5.pc.in \
 	obt/version.h.in \
 	tools/themeupdate/themeupdate.py \
+	tests/contract/README.md \
+	tests/contract/run.sh \
 	tests/hideshow.py \
 	tests/Makefile \
 	tests/aspect.c \
