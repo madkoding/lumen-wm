@@ -301,8 +301,13 @@ void client_manage(Window window, ObPrompt *prompt)
     /* tell startup notification that this app started */
     launch_time = sn_app_started(self->startup_id, self->class, self->name);
 
-    if (!OBT_PROP_GET32(self->window, NET_WM_USER_TIME, CARDINAL, &user_time))
-        user_time = event_time();
+    {
+        ObSurfaceInfo info = { 0 };
+
+        ob_backend->surface_info(self->window, OB_SURFACE_INFO_USER_TIME,
+                                 &info);
+        user_time = info.has_user_time ? info.user_time : event_time();
+    }
 
     /* do this after we have a frame.. it uses the frame to help determine the
        WM_STATE to apply. */
@@ -1268,10 +1273,13 @@ static void client_get_all(ObClient *self, gboolean real)
 
 static void client_get_startup_id(ObClient *self)
 {
-    if (!(OBT_PROP_GETS_UTF8(self->window, NET_STARTUP_ID, &self->startup_id)))
-        if (self->group)
-            OBT_PROP_GETS_UTF8(self->group->leader, NET_STARTUP_ID,
-                               &self->startup_id);
+    ObSurfaceInfo info = { 0 };
+
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_STARTUP, &info);
+    if (!info.startup_id && self->group)
+        ob_backend->surface_info((ObSurfaceId)self->group->leader,
+                                 OB_SURFACE_INFO_STARTUP, &info);
+    self->startup_id = info.startup_id;
 }
 
 static void client_get_area(ObClient *self)
@@ -1292,9 +1300,12 @@ static void client_get_area(ObClient *self)
 
 static void client_get_desktop(ObClient *self)
 {
-    guint32 d = screen_num_desktops; /* an always-invalid value */
+    ObSurfaceInfo info = { 0 };
+    guint d;
 
-    if (OBT_PROP_GET32(self->window, NET_WM_DESKTOP, CARDINAL, &d)) {
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_DESKTOP, &info);
+    if (info.has_desktop) {
+        d = info.desktop;
         if (d >= screen_num_desktops && d != DESKTOP_ALL)
             self->desktop = screen_num_desktops - 1;
         else
@@ -1344,40 +1355,25 @@ static void client_get_desktop(ObClient *self)
 
 static void client_get_state(ObClient *self)
 {
-    guint32 *state;
-    guint num;
+    ObSurfaceInfo info = { 0 };
+    ObSurfaceStates st;
 
-    if (OBT_PROP_GETA32(self->window, NET_WM_STATE, ATOM, &state, &num)) {
-        gulong i;
-        for (i = 0; i < num; ++i) {
-            if (state[i] == OBT_PROP_ATOM(NET_WM_STATE_MODAL))
-                self->modal = TRUE;
-            else if (state[i] == OBT_PROP_ATOM(NET_WM_STATE_SHADED))
-                self->shaded = TRUE;
-            else if (state[i] == OBT_PROP_ATOM(NET_WM_STATE_HIDDEN))
-                self->iconic = TRUE;
-            else if (state[i] == OBT_PROP_ATOM(NET_WM_STATE_SKIP_TASKBAR))
-                self->skip_taskbar = TRUE;
-            else if (state[i] == OBT_PROP_ATOM(NET_WM_STATE_SKIP_PAGER))
-                self->skip_pager = TRUE;
-            else if (state[i] == OBT_PROP_ATOM(NET_WM_STATE_FULLSCREEN))
-                self->fullscreen = TRUE;
-            else if (state[i] == OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_VERT))
-                self->max_vert = TRUE;
-            else if (state[i] == OBT_PROP_ATOM(NET_WM_STATE_MAXIMIZED_HORZ))
-                self->max_horz = TRUE;
-            else if (state[i] == OBT_PROP_ATOM(NET_WM_STATE_ABOVE))
-                self->above = TRUE;
-            else if (state[i] == OBT_PROP_ATOM(NET_WM_STATE_BELOW))
-                self->below = TRUE;
-            else if (state[i] == OBT_PROP_ATOM(NET_WM_STATE_DEMANDS_ATTENTION))
-                self->demands_attention = TRUE;
-            else if (state[i] == OBT_PROP_ATOM(OB_WM_STATE_UNDECORATED))
-                self->undecorated = TRUE;
-        }
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_STATES, &info);
+    st = info.states;
 
-        g_free(state);
-    }
+    /* states it asks for only add to what we already know */
+    if (st & OB_SURFACE_STATE_MODAL) self->modal = TRUE;
+    if (st & OB_SURFACE_STATE_SHADED) self->shaded = TRUE;
+    if (st & OB_SURFACE_STATE_ICONIC) self->iconic = TRUE;
+    if (st & OB_SURFACE_STATE_SKIP_TASKBAR) self->skip_taskbar = TRUE;
+    if (st & OB_SURFACE_STATE_SKIP_PAGER) self->skip_pager = TRUE;
+    if (st & OB_SURFACE_STATE_FULLSCREEN) self->fullscreen = TRUE;
+    if (st & OB_SURFACE_STATE_MAXIMIZED_VERT) self->max_vert = TRUE;
+    if (st & OB_SURFACE_STATE_MAXIMIZED_HORZ) self->max_horz = TRUE;
+    if (st & OB_SURFACE_STATE_ABOVE) self->above = TRUE;
+    if (st & OB_SURFACE_STATE_BELOW) self->below = TRUE;
+    if (st & OB_SURFACE_STATE_URGENT) self->demands_attention = TRUE;
+    if (st & OB_SURFACE_STATE_UNDECORATED) self->undecorated = TRUE;
 }
 
 static void client_get_shaped(ObClient *self)

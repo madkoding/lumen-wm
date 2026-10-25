@@ -114,7 +114,11 @@ typedef enum {
     OB_SURFACE_INFO_DECOR    = 1 << 8,
     OB_SURFACE_INFO_PROTOCOLS = 1 << 9,
     OB_SURFACE_INFO_ICON_AREA = 1 << 10, /*!< where a taskbar shows it */
-    OB_SURFACE_INFO_ALL      = (1 << 11) - 1
+    OB_SURFACE_INFO_STARTUP  = 1 << 11, /*!< startup notification id */
+    OB_SURFACE_INFO_DESKTOP  = 1 << 12, /*!< the desktop it asks for */
+    OB_SURFACE_INFO_STATES   = 1 << 13, /*!< the states it maps in */
+    OB_SURFACE_INFO_USER_TIME = 1 << 14,
+    OB_SURFACE_INFO_ALL      = (1 << 15) - 1
 } ObSurfaceInfoFields;
 
 /*! One size of a client's icon. */
@@ -154,7 +158,6 @@ typedef struct _ObSurfaceInfo {
     ObSurfaceId parent;     /*!< transient for, or xdg parent */
     /*! transient for its whole group (WM_TRANSIENT_FOR the root, X11) */
     gboolean parent_is_group;
-    gboolean modal;
 
     /*! FALSE when it gave no size hints, or nonsense ones; the sizes below
       are then the defaults, and has_position, has_size and gravity are
@@ -191,6 +194,17 @@ typedef struct _ObSurfaceInfo {
     gboolean can_ping;      /*!< _NET_WM_PING; always on Wayland */
     gboolean sync_resize;   /*!< _NET_WM_SYNC_REQUEST */
     gint pid;               /*!< 0 when not known; X11 needs machine too */
+
+    gchar *startup_id;      /*!< for startup notification; NULL for none */
+    gboolean has_desktop;
+    guint desktop;          /*!< DESKTOP_ALL for every desktop */
+    /*! what it asks to be in when it shows up (_NET_WM_STATE on X11, the
+      xdg_toplevel requests made before the first commit on Wayland) */
+    ObSurfaceStates states;
+    gboolean has_user_time;
+    /*! when the user last used it, in event time; 0 asks not to be
+      focused */
+    guint32 user_time;
 
     ObIcon *icons;          /*!< every size it offers; NULL for none */
     guint n_icons;

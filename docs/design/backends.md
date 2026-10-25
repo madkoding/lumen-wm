@@ -112,12 +112,12 @@ Every step is its own small PR, and the contract tests stay green on X11 through
    6. Client info: property reading in `client.c` becomes `ObSurfaceInfo`, filled by the backend's `surface_info`
       for the fields asked for. Done for the titles, WM_PROTOCOLS, struts, the size hints (WM_NORMAL_HINTS, checked
       for sanity in the backend), WM_HINTS, the window type, Motif hints and transient-for, the class, role and
-      session ids, and the icons; the core keeps the fallbacks (a title from WM_CLASS, a legacy strut spanning the
-      screen, a dialog type for transients) and publishes the visible titles with `publish_surface_titles`, decides
-      whether WM_CLIENT_MACHINE is another host, and builds the icon images from the ARGB sizes the backend hands
-      over (`ObIcon`), publishing the theme's icon with `publish_surface_icon` for a window that has none. Still
-      read in `client.c`: the startup id, initial desktop and states and user time, which go next, and the
-      geometry, shape, colormap and sync counter, which go with the frames and move/resize.
+      session ids, the icons, the startup id, the requested desktop, the initial states and the user time; the core
+      keeps the fallbacks (a title from WM_CLASS, a legacy strut spanning the screen, a dialog type for transients)
+      and publishes the visible titles with `publish_surface_titles`, decides whether WM_CLIENT_MACHINE is another
+      host, and builds the icon images from the ARGB sizes the backend hands over (`ObIcon`), publishing the
+      theme's icon with `publish_surface_icon` for a window that has none. Still read in `client.c`: the geometry,
+      shape, colormap, opacity and sync counter, which go with the frames and move/resize.
    7. Requests: `event.c` splits in two. The X11 half turns XEvents into `ObBackendEvents`, and the core half
       handles them.
    8. Input: `grab.c`, `keyboard.c`, `mouse.c`.
