@@ -62,6 +62,7 @@
 #define DAY_W       46
 #define WPAD        16
 #define BATT_W      62
+#define MENU_GAP    10    /* between a menu and the island it opens from */
 #define HIT_NET     (-90)
 #define HIT_VOL     (-91)
 #define HIT_POWER   (-92)
@@ -1819,8 +1820,8 @@ gboolean shelf_event(const XEvent *e)
     case ButtonPress:
         h = hit(e->xbutton.x, e->xbutton.y);
         if (h == 0 && e->xbutton.button == 1) {
-            show_menu("root-menu", e->xbutton.x_root,
-                      S.wy + S.island_y - 4, NULL);
+            show_menu("root-menu", S.wx + S.dock_x,
+                      S.wy + S.island_y - MENU_GAP, NULL);
         } else if (h <= HIT_NET && h >= HIT_BATT) {
             guint b = e->xbutton.button;
             if (h == HIT_VOL && config_shelf_volume) {
@@ -1830,7 +1831,7 @@ gboolean shelf_event(const XEvent *e)
                 if (cmd) launch(cmd);
             } else if (b == 1) {
                 show_status_menu(h, e->xbutton.x_root,
-                                 S.wy + S.island_y - 4);
+                                 S.wy + S.island_y - MENU_GAP);
             }
         } else if (h <= HIT_PREV && e->xbutton.button == 1) {
             const gchar *cmd = h == HIT_PREV ? config_shelf_media->previous :
@@ -1845,7 +1846,7 @@ gboolean shelf_event(const XEvent *e)
             Tile *t = &g_array_index(S.tiles, Tile, h - 1);
             ObClient *c = t->client;
             if (e->xbutton.button == 3) {
-                show_tile_menu(t, e->xbutton.x_root, S.wy + S.island_y - 4);
+                show_tile_menu(t, S.wx + t->x, S.wy + S.island_y - MENU_GAP);
                 break;
             }
             if (!c) {
