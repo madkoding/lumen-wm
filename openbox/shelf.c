@@ -438,7 +438,7 @@ static void box_blur(guint8 *a, gint w, gint h, gint r)
 
 /* css: box-shadow: 0 <dy>px <blur>px <spread>px colour, blur radius = 2 sigma */
 static void shadow(cairo_t *cr, gdouble x, gdouble y, gdouble w, gdouble h,
-                   gdouble dy, gdouble blur, gdouble spread,
+                   gdouble r, gdouble dy, gdouble blur, gdouble spread,
                    Rgb col, gdouble alpha, gint ww, gint wh)
 {
     cairo_surface_t *mask = cairo_image_surface_create(CAIRO_FORMAT_A8, ww, wh);
@@ -449,7 +449,7 @@ static void shadow(cairo_t *cr, gdouble x, gdouble y, gdouble w, gdouble h,
 
     cairo_set_source_rgba(mc, 0, 0, 0, 1);
     rrect(mc, x - spread, y + dy - spread, w + 2 * spread, h + 2 * spread,
-          MAX(0, ISLAND_R + spread));
+          MAX(0, r + spread));
     cairo_fill(mc);
     cairo_destroy(mc);
     cairo_surface_flush(mask);
@@ -1237,9 +1237,9 @@ static void paint(void)
         gint ws[4] = { S.dock_w, S.media_w, S.weather_w, S.status_w };
         for (i = 0; i < 4; ++i) {
             if (!ws[i]) continue;
-            shadow(cr, xs[i], y, ws[i], ISLAND_H, 22, 52, -15, m->shadow,
+            shadow(cr, xs[i], y, ws[i], ISLAND_H, ISLAND_R, 22, 52, -15, m->shadow,
                    m->shadow_mid_a, S.ww, S.wh);
-            shadow(cr, xs[i], y, ws[i], ISLAND_H, 3, 8, 0, m->shadow,
+            shadow(cr, xs[i], y, ws[i], ISLAND_H, ISLAND_R, 3, 8, 0, m->shadow,
                    m->shadow_near_a, S.ww, S.wh);
         }
         for (i = 0; i < 4; ++i) {
@@ -2098,6 +2098,7 @@ void shelf_menu_paint(ObMenuFrame *f, Visual *visual)
 {
     const RrTheme *t = ob_rr_theme;
     gint w = f->area.width, h = f->area.height, b = t->mbwidth;
+    gint s = f->shadow, ww = w + 2 * s, wh = h + 2 * s;
     gint pad = MENU_ITEM_PADDING;
     gdouble r = MIN(config_shelf_menu_radius, MIN(w, h) / 2.0);
     gdouble ir = CLAMP(r - config_shelf_menu_padding, 4, 8);
@@ -2112,14 +2113,21 @@ void shelf_menu_paint(ObMenuFrame *f, Visual *visual)
     if (w <= 0 || h <= 0) return;
     /* drawn into the window's background pixmap, as RrPaint does, so the
        server repaints it when the menu is mapped or exposed */
-    pm = XCreatePixmap(obt_display, f->window, w, h, 32);
-    dst = cairo_xlib_surface_create(obt_display, pm, visual, w, h);
+    pm = XCreatePixmap(obt_display, f->window, ww, wh, 32);
+    dst = cairo_xlib_surface_create(obt_display, pm, visual, ww, wh);
     cr = cairo_create(dst);
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_BEST);
     cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
     cairo_set_source_rgba(cr, 0, 0, 0, 0);
     cairo_paint(cr);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    /* a soft shadow like the islands': a wide one and a close one */
+    if (s) {
+        shadow(cr, s, s, w, h, r, 8, 22, -4, mat_dark.shadow, 0.34, ww, wh);
+        shadow(cr, s, s, w, h, r, 1, 4, 0, mat_dark.shadow, 0.22, ww, wh);
+    }
+    cairo_translate(cr, s, s);
 
     /* the box: the border, then the background inside it; the background
        has the size of the items' own, so gradients line up */

@@ -1130,10 +1130,16 @@ static void parse_shelf_system(xmlNodePtr node)
     }
     if ((n = obt_xml_find_node(node, "battery")))
         config_shelf_battery = obt_xml_node_bool(n);
+    /* rounded, airy menus come with the shelf; without it the menus stay
+       as upstream draws them unless asked */
     if ((n = obt_xml_find_node(node, "menuRadius")))
         config_shelf_menu_radius = CLAMP(obt_xml_node_int(n), 0, 32);
+    else if (config_shelf_enabled)
+        config_shelf_menu_radius = 12;
     if ((n = obt_xml_find_node(node, "menuPadding")))
         config_shelf_menu_padding = CLAMP(obt_xml_node_int(n), 0, 24);
+    else if (config_shelf_enabled)
+        config_shelf_menu_padding = 8;
     if ((n = obt_xml_find_node(node, "batteryDir")))
         config_shelf_battery_dir = obt_xml_node_string(n);
 }

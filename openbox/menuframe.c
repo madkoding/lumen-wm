@@ -151,6 +151,7 @@ ObMenuFrame* menu_frame_new(ObMenu *menu, guint show_from, ObClient *client)
         self->argb = config_shelf_menu_radius > 0 &&
                      shelf_menu_argb(&vis, &cmap);
         if (self->argb) {
+            self->shadow = 24;
             attr.colormap = cmap;
             attr.border_pixel = 0;
             attr.background_pixmap = None;
@@ -279,7 +280,8 @@ void menu_frame_move(ObMenuFrame *self, gint x, gint y)
 {
     RECT_SET_POINT(self->area, x, y);
     self->monitor = screen_find_monitor_point(x, y);
-    XMoveWindow(obt_display, self->window, self->area.x, self->area.y);
+    XMoveWindow(obt_display, self->window, self->area.x - self->shadow,
+                self->area.y - self->shadow);
 }
 
 static void menu_frame_place_topmenu(ObMenuFrame *self, const GravityPoint *pos,
@@ -463,9 +465,6 @@ static void menu_entry_frame_render(ObMenuEntryFrame *self)
                   self->area.width, self->area.height);
     /* a cairo frame paints its entries itself (shelf_menu_paint) */
     if (frame->argb) return;
-    if (MARGIN && self->entry->type != OB_MENU_ENTRY_TYPE_SEPARATOR)
-        round_corners(self->window, self->area.width, self->area.height,
-                      MIN(config_shelf_menu_radius, 8));
     item_a->surface.parent = self->frame->a_items;
     item_a->surface.parentx = self->area.x;
     item_a->surface.parenty = self->area.y;
@@ -843,8 +842,12 @@ void menu_frame_render(ObMenuFrame *self)
         RECT_SET_POINT(e->area, MARGIN, h+e->border);
         /* the border of an ARGB frame is painted inside the window */
         XMoveWindow(obt_display, e->window,
-                    e->area.x-e->border + (self->argb ? ob_rr_theme->mbwidth : 0),
-                    e->area.y-e->border + (self->argb ? ob_rr_theme->mbwidth : 0));
+                    e->area.x - e->border + (self->argb ?
+                                             ob_rr_theme->mbwidth : 0) +
+                    self->shadow,
+                    e->area.y - e->border + (self->argb ?
+                                             ob_rr_theme->mbwidth : 0) +
+                    self->shadow);
         if (!self->argb) {
             XSetWindowBorderWidth(obt_display, e->window, e->border);
             XSetWindowBorder(obt_display, e->window,
@@ -941,8 +944,8 @@ void menu_frame_render(ObMenuFrame *self)
            is drawn with cairo, border included */
         if (old) XFreePixmap(obt_display, old);
         XResizeWindow(obt_display, self->window,
-                      w + 2 * ob_rr_theme->mbwidth,
-                      h + 2 * ob_rr_theme->mbwidth);
+                      w + 2 * ob_rr_theme->mbwidth + 2 * self->shadow,
+                      h + 2 * ob_rr_theme->mbwidth + 2 * self->shadow);
     } else {
         XResizeWindow(obt_display, self->window, w, h);
         RrPaint(self->a_items, self->window, w, h);
@@ -957,6 +960,10 @@ void menu_frame_render(ObMenuFrame *self)
     RECT_SET_SIZE(self->area, w, h);
     if (self->argb) {
         Visual *vis;
+        XRectangle box = { self->shadow, self->shadow, w, h };
+        /* the shadow lets the pointer through */
+        XShapeCombineRectangles(obt_display, self->window, ShapeInput, 0, 0,
+                                &box, 1, ShapeSet, Unsorted);
         if (shelf_menu_argb(&vis, NULL))
             shelf_menu_paint(self, vis);
     } else {

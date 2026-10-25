@@ -77,6 +77,9 @@ struct _ObMenuFrame
     /* drawn with cairo on a 32-bit window (a compositor runs): anti-aliased
        rounded corners, and the border is painted, not a window border */
     gboolean argb;
+    /* room for the shadow around an ARGB frame; the window is that much
+       bigger on each side than area, and takes no input there */
+    gint shadow;
 
     gint monitor; /* monitor on which to show the menu in xinerama */
 
