@@ -4,6 +4,8 @@
 
 - This is a fork: `madkoding/openbox`. Branches, pushes and pull requests always target
   `madkoding/openbox` (base `main`), **never** the upstream Openbox repository.
+- The project's user-facing name is **Lumen** (based on Openbox). Binaries, config paths and package names
+  still say `openbox` until the user decides otherwise.
 - Commits and pull request titles are semantic (`feat(shelf): …`, `fix(menu): …`, `docs: …`).
 
 ## Checks

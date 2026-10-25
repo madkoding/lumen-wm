@@ -1,12 +1,15 @@
-# Openbox with a shelf
+# Lumen
 
-**Openbox, the light and fast window manager, plus a modern floating shelf at the bottom of the screen.**
-It gives you a dock with your favourite apps, a music player, the weather, and a clock with wifi, volume and
-power controls. It looks like a modern desktop and keeps Openbox's speed.
+**A light and fast X11 window manager with colour themes and a modern floating shelf at the bottom of the
+screen.** It gives you a dock with your favourite apps, a music player, the weather, and a clock with wifi,
+volume and power controls. It looks like a modern desktop and keeps the speed of Openbox, which it is based on.
+
+> Lumen is a heavily modified fork of [Openbox](http://openbox.org). For now it still installs and runs as
+> `openbox` and reads its settings from `~/.config/openbox`, so the commands and paths below keep that name.
 
 ![The shelf: dock with pinned apps, music player, weather and clock](docs/screenshots/shelf-desktop.png)
 
-The shelf is **off by default**. Until you turn it on, this is plain [Openbox](http://openbox.org).
+The shelf is **off by default**. Until you turn it on, Lumen behaves like plain [Openbox](http://openbox.org).
 
 ## What you get
 
@@ -30,8 +33,8 @@ sudo apt-get install build-essential autoconf automake libtool pkg-config gettex
   libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev libx11-dev libxft-dev \
   libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev libimlib2-dev
 
-git clone https://github.com/madkoding/openbox
-cd openbox
+git clone https://github.com/madkoding/openbox lumen
+cd lumen
 ./bootstrap
 ./configure --prefix=/usr --sysconfdir=/etc
 make
@@ -61,8 +64,8 @@ The shelf appears at the bottom of the screen. Every time you change `rc.xml`, r
 
 ### Pick a look
 
-The shelf takes the colours of your Openbox theme. Change the theme (for example with `obconf`) and the shelf
-changes with it. These are the themes that come with Openbox:
+The shelf takes the colours of your window theme. Change the theme (for example with `obconf`) and the shelf
+changes with it. These are the themes that come with Lumen:
 
 ![The shelf under each bundled theme](docs/screenshots/shelf-themes.png)
 
@@ -298,7 +301,7 @@ Commands run in the background, so a slow one never freezes the desktop.
 
 ## Use in Kitties
 
-This fork is the window manager of [Kitties](https://github.com/madkoding/kitties). Its desktop image comes with
+Lumen is the window manager of [Kitties](https://github.com/madkoding/kitties). Its desktop image comes with
 the shelf already set up: the Sansation font, Lucide icons, pinned apps, and music and weather scripts. See its
 [desktop docs](https://github.com/madkoding/kitties/blob/main/docs/DESKTOP.md).
 
@@ -312,14 +315,14 @@ the shelf already set up: the Sansation font, Lucide icons, pinned apps, and mus
 
 ## License and credits
 
-Openbox is free software under the GNU General Public License, version 2 or (at your option) any later
-version. See [`COPYING`](COPYING). This fork keeps the original copyright notices and [`AUTHORS`](AUTHORS),
-and the shelf is released under the same licence.
+Lumen is based on Openbox and, like it, is free software under the GNU General Public License, version 2 or
+(at your option) any later version. See [`COPYING`](COPYING). Lumen keeps the original copyright notices and
+[`AUTHORS`](AUTHORS), and its own changes, the shelf included, are released under the same licence.
 
 - Openbox: Copyright (C) 2004 Mikael Magnusson, Copyright (C) 2002 Dana Jansens, and all the contributors in
   `AUTHORS`. Upstream: <http://openbox.org>.
-- The shelf's design is inspired by the shelf of Luma. This project is not affiliated with Luma and does not
-  use its name or logo.
+- The shelf's design is inspired by the shelf of LumaUI. Lumen is not affiliated with LumaUI or Openbox and
+  does not use their logos.
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
 implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.

@@ -1,6 +1,6 @@
 # Shelf
 
-An optional bar drawn by Openbox itself: two rounded islands held 16 px off
+An optional bar drawn by Lumen itself: two rounded islands held 16 px off
 the bottom edge, centred on the primary monitor.
 
 - **Dock island**: an applications tile (opens `root-menu`), a rule, then one
@@ -13,7 +13,7 @@ Enable it in `rc.xml`:
 ```xml
 <shelf>
   <enabled>yes</enabled>
-  <material>theme</material>  <!-- theme (the Openbox theme's colours) | dark | light -->
+  <material>theme</material>  <!-- theme (the window theme's colours) | dark | light -->
   <font></font>  <!-- empty = the system sans (fontconfig); or a family -->
   <colors><!-- optional #rrggbb overrides: body, text, hover, accent --></colors>
 </shelf>
