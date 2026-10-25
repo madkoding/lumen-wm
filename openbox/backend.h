@@ -201,10 +201,11 @@ struct _ObBackend {
 
     /* --- stacking --- */
 
-    /*! Set the stacking order of everything the core shows: managed
-      surfaces together with the canvases they own, bottom first. A canvas
-      id and a surface id never collide. */
-    void (*restack)(const guintptr *bottom_to_top, guint n);
+    /*! Stack these right below above, the first one highest, as
+      XRestackWindows() does. Ids are managed surfaces, the canvases they
+      own, or the backend's own windows; a canvas id and a surface id never
+      collide. above is OB_SURFACE_NONE to put them at the top. */
+    void (*restack)(guintptr above, const guintptr *top_first, guint n);
 
     /* --- canvases: what the core draws --- */
 
