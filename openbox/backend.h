@@ -452,10 +452,12 @@ struct _ObBackendEvents {
     void (*request_activate)(ObSurfaceId s, ObRequestSource from,
                              guint32 time);
     void (*request_close)(ObSurfaceId s, ObRequestSource from);
-    /*! An interactive move or resize the client started (xdg_toplevel.move,
-      _NET_WM_MOVERESIZE). cursor names the edge, or OB_CURSOR_MOVE. */
-    void (*request_move_resize)(ObSurfaceId s, ObCursor cursor,
-                                guint32 time);
+    /*! An interactive move or resize the client started (xdg_toplevel.move
+      and resize, _NET_WM_MOVERESIZE), or OB_MOVERESIZE_CANCEL to stop the
+      one going on. x, y: where the pointer is, in layout coordinates;
+      button: the one held down, or 0 for the keyboard. */
+    void (*request_move_resize)(ObSurfaceId s, ObMoveResize edge, gint x,
+                                gint y, guint button);
     void (*request_desktop)(guint desktop, guint32 time);
     /*! desktop is DESKTOP_ALL for every desktop; it may be out of range. */
     void (*request_surface_desktop)(ObSurfaceId s, guint desktop);

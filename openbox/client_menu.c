@@ -151,7 +151,7 @@ static void client_menu_execute(ObMenuEntry *e, ObMenuFrame *f,
 
         screen_pointer_pos(&x, &y);
         moveresize_start(c, x, y, 0,
-                         OBT_PROP_ATOM(NET_WM_MOVERESIZE_MOVE_KEYBOARD));
+                         OB_MOVERESIZE_MOVE_KEYBOARD);
         break;
     case CLIENT_RESIZE:
         /* this needs to grab the keyboard so hide the menu */
@@ -160,7 +160,7 @@ static void client_menu_execute(ObMenuEntry *e, ObMenuFrame *f,
 
         screen_pointer_pos(&x, &y);
         moveresize_start(c, x, y, 0,
-                         OBT_PROP_ATOM(NET_WM_MOVERESIZE_SIZE_KEYBOARD));
+                         OB_MOVERESIZE_SIZE_KEYBOARD);
         break;
     case CLIENT_CLOSE:
         client_close(c);

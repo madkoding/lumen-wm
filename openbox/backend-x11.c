@@ -831,6 +831,15 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
         events->request_activate(s, from,
                                  from == OB_REQUEST_FROM_UNKNOWN ?
                                  0 : (guint32)e->data.l[1]);
+    } else if (msgtype == OBT_PROP_ATOM(NET_WM_MOVERESIZE)) {
+        const glong dir = e->data.l[2];
+
+        ob_debug("net_wm_moveresize for 0x%lx direction %ld",
+                 e->window, dir);
+        /* ObMoveResize has _NET_WM_MOVERESIZE's order */
+        if (dir >= OB_MOVERESIZE_SIZE_TOPLEFT && dir <= OB_MOVERESIZE_CANCEL)
+            events->request_move_resize(s, (ObMoveResize)dir, e->data.l[0],
+                                        e->data.l[1], e->data.l[3]);
     } else
         return FALSE;
     return TRUE;
