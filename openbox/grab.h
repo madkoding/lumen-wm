@@ -44,14 +44,6 @@ gint grab_server(gboolean grab);
 gboolean grab_on_keyboard(void);
 gboolean grab_on_pointer(void);
 
-void grab_button_full(guint button, guint state, Window win, guint mask,
-                      gint pointer_mode, ObCursor cursor);
-void ungrab_button(guint button, guint state, Window win);
-
-void grab_key(guint keycode, guint state, Window win, gint keyboard_mode);
-
-void ungrab_all_keys(Window win);
-
 void grab_key_passive_count(int change);
 void ungrab_passive_key(void);
 

@@ -23,6 +23,7 @@
 #include "event.h"
 #include "client.h"
 #include "grab.h"
+#include "backend.h"
 #include "frame.h"
 #include "translate.h"
 #include "mouse.h"
@@ -110,27 +111,22 @@ void mouse_grab_for_client(ObClient *client, gboolean grab)
         for (it = bound_contexts[i]; it; it = g_slist_next(it)) {
             /* grab/ungrab the button */
             ObMouseBinding *b = it->data;
-            Window win;
-            gint mode;
-            guint mask;
+            guintptr over;
+            gboolean hold;
 
             if (FRAME_CONTEXT(i, client)) {
-                win = client->frame->window;
-                mode = GrabModeAsync;
-                mask = ButtonPressMask | ButtonMotionMask | ButtonReleaseMask;
+                over = client->frame->window;
+                hold = FALSE;
             } else if (CLIENT_CONTEXT(i, client)) {
-                win = client->window;
-                mode = GrabModeSync; /* this is handled in event */
-                mask = ButtonPressMask; /* can't catch more than this with Sync
-                                           mode the release event is
-                                           manufactured in event() */
+                over = client->window;
+                hold = TRUE; /* the press is replayed or not in event */
             } else continue;
 
             if (grab)
-                grab_button_full(b->button, b->state, win, mask, mode,
-                                 OB_CURSOR_NONE);
+                ob_backend->bind_button(over, b->button, b->state, hold,
+                                        OB_CURSOR_NONE);
             else
-                ungrab_button(b->button, b->state, win);
+                ob_backend->unbind_button(over, b->button, b->state);
         }
 }
 

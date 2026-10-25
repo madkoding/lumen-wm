@@ -29,12 +29,6 @@
 #include <glib.h>
 #include <X11/Xlib.h>
 
-#define GRAB_KEY_MASK (KeyPressMask | KeyReleaseMask)
-
-#define MASK_LIST_SIZE 8
-
-/*! A list of all possible combinations of keyboard lock masks */
-static guint mask_list[MASK_LIST_SIZE];
 static guint kgrabs = 0;
 static guint pgrabs = 0;
 /*! The time at which the last grab was made */
@@ -147,23 +141,6 @@ gint grab_server(gboolean grab)
 
 void grab_startup(gboolean reconfig)
 {
-    guint i = 0;
-    guint num, caps, scroll;
-
-    num = obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_NUMLOCK);
-    caps = obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_CAPSLOCK);
-    scroll = obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_SCROLLLOCK);
-
-    mask_list[i++] = 0;
-    mask_list[i++] = num;
-    mask_list[i++] = caps;
-    mask_list[i++] = scroll;
-    mask_list[i++] = num | caps;
-    mask_list[i++] = num | scroll;
-    mask_list[i++] = caps | scroll;
-    mask_list[i++] = num | caps | scroll;
-    g_assert(i == MASK_LIST_SIZE);
-
     ic = obt_keyboard_context_new(obt_root(ob_screen), grab_window());
 }
 
@@ -177,48 +154,6 @@ void grab_shutdown(gboolean reconfig)
     while (ungrab_keyboard());
     while (ungrab_pointer());
     while (grab_server(FALSE));
-}
-
-void grab_button_full(guint button, guint state, Window win, guint mask,
-                      gint pointer_mode, ObCursor cur)
-{
-    guint i;
-
-    /* can get BadAccess from these */
-    obt_display_ignore_errors(TRUE);
-    for (i = 0; i < MASK_LIST_SIZE; ++i)
-        XGrabButton(obt_display, button, state | mask_list[i], win, False,
-                    mask, pointer_mode, GrabModeAsync, None, ob_cursor(cur));
-    obt_display_ignore_errors(FALSE);
-    if (obt_display_error_occured)
-        ob_debug("Failed to grab button %d modifiers %d", button, state);
-}
-
-void ungrab_button(guint button, guint state, Window win)
-{
-    guint i;
-
-    for (i = 0; i < MASK_LIST_SIZE; ++i)
-        XUngrabButton(obt_display, button, state | mask_list[i], win);
-}
-
-void grab_key(guint keycode, guint state, Window win, gint keyboard_mode)
-{
-    guint i;
-
-    /* can get BadAccess' from these */
-    obt_display_ignore_errors(TRUE);
-    for (i = 0; i < MASK_LIST_SIZE; ++i)
-        XGrabKey(obt_display, keycode, state | mask_list[i], win, FALSE,
-                 GrabModeAsync, keyboard_mode);
-    obt_display_ignore_errors(FALSE);
-    if (obt_display_error_occured)
-        ob_debug("Failed to grab keycode %d modifiers %d", keycode, state);
-}
-
-void ungrab_all_keys(Window win)
-{
-    XUngrabKey(obt_display, AnyKey, AnyModifier, win);
 }
 
 void grab_key_passive_count(int change)

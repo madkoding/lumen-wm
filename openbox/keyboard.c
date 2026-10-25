@@ -24,6 +24,7 @@
 #include "openbox.h"
 #include "event.h"
 #include "grab.h"
+#include "backend.h"
 #include "client.h"
 #include "actions.h"
 #include "menuframe.h"
@@ -48,20 +49,18 @@ static void grab_keys(gboolean grab)
 {
     KeyBindingTree *p;
 
-    ungrab_all_keys(obt_root(ob_screen));
+    ob_backend->unbind_all_keys();
 
     if (grab) {
         p = curpos ? curpos->first_child : keyboard_firstnode;
         while (p) {
             if (p->key && p->grab)
-                grab_key(p->key, p->state, obt_root(ob_screen),
-                         GrabModeAsync);
+                ob_backend->bind_key(p->key, p->state);
             p = p->next_sibling;
         }
         if (curpos)
-            grab_key(config_keyboard_reset_keycode,
-                     config_keyboard_reset_state,
-                     obt_root(ob_screen), GrabModeAsync);
+            ob_backend->bind_key(config_keyboard_reset_keycode,
+                                 config_keyboard_reset_state);
     }
 }
 
