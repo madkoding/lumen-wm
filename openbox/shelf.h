@@ -33,6 +33,9 @@ extern StrutPartial shelf_strut;
 void shelf_startup(gboolean reconfig);
 void shelf_shutdown(gboolean reconfig);
 
+/*! Registers the menu of the dock tiles (Pin, Unpin). Called by menu_startup */
+void shelf_menu_startup(void);
+
 /*! Gives the shelf a chance to take an X event. Returns TRUE when the event
   was for the shelf and must not be processed any further. */
 gboolean shelf_event(const XEvent *e);

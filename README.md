@@ -51,6 +51,7 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
       <class>Pcmanfm</class>            <!-- WM_CLASS; default: the command's first word -->
     </pin>
   </pins>
+  <pinsFile>~/.config/kitties/pins</pinsFile> <!-- optional: pins saved from the dock; replaces <pins> once it exists -->
 
   <media>
     <command>my-media-script</command>  <!-- prints what the island shows -->
@@ -68,6 +69,9 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
 
 - **Pins**: a click starts the command, or focuses the window of that class (and minimises it if it
   already has focus). Bare icon names are searched in `$XDG_DATA_DIRS/icons/<iconTheme>/`.
+- **Pin and unpin**: right click a tile for *Pin to dock* or *Unpin from dock* (running apps also get their
+  window menu). With `<pinsFile>` set, each change is saved there as `name|icon|command|class` lines, and the
+  file replaces the `<pins>` of rc.xml from then on. The first word of the window's command line is the command.
 - **Font**: `Sansation` is the font Kitties uses. Install it and name it in `<font>`.
 - **Media command**: prints four lines: `Playing` or `Paused`, the title, the artist and a path to the cover
   (may be empty). The `previous`, `toggle` and `next` commands run on the buttons.
