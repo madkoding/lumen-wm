@@ -27,6 +27,7 @@
 #include "obt/display.h"
 #include "obt/xqueue.h"
 #include "obt/prop.h"
+#include "obt/keyboard.h"
 
 #include <X11/Xatom.h>
 #include <string.h>
@@ -1001,6 +1002,74 @@ static gboolean x11_grab_keyboard(gboolean grab, guint32 time)
                          GrabModeAsync, GrabModeAsync, time) == Success;
 }
 
+/* Every combination of the lock keys, so a binding works with any of them
+   on. The keyboard map can change, so look them up each time. */
+#define N_LOCK_MASKS 8
+static void lock_masks(guint list[N_LOCK_MASKS])
+{
+    const guint num =
+        obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_NUMLOCK);
+    const guint caps =
+        obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_CAPSLOCK);
+    const guint scroll =
+        obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_SCROLLLOCK);
+    guint i;
+
+    for (i = 0; i < N_LOCK_MASKS; ++i)
+        list[i] = (i & 1 ? num : 0) | (i & 2 ? caps : 0) |
+            (i & 4 ? scroll : 0);
+}
+
+static void x11_bind_key(guint keycode, guint mods)
+{
+    guint locks[N_LOCK_MASKS], i;
+
+    lock_masks(locks);
+    /* can get BadAccess' from these */
+    obt_display_ignore_errors(TRUE);
+    for (i = 0; i < N_LOCK_MASKS; ++i)
+        XGrabKey(obt_display, keycode, mods | locks[i], root(), FALSE,
+                 GrabModeAsync, GrabModeAsync);
+    obt_display_ignore_errors(FALSE);
+    if (obt_display_error_occured)
+        ob_debug("Failed to grab keycode %d modifiers %d", keycode, mods);
+}
+
+static void x11_unbind_all_keys(void)
+{
+    XUngrabKey(obt_display, AnyKey, AnyModifier, root());
+}
+
+static void x11_bind_button(guintptr over, guint button, guint mods,
+                            gboolean hold, ObCursor cursor)
+{
+    /* a held press is all a sync grab can catch; event.c makes up the
+       release */
+    const guint mask = hold ? ButtonPressMask :
+        ButtonPressMask | ButtonMotionMask | ButtonReleaseMask;
+    guint locks[N_LOCK_MASKS], i;
+
+    lock_masks(locks);
+    /* can get BadAccess from these */
+    obt_display_ignore_errors(TRUE);
+    for (i = 0; i < N_LOCK_MASKS; ++i)
+        XGrabButton(obt_display, button, mods | locks[i], (Window)over,
+                    False, mask, hold ? GrabModeSync : GrabModeAsync,
+                    GrabModeAsync, None, ob_cursor(cursor));
+    obt_display_ignore_errors(FALSE);
+    if (obt_display_error_occured)
+        ob_debug("Failed to grab button %d modifiers %d", button, mods);
+}
+
+static void x11_unbind_button(guintptr over, guint button, guint mods)
+{
+    guint locks[N_LOCK_MASKS], i;
+
+    lock_masks(locks);
+    for (i = 0; i < N_LOCK_MASKS; ++i)
+        XUngrabButton(obt_display, button, mods | locks[i], (Window)over);
+}
+
 static void x11_grab_server(gboolean grab)
 {
     if (grab) {
@@ -1039,6 +1108,10 @@ const ObBackend ob_backend_x11 = {
     .grab_pointer = x11_grab_pointer,
     .grab_keyboard = x11_grab_keyboard,
     .grab_server = x11_grab_server,
+    .bind_key = x11_bind_key,
+    .unbind_all_keys = x11_unbind_all_keys,
+    .bind_button = x11_bind_button,
+    .unbind_button = x11_unbind_button,
 
     .publish_clients = x11_publish_clients,
     .publish_stacking = x11_publish_stacking,

@@ -367,9 +367,18 @@ struct _ObBackend {
       core counts nested grabs. */
     void (*grab_server)(gboolean grab);
     /*! Make sure a key binding reaches the core whichever surface has the
-      focus. keysym and modifiers are xkbcommon's. */
-    void (*bind_key)(guint32 keysym, guint mods);
+      focus, with any lock key on or off. keycode and mods are xkb's (on
+      X11, the server's keycodes and modifier masks). */
+    void (*bind_key)(guint keycode, guint mods);
     void (*unbind_all_keys)(void);
+    /*! Make sure a button binding over a canvas or a surface reaches the
+      core, with any lock key on or off. hold: over a surface, hold the
+      press until the core says whether the client gets it; otherwise the
+      press, the drag and the release go to the core. cursor: shown while
+      the button is down. */
+    void (*bind_button)(guintptr over, guint button, guint mods,
+                        gboolean hold, ObCursor cursor);
+    void (*unbind_button)(guintptr over, guint button, guint mods);
     void (*pointer_position)(gint *x, gint *y);
     void (*pointer_warp)(gint x, gint y);
     void (*set_cursor)(ObCanvasId c, ObCursor cursor);

@@ -22,6 +22,7 @@
 #include "screen.h"
 #include "config.h"
 #include "grab.h"
+#include "backend.h"
 #include "openbox.h"
 #include "obrender/theme.h"
 #include "obt/prop.h"
@@ -41,14 +42,13 @@ StrutPartial dock_strut;
 static void dock_app_grab_button(ObDockApp *app, gboolean grab)
 {
     if (grab) {
-        grab_button_full(config_dock_app_move_button,
-                         config_dock_app_move_modifiers, app->icon_win,
-                         ButtonPressMask | ButtonReleaseMask |
-                         ButtonMotionMask,
-                         GrabModeAsync, OB_CURSOR_MOVE);
+        ob_backend->bind_button(app->icon_win, config_dock_app_move_button,
+                                config_dock_app_move_modifiers, FALSE,
+                                OB_CURSOR_MOVE);
     } else {
-        ungrab_button(config_dock_app_move_button,
-                      config_dock_app_move_modifiers, app->icon_win);
+        ob_backend->unbind_button(app->icon_win,
+                                  config_dock_app_move_button,
+                                  config_dock_app_move_modifiers);
     }
 }
 
