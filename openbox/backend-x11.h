@@ -38,6 +38,8 @@ void backend_x11_configure_request(const XConfigureRequestEvent *e);
   unmapped, destroyed or reparented out of its frame (UnmapNotify,
   DestroyNotify, ReparentNotify). */
 void backend_x11_map_event(const XEvent *e);
+/*! The event's timestamp, or CurrentTime when it has none. */
+guint32 backend_x11_event_time(const XEvent *e);
 /*! An XSync alarm went off. */
 void backend_x11_sync_alarm(const XEvent *e);
 

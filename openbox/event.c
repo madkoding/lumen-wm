@@ -232,51 +232,9 @@ static Window event_get_window(XEvent *e)
     return window;
 }
 
-static inline Time event_get_timestamp(const XEvent *e)
-{
-    Time t = CurrentTime;
-
-    /* grab the lasttime and hack up the state */
-    switch (e->type) {
-    case ButtonPress:
-    case ButtonRelease:
-        t = e->xbutton.time;
-        break;
-    case KeyPress:
-        t = e->xkey.time;
-        break;
-    case KeyRelease:
-        t = e->xkey.time;
-        break;
-    case MotionNotify:
-        t = e->xmotion.time;
-        break;
-    case PropertyNotify:
-        t = e->xproperty.time;
-        break;
-    case EnterNotify:
-    case LeaveNotify:
-        t = e->xcrossing.time;
-        break;
-    default:
-#ifdef SYNC
-        if (obt_display_extension_sync &&
-            e->type == obt_display_extension_sync_basep + XSyncAlarmNotify)
-        {
-            t = ((const XSyncAlarmNotifyEvent*)e)->time;
-        }
-#endif
-        /* if more event types are anticipated, get their timestamp
-           explicitly */
-        break;
-    }
-
-    return t;
-}
-
 static void event_set_curtime(XEvent *e)
 {
-    Time t = event_get_timestamp(e);
+    Time t = backend_x11_event_time(e);
 
     /* watch that if we get an event earlier than the last specified user_time,
        which can happen if the clock goes backwards, we erase the last
@@ -1720,42 +1678,13 @@ gboolean event_time_after(guint32 t1, guint32 t2)
         return t1 >= t2 && t1 < (t2 + TIME_HALF);
 }
 
-gboolean find_timestamp(XEvent *e, gpointer data)
-{
-    const Time t = event_get_timestamp(e);
-    if (t && t >= event_curtime) {
-        event_curtime = t;
-        return TRUE;
-    }
-    else
-        return FALSE;
-}
-
-static Time next_time(void)
-{
-    /* Some events don't come with timestamps :(
-       ...but we can get one anyways >:) */
-
-    /* Generate a timestamp so there is guaranteed at least one in the queue
-       eventually */
-    XChangeProperty(obt_display, screen_support_win,
-                    OBT_PROP_ATOM(WM_CLASS), OBT_PROP_ATOM(STRING),
-                    8, PropModeAppend, NULL, 0);
-
-    /* Grab the first timestamp available */
-    xqueue_exists(find_timestamp, NULL);
-
-    /*g_assert(event_curtime != CurrentTime);*/
-
-    /* Save the time so we don't have to do this again for this event */
-    return event_curtime;
-}
-
 Time event_time(void)
 {
-    if (event_curtime) return event_curtime;
-
-    return next_time();
+    /* some events don't come with timestamps, so ask for one, and keep it
+       for the rest of this event */
+    if (!event_curtime)
+        event_curtime = (*ob_backend->time)();
+    return event_curtime;
 }
 
 Time event_source_time(void)
@@ -1770,7 +1699,7 @@ void event_set_source_time(Time t)
 
 void event_reset_time(void)
 {
-    next_time();
+    event_curtime = (*ob_backend->time)();
 }
 
 void event_update_user_time(void)

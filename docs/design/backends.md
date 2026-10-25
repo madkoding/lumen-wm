@@ -97,7 +97,8 @@ Every step is its own small PR, and the contract tests stay green on X11 through
    (moving the Xlib code out of the core file, not rewriting it) and switches the callers:
    1. `backend-x11.c` skeleton: `startup`, `shutdown` and `event_source`, wrapping `obt_display` and `xqueue`
       (done). `openbox.c` starts the backend through `backend_startup()`. The other `ObBackend` functions stay
-      NULL until the step that moves their callers, and `time` comes with the event split (7). Taking over the
+      NULL until the step that moves their callers. `time` asks the server for a timestamp when an event came
+      without one (on X11, a property change on the support window). Taking over the
       screen is `claim_screen` and `release_screen`: the support window, the WM_Sn selection (and `--replace`),
       the root event mask, `_NET_SUPPORTING_WM_CHECK` and `_NET_SUPPORTED` live in the backend (done).
    2. Outputs: `screen.c` stops calling Xinerama and asks `output_count` and `output_area` instead (done).
