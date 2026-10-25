@@ -516,7 +516,7 @@ static void event_process(const XEvent *ec, gpointer data)
                 ob_debug_type(OB_DEBUG_FOCUS,
                               "Focus went to an unmanaged window 0x%x !",
                               e->xfocus.window);
-                focus_fallback(TRUE, config_focus_under_mouse, TRUE, TRUE);
+                ob_backend_events.focus_lost(TRUE);
             }
         }
         else if (client && e->xfocus.detail == NotifyInferior) {
@@ -524,13 +524,13 @@ static void event_process(const XEvent *ec, gpointer data)
 
             focus_left_screen = FALSE;
 
-            focus_fallback(FALSE, config_focus_under_mouse, TRUE, TRUE);
+            ob_backend_events.focus_lost(FALSE);
 
             /* We don't get a FocusOut for this case, because it's just moving
                from our Inferior up to us. This happens when iconifying a
                window with RevertToParent focus */
-            frame_adjust_focus(client->frame, FALSE);
-            /* focus_set_client(NULL) has already been called */
+            ob_backend_events.focus_left((ObSurfaceId)client->window);
+            /* the focused client has already been forgotten */
         }
         else if (e->xfocus.detail == NotifyPointerRoot ||
                  e->xfocus.detail == NotifyDetailNone ||
@@ -570,8 +570,7 @@ static void event_process(const XEvent *ec, gpointer data)
                 */
 
                 if (!focus_left_screen)
-                    focus_fallback(FALSE, config_focus_under_mouse,
-                                   TRUE, TRUE);
+                    ob_backend_events.focus_lost(FALSE);
             }
         }
         else if (!client)
@@ -583,14 +582,11 @@ static void event_process(const XEvent *ec, gpointer data)
                get the FocusIn for it, after it is unmanaged.
                Just wait for the next FocusOut/FocusIn pair, but make note that
                the window that was focused no longer is. */
-            focus_set_client(NULL);
+            ob_backend_events.focus_changed(0);
         }
         else if (client != focus_client) {
             focus_left_screen = FALSE;
-            frame_adjust_focus(client->frame, TRUE);
-            focus_set_client(client);
-            client_calc_layer(client);
-            client_bring_helper_windows(client);
+            ob_backend_events.focus_changed((ObSurfaceId)client->window);
         }
 
         waiting_for_focusin = FALSE;
@@ -619,18 +615,18 @@ static void event_process(const XEvent *ec, gpointer data)
                               "Focus went to a black hole !");
             obt_display_ignore_errors(FALSE);
             /* nothing is focused */
-            focus_set_client(NULL);
+            ob_backend_events.focus_changed(0);
         } else {
             /* Focus moved, so mark that we are waiting to process that
                FocusIn */
             waiting_for_focusin = TRUE;
 
             /* nothing is focused right now, but will be again shortly */
-            focus_set_client(NULL);
+            ob_backend_events.focus_changed(0);
         }
 
-        if (client && client != focus_client)
-            frame_adjust_focus(client->frame, FALSE);
+        if (client)
+            ob_backend_events.focus_left((ObSurfaceId)client->window);
     }
     else if (client)
         event_handle_client(client, e);
