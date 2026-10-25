@@ -53,6 +53,22 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
   </pins>
   <pinsFile>~/.config/kitties/pins</pinsFile> <!-- optional: pins saved from the dock; replaces <pins> once it exists -->
 
+  <!-- the status island's glyphs; each is optional and does nothing without its section -->
+  <network>
+    <list>nmcli -t -f IN-USE,SSID dev wifi</list>  <!-- "in-use:name" lines -->
+    <connect>nmcli dev wifi connect %s</connect>   <!-- %s: the quoted name -->
+  </network>
+  <volume>                            <!-- click: toggle, wheel: up and down -->
+    <up>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+</up>
+    <down>wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-</down>
+    <toggle>wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle</toggle>
+  </volume>
+  <power>
+    <item><name>Log out</name><command>openbox --exit</command></item>
+    <item><name>Shut down</name><command>systemctl poweroff</command></item>
+  </power>
+  <battery>yes</battery>              <!-- shown only when the machine has one -->
+
   <media>
     <command>my-media-script</command>  <!-- prints what the island shows -->
     <previous>playerctl previous</previous>
@@ -72,6 +88,10 @@ Edit `~/.config/openbox/rc.xml` (the default is in [`data/rc.xml`](data/rc.xml))
 - **Pin and unpin**: right click a tile for *Pin to dock* or *Unpin from dock* (running apps also get their
   window menu). With `<pinsFile>` set, each change is saved there as `name|icon|command|class` lines, and the
   file replaces the `<pins>` of rc.xml from then on. The first word of the window's command line is the command.
+- **Status glyphs**: the network glyph opens a menu of the networks `<list>` prints, and picking one runs
+  `<connect>`. The volume glyph toggles on click and steps with the wheel. The power glyph opens the `<power>`
+  items. With `<battery>` and a battery in `/sys/class/power_supply` (or `<batteryDir>`), its charge shows next
+  to the glyphs, and a click tells the state. Without these sections the glyphs only show.
 - **Font**: `Sansation` is the font Kitties uses. Install it and name it in `<font>`.
 - **Media command**: prints four lines: `Playing` or `Paused`, the title, the artist and a path to the cover
   (may be empty). The `previous`, `toggle` and `next` commands run on the buttons.

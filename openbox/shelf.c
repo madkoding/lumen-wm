@@ -61,11 +61,19 @@
 #define BTN_GAP     6
 #define DAY_W       46
 #define WPAD        16
+#define BATT_W      62
+#define HIT_NET     (-90)
+#define HIT_VOL     (-91)
+#define HIT_POWER   (-92)
+#define HIT_BATT    (-93)
 #define HIT_PREV    (-100)
 #define HIT_TOGGLE  (-101)
 #define HIT_NEXT    (-102)
 
 StrutPartial shelf_strut;
+
+/* the commands behind the entries of the status glyphs' menus */
+static GPtrArray *sys_cmds;
 
 typedef struct {
     gdouble r, g, b;
@@ -136,6 +144,8 @@ static struct {
     GHashTable      *pin_icons;  /* ObShelfPin* -> RrImage* (or NULL) */
     gint             hover;      /* -1 nothing, 0 the apps tile, n the nth app */
     gchar           *sig;
+    gint             batt_pct;   /* -1 when there is no battery */
+    gboolean         batt_charging;
     guint            pins_rev;   /* bumped when the pins change */
     guint            tick_id;
     guint            snap_id;
@@ -290,6 +300,25 @@ static void glyph_volume(cairo_t *cr, gdouble x, gdouble y, Rgb ink)
     cairo_stroke(cr);
     cairo_new_path(cr); cairo_arc(cr, 11, 12, 10.5, -G_PI / 4, G_PI / 4);
     cairo_stroke(cr);
+    cairo_restore(cr);
+}
+
+static void glyph_battery(cairo_t *cr, gdouble x, gdouble y, Rgb ink,
+                          gint pct, gboolean charging)
+{
+    glyph_begin(cr, x, y, ink);
+    rrect(cr, 2, 6.5, 17, 11, 2.5);
+    cairo_stroke(cr);
+    cairo_move_to(cr, 22, 10.5); cairo_line_to(cr, 22, 13.5);
+    cairo_stroke(cr);
+    if (charging) {
+        cairo_move_to(cr, 11.5, 8); cairo_line_to(cr, 8.5, 12.5);
+        cairo_line_to(cr, 12.5, 12.5); cairo_line_to(cr, 9.5, 17);
+        cairo_stroke(cr);
+    } else {
+        rrect(cr, 4.5, 9, MAX(1.5, 12 * CLAMP(pct, 0, 100) / 100.0), 6, 1);
+        cairo_fill(cr);
+    }
     cairo_restore(cr);
 }
 
@@ -552,6 +581,47 @@ static void layout_islands(void)
     cairo_surface_destroy(sc);
 }
 
+/* The first battery the kernel lists, or -1 */
+static void battery_poll(void)
+{
+    GDir *dir;
+    const gchar *name, *root;
+
+    S.batt_pct = -1;
+    S.batt_charging = FALSE;
+    if (!config_shelf_battery) return;
+    root = config_shelf_battery_dir && *config_shelf_battery_dir ?
+           config_shelf_battery_dir : "/sys/class/power_supply";
+    dir = g_dir_open(root, 0, NULL);
+    while (dir && (name = g_dir_read_name(dir))) {
+        gchar *base = g_build_filename(root, name, NULL);
+        gchar *f, *type = NULL, *cap = NULL, *st = NULL;
+
+        f = g_build_filename(base, "type", NULL);
+        g_file_get_contents(f, &type, NULL, NULL);
+        g_free(f);
+        f = g_build_filename(base, "capacity", NULL);
+        g_file_get_contents(f, &cap, NULL, NULL);
+        g_free(f);
+        f = g_build_filename(base, "status", NULL);
+        g_file_get_contents(f, &st, NULL, NULL);
+        g_free(f);
+        if (type && cap && g_ascii_isdigit(*cap) &&
+            g_str_has_prefix(type, "Battery")) {
+            S.batt_pct = CLAMP((gint)g_ascii_strtoll(cap, NULL, 10), 0, 100);
+            S.batt_charging = st && g_str_has_prefix(st, "Charging");
+        }
+        g_free(base); g_free(type); g_free(cap); g_free(st);
+        if (S.batt_pct >= 0) break;
+    }
+    if (dir) g_dir_close(dir);
+}
+
+static gint battery_w(void)
+{
+    return S.batt_pct >= 0 ? BATT_W : 0;
+}
+
 static void layout(void)
 {
     const Rect *mon = screen_physical_area_monitor(screen_monitor_primary(FALSE));
@@ -586,7 +656,8 @@ static void layout(void)
     S.dock_w = 2 * PAD + TILE;
     if (n) S.dock_w += DIVIDER_W + n * TILE + (n - 1) * TILE_GAP;
     layout_islands();
-    S.status_w = 2 * PAD + CLOCK_W + DIVIDER_W + CONTROLS_W;
+    battery_poll();
+    S.status_w = 2 * PAD + CLOCK_W + DIVIDER_W + battery_w() + CONTROLS_W;
     row_w = S.dock_w + ISLAND_GAP + S.status_w;
     if (S.media_w) row_w += ISLAND_GAP + S.media_w;
     if (S.weather_w) row_w += ISLAND_GAP + S.weather_w;
@@ -967,6 +1038,14 @@ static void paint(void)
         gdouble dx = S.status_x + PAD + CLOCK_W + 8;
         gdouble gx = S.status_x + PAD + CLOCK_W + DIVIDER_W;
         gdouble gy = y + (ISLAND_H - GLYPH) / 2.0;
+        if (S.batt_pct >= 0) {
+            gchar *pc = g_strdup_printf("%d%%", S.batt_pct);
+            glyph_battery(cr, gx, gy, m->ink, S.batt_pct, S.batt_charging);
+            centred_text(cr, pc, 12, PANGO_WEIGHT_MEDIUM,
+                         gx + GLYPH + 6 + 15, y + ISLAND_H / 2.0, m->ink, 0.85);
+            g_free(pc);
+            gx += BATT_W;
+        }
         cairo_rectangle(cr, dx, y + (ISLAND_H - DIVIDER_H) / 2.0, 1, DIVIDER_H);
         set_rgb(cr, m->divider, m->divider_a);
         cairo_fill(cr);
@@ -1067,8 +1146,9 @@ static gchar *signature(void)
     localtime_r(&now, &tm);
     strftime(buf, sizeof buf, "%H:%M", &tm);
     g_string_append(g, buf);
-    g_string_append_printf(g, "|%d|%d|%u", covered_by_fullscreen(), S.hover,
-                           S.pins_rev);
+    battery_poll();
+    g_string_append_printf(g, "|%d|%d|%u|b:%d%d", covered_by_fullscreen(),
+                           S.hover, S.pins_rev, S.batt_pct, S.batt_charging);
     g_string_append_printf(g, "|m:%s|w:%s", S.media.out ? S.media.out : "",
                            S.weather.out ? S.weather.out : "");
     for (it = client_list; it; it = g_list_next(it)) {
@@ -1392,6 +1472,7 @@ void shelf_shutdown(gboolean reconfig)
     if (S.cmap) XFreeColormap(obt_display, S.cmap);
     if (S.bg) cairo_surface_destroy(S.bg);
     if (S.tiles) g_array_free(S.tiles, TRUE);
+    if (sys_cmds) { g_ptr_array_free(sys_cmds, TRUE); sys_cmds = NULL; }
     stop_feeds();
     unload_pin_icons();
     g_free(S.sig);
@@ -1411,6 +1492,18 @@ static gint hit(gint x, gint y)
             if (x >= bx + i * (BTN + BTN_GAP) &&
                 x < bx + i * (BTN + BTN_GAP) + BTN)
                 return HIT_PREV - i;
+    }
+    if (y >= S.island_y + PAD && y < S.island_y + PAD + TILE) {
+        gint gx = S.status_x + PAD + CLOCK_W + DIVIDER_W;
+        if (S.batt_pct >= 0) {
+            if (x >= gx - GLYPH_GAP / 2 && x < gx + BATT_W - GLYPH_GAP / 2)
+                return HIT_BATT;
+            gx += BATT_W;
+        }
+        for (i = 0; i < 3; ++i)
+            if (x >= gx + i * (GLYPH + GLYPH_GAP) - GLYPH_GAP / 2 &&
+                x < gx + i * (GLYPH + GLYPH_GAP) + GLYPH + GLYPH_GAP / 2)
+                return HIT_NET - i;
     }
     if (y < S.island_y + PAD || y >= S.island_y + PAD + TILE) return -1;
     if (x >= S.dock_x + PAD && x < S.dock_x + PAD + TILE) return 0;
@@ -1436,6 +1529,7 @@ static void show_menu(const gchar *name, gint rx, gint ry, ObClient *c)
 
 #define SHELF_MENU_NAME "shelf-menu"
 enum { SM_PIN = 1, SM_UNPIN, SM_WINDOW };
+#define SM_COMMAND  100   /* ids from here run sys_cmds[id - SM_COMMAND] */
 
 static ObMenu *shelf_menu;
 static ObShelfPin *menu_pin;     /* the tile the menu was opened on */
@@ -1558,6 +1652,10 @@ static void shelf_menu_execute(ObMenuEntry *e, ObMenuFrame *f, ObClient *c,
     switch (e->id) {
     case SM_PIN:   pin_client(menu_client); break;
     case SM_UNPIN: unpin(menu_pin); break;
+    default:
+        if (e->id >= SM_COMMAND && sys_cmds &&
+            (guint)(e->id - SM_COMMAND) < sys_cmds->len)
+            launch(g_ptr_array_index(sys_cmds, e->id - SM_COMMAND));
     }
     menu_pin = NULL;
     menu_client = NULL;
@@ -1581,6 +1679,107 @@ void shelf_menu_startup(void)
     shelf_menu = menu_new(SHELF_MENU_NAME, "Dock", FALSE, NULL);
     menu_set_execute_func(shelf_menu, shelf_menu_execute);
     menu_set_place_func(shelf_menu, shelf_menu_place);
+}
+
+/* ---- the status glyphs' menus --------------------------------------------- */
+
+static void sys_menu_begin(void)
+{
+    menu_clear_entries(shelf_menu);
+    menu_pin = NULL;
+    menu_client = NULL;
+    if (sys_cmds) g_ptr_array_free(sys_cmds, TRUE);
+    sys_cmds = g_ptr_array_new_with_free_func(g_free);
+}
+
+static void sys_menu_add(const gchar *label, const gchar *command,
+                         gboolean enabled)
+{
+    ObMenuEntry *e;
+    gint id = SM_COMMAND + sys_cmds->len;
+
+    g_ptr_array_add(sys_cmds, g_strdup(command ? command : ""));
+    e = menu_add_normal(shelf_menu, id, label, NULL, FALSE);
+    e->data.normal.enabled = enabled && command;
+}
+
+/* "in-use:name" lines; a ':' in the name is escaped with a backslash */
+static void network_menu(void)
+{
+    gchar *argv[] = { "/bin/sh", "-c", config_shelf_network->list, NULL };
+    gchar *out = NULL, **lines;
+    GHashTable *seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
+                                             NULL);
+    gint i, n = 0;
+
+    g_spawn_sync(NULL, argv, NULL, G_SPAWN_STDERR_TO_DEV_NULL, NULL, NULL,
+                 &out, NULL, NULL, NULL);
+    lines = g_strsplit(out ? out : "", "\n", -1);
+    for (i = 0; lines[i] && n < 20; ++i) {
+        gchar *colon = strchr(lines[i], ':');
+        gboolean active;
+        GString *name;
+        gchar *c, *label, *cmd = NULL, *q;
+
+        if (!colon || !colon[1]) continue;
+        active = lines[i][0] == '*';
+        name = g_string_new(NULL);
+        for (c = colon + 1; *c; ++c) {
+            if (*c == '\\' && c[1]) ++c;
+            g_string_append_c(name, *c);
+        }
+        if (g_hash_table_contains(seen, name->str)) {
+            g_string_free(name, TRUE);
+            continue;
+        }
+        g_hash_table_add(seen, g_strdup(name->str));
+        label = g_strdup_printf("%s%s", active ? "\342\234\223 " : "", name->str);
+        if (config_shelf_network->connect && !active) {
+            gchar **parts;
+            q = g_shell_quote(name->str);
+            parts = g_strsplit(config_shelf_network->connect, "%s", 2);
+            cmd = parts[1] ? g_strconcat(parts[0], q, parts[1], NULL) :
+                  g_strdup(config_shelf_network->connect);
+            g_strfreev(parts);
+            g_free(q);
+        }
+        sys_menu_add(label, cmd, TRUE);
+        g_free(label);
+        g_free(cmd);
+        g_string_free(name, TRUE);
+        ++n;
+    }
+    if (!n) sys_menu_add("No networks found", NULL, FALSE);
+    g_strfreev(lines);
+    g_free(out);
+    g_hash_table_destroy(seen);
+}
+
+static void show_status_menu(gint h, gint rx, gint ry)
+{
+    GSList *it;
+
+    if (!shelf_menu) return;
+    if (h == HIT_NET && config_shelf_network) {
+        sys_menu_begin();
+        network_menu();
+    } else if (h == HIT_POWER && config_shelf_power) {
+        sys_menu_begin();
+        for (it = config_shelf_power; it; it = g_slist_next(it)) {
+            ObShelfPower *p = it->data;
+            sys_menu_add(p->name, p->command, TRUE);
+        }
+    } else if (h == HIT_BATT && S.batt_pct >= 0) {
+        gchar *l;
+        sys_menu_begin();
+        l = g_strdup_printf("%d%%, %s", S.batt_pct,
+                            S.batt_charging ? "charging" : "on battery");
+        sys_menu_add(l, NULL, FALSE);
+        g_free(l);
+    } else {
+        return;
+    }
+    show_menu(SHELF_MENU_NAME, rx, ry, NULL);
 }
 
 static void show_tile_menu(Tile *t, gint rx, gint ry)
@@ -1622,6 +1821,17 @@ gboolean shelf_event(const XEvent *e)
         if (h == 0 && e->xbutton.button == 1) {
             show_menu("root-menu", e->xbutton.x_root,
                       S.wy + S.island_y - 4, NULL);
+        } else if (h <= HIT_NET && h >= HIT_BATT) {
+            guint b = e->xbutton.button;
+            if (h == HIT_VOL && config_shelf_volume) {
+                const gchar *cmd = b == 1 ? config_shelf_volume->toggle :
+                                   b == 4 ? config_shelf_volume->up :
+                                   b == 5 ? config_shelf_volume->down : NULL;
+                if (cmd) launch(cmd);
+            } else if (b == 1) {
+                show_status_menu(h, e->xbutton.x_root,
+                                 S.wy + S.island_y - 4);
+            }
         } else if (h <= HIT_PREV && e->xbutton.button == 1) {
             const gchar *cmd = h == HIT_PREV ? config_shelf_media->previous :
                                h == HIT_TOGGLE ? config_shelf_media->toggle :

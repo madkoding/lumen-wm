@@ -183,6 +183,32 @@ typedef struct _ObShelfWeather {
     guint  interval;
 } ObShelfWeather;
 extern ObShelfWeather *config_shelf_weather;
+/*! What the status island's glyphs do when clicked. All are optional: a
+  control without its section does nothing. */
+typedef struct _ObShelfNetwork {
+    gchar *list;     /*!< prints the networks: "in-use:name", as
+                       nmcli -t -f IN-USE,SSID dev wifi does */
+    gchar *connect;  /*!< run to join one; %s is the quoted name */
+} ObShelfNetwork;
+extern ObShelfNetwork *config_shelf_network;
+typedef struct _ObShelfVolume {
+    gchar *up;       /*!< the wheel and the click */
+    gchar *down;
+    gchar *toggle;
+} ObShelfVolume;
+extern ObShelfVolume *config_shelf_volume;
+typedef struct _ObShelfPower {
+    gchar *name;
+    gchar *command;
+} ObShelfPower;
+/*! The entries of the power menu (ObShelfPower*) */
+extern GSList *config_shelf_power;
+/*! Show the battery, when the machine has one (a /sys/class/power_supply
+  entry of type Battery) */
+extern gboolean config_shelf_battery;
+/*! Where the kernel lists power supplies (default /sys/class/power_supply) */
+extern gchar   *config_shelf_battery_dir;
+
 /*! The number of milliseconds to wait before showing the dock */
 extern guint config_dock_show_delay;
 /*! The mouse button to be used to move dock apps */
