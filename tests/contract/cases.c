@@ -39,6 +39,17 @@ static void title_shown(void)
     ct_window_destroy(w);
 }
 
+/* A window without a title is shown with its application's name. */
+static void untitled_shows_app_id(void)
+{
+    ct_win *w = ct_window_new(CT_WIN_NORMAL, NULL, SMALL);
+    ct_window_set_app_id(w, "ContractApp");
+    ct_window_map(w);
+    CT_EVENTUALLY(ct_window_managed(w) && ct_window_viewable(w));
+    CT_EVENTUALLY(ct_window_title_is(w, "ContractApp"));
+    ct_window_destroy(w);
+}
+
 /* A window that draws its own decorations gets none from the window
    manager. */
 static void undecorated_request_honoured(void)
@@ -278,6 +289,7 @@ static void desktops_switch(void)
 const ct_case ct_cases[] = {
     { "map_manages", map_manages },
     { "title_shown", title_shown },
+    { "untitled_shows_app_id", untitled_shows_app_id },
     { "undecorated_request_honoured", undecorated_request_honoured },
     { "destroy_unmanages", destroy_unmanages },
     { "new_window_focused", new_window_focused },
