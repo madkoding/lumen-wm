@@ -133,7 +133,10 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       `focus_changed`, `focus_left` and `focus_lost`; the FocusIn/FocusOut bookkeeping (the queue look-ahead,
       focus on another screen) stays in `event.c` and moves to the backend with the event queue. Next: the
       interactive `_NET_WM_MOVERESIZE` with move/resize (9).
-   8. Input: `grab.c`, `keyboard.c`, `mouse.c`.
+   8. Input: `grab.c`, `keyboard.c`, `mouse.c`. The contract cases type and click with XTest (a key binding,
+      Alt-Tab, Alt-drag). Done: the active grabs (`grab_keyboard`, `grab_pointer`, `grab_server`); `grab.c`
+      keeps counting nested grabs and picking the ungrab time. Next: the passive key and button grabs
+      (`bind_key`, and the button bindings on frames), then the replayed clicks in `mouse.c`.
    9. Move/resize: XSync and pointer warps go behind the backend.
 4. **Render without Xlib**: obrender, frames, the shelf, menus and popups draw into cairo image surfaces and hand
    them to `canvas_present`. Themes are unchanged, and `tools/shelf-themes.sh` checks that they still read.

@@ -353,8 +353,19 @@ struct _ObBackend {
 
     /* --- input --- */
 
-    gboolean (*grab_pointer)(gboolean grab, ObCursor cursor);
-    gboolean (*grab_keyboard)(gboolean grab);
+    /*! Send every pointer event to the core, whatever is under the
+      pointer, or stop. owner_events: the core's own canvases still get the
+      pointer over them (menus); confine: keep it on the screen. time: the
+      event that asked. FALSE when the grab fails (another client holds
+      it). */
+    gboolean (*grab_pointer)(gboolean grab, gboolean owner_events,
+                             gboolean confine, ObCursor cursor,
+                             guint32 time);
+    gboolean (*grab_keyboard)(gboolean grab, guint32 time);
+    /*! Hold the other clients still while the core does several things
+      that must look like one (X11 XGrabServer; nothing on Wayland). The
+      core counts nested grabs. */
+    void (*grab_server)(gboolean grab);
     /*! Make sure a key binding reaches the core whichever surface has the
       focus. keysym and modifiers are xkbcommon's. */
     void (*bind_key)(guint32 keysym, guint mods);

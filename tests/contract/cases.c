@@ -437,6 +437,50 @@ static void starts_on_desktop(void)
     ct_window_destroy(w);
 }
 
+/* A key binding runs its action (GoToDesktop on C-A-Right in rc.xml). */
+static void key_binding_runs(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT | CT_CAP_DESKTOPS);
+    CT_EVENTUALLY(ct_current_desktop() == 0);
+    ct_input_keys("C-A-Right");
+    CT_EVENTUALLY(ct_current_desktop() == 1);
+    ct_input_keys("C-A-Left");
+    CT_EVENTUALLY(ct_current_desktop() == 0);
+}
+
+/* Alt-Tab goes to the window used before, and holds the keyboard until Alt
+   is let go. */
+static void alt_tab_switches(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT);
+    ct_win *a = mapped(CT_WIN_NORMAL, "first", SMALL);
+    ct_win *b = mapped(CT_WIN_NORMAL, "second", SMALL);
+    CT_EVENTUALLY(ct_window_focused(b));
+
+    ct_input_keys("A-Tab");
+    CT_EVENTUALLY(ct_window_focused(a));
+    ct_settle();
+    ct_input_keys("A-Tab");
+    CT_EVENTUALLY(ct_window_focused(b));
+    ct_window_destroy(b);
+    ct_window_destroy(a);
+}
+
+/* Dragging a window with Alt held moves it by as much. */
+static void alt_drag_moves(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT);
+    ct_win *w = mapped(CT_WIN_NORMAL, "drag", SMALL);
+    ct_settle();
+    ct_rect before = ct_window_frame(w);
+
+    ct_input_drag(w, "A", 120, 80);
+    CT_EVENTUALLY(ct_window_frame(w).x == before.x + 120 &&
+                  ct_window_frame(w).y == before.y + 80);
+    CT_CHECK(ct_window_frame(w).w == before.w);
+    ct_window_destroy(w);
+}
+
 const ct_case ct_cases[] = {
     { "map_manages", map_manages },
     { "title_shown", title_shown },
@@ -465,5 +509,8 @@ const ct_case ct_cases[] = {
     { "pager_move_resize_honoured", pager_move_resize_honoured },
     { "desktops_switch", desktops_switch },
     { "starts_on_desktop", starts_on_desktop },
+    { "key_binding_runs", key_binding_runs },
+    { "alt_tab_switches", alt_tab_switches },
+    { "alt_drag_moves", alt_drag_moves },
     { NULL, NULL }
 };

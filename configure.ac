@@ -180,6 +180,15 @@ else
   xcursor_found=no
 fi
 
+dnl the contract tests type and click with XTest; without it they skip
+dnl the input cases
+PKG_CHECK_MODULES(XTEST, [xtst],
+  [XTEST_CFLAGS="$XTEST_CFLAGS -DCT_HAVE_XTEST"],
+  [XTEST_CFLAGS=; XTEST_LIBS=]
+)
+AC_SUBST(XTEST_CFLAGS)
+AC_SUBST(XTEST_LIBS)
+
 AC_ARG_ENABLE(imlib2,
   AC_HELP_STRING(
     [--disable-imlib2],

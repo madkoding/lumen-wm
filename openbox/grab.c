@@ -22,13 +22,13 @@
 #include "event.h"
 #include "screen.h"
 #include "debug.h"
+#include "backend.h"
 #include "obt/display.h"
 #include "obt/keyboard.h"
 
 #include <glib.h>
 #include <X11/Xlib.h>
 
-#define GRAB_PTR_MASK (ButtonPressMask | ButtonReleaseMask | PointerMotionMask)
 #define GRAB_KEY_MASK (KeyPressMask | KeyReleaseMask)
 
 #define MASK_LIST_SIZE 8
@@ -41,6 +41,9 @@ static guint pgrabs = 0;
 static Time  grab_time = CurrentTime;
 static gint passive_count = 0;
 static ObtIC *ic = NULL;
+
+/* grab.h's grab_keyboard() and grab_pointer() macros would take the backend
+   calls of the same names, hence (*ob_backend->grab_...)(). */
 
 static Time ungrab_time(void)
 {
@@ -85,9 +88,7 @@ gboolean grab_keyboard_full(gboolean grab)
 
     if (grab) {
         if (kgrabs++ == 0) {
-            ret = XGrabKeyboard(obt_display, grab_window(),
-                                False, GrabModeAsync, GrabModeAsync,
-                                event_time()) == Success;
+            ret = (*ob_backend->grab_keyboard)(TRUE, event_time());
             if (!ret)
                 --kgrabs;
             else {
@@ -98,7 +99,7 @@ gboolean grab_keyboard_full(gboolean grab)
             ret = TRUE;
     } else if (kgrabs > 0) {
         if (--kgrabs == 0) {
-            XUngrabKeyboard(obt_display, ungrab_time());
+            (*ob_backend->grab_keyboard)(FALSE, ungrab_time());
         }
         ret = TRUE;
     }
@@ -113,11 +114,8 @@ gboolean grab_pointer_full(gboolean grab, gboolean owner_events,
 
     if (grab) {
         if (pgrabs++ == 0) {
-            ret = XGrabPointer(obt_display, grab_window(), owner_events,
-                               GRAB_PTR_MASK,
-                               GrabModeAsync, GrabModeAsync,
-                               (confine ? obt_root(ob_screen) : None),
-                               ob_cursor(cur), event_time()) == Success;
+            ret = (*ob_backend->grab_pointer)(TRUE, owner_events, confine,
+                                              cur, event_time());
             if (!ret)
                 --pgrabs;
             else
@@ -126,7 +124,8 @@ gboolean grab_pointer_full(gboolean grab, gboolean owner_events,
             ret = TRUE;
     } else if (pgrabs > 0) {
         if (--pgrabs == 0) {
-            XUngrabPointer(obt_display, ungrab_time());
+            (*ob_backend->grab_pointer)(FALSE, FALSE, FALSE,
+                                        OB_CURSOR_NONE, ungrab_time());
         }
         ret = TRUE;
     }
@@ -137,15 +136,11 @@ gint grab_server(gboolean grab)
 {
     static guint sgrabs = 0;
     if (grab) {
-        if (sgrabs++ == 0) {
-            XGrabServer(obt_display);
-            XSync(obt_display, FALSE);
-        }
+        if (sgrabs++ == 0)
+            ob_backend->grab_server(TRUE);
     } else if (sgrabs > 0) {
-        if (--sgrabs == 0) {
-            XUngrabServer(obt_display);
-            XFlush(obt_display);
-        }
+        if (--sgrabs == 0)
+            ob_backend->grab_server(FALSE);
     }
     return sgrabs;
 }
@@ -238,7 +233,7 @@ void ungrab_passive_key(void)
     /*ob_debug("ungrabbing %d passive grabs\n", passive_count);*/
     if (passive_count) {
         /* kill our passive grab */
-        XUngrabKeyboard(obt_display, event_time());
+        (*ob_backend->grab_keyboard)(FALSE, event_time());
         passive_count = 0;
     }
 }
