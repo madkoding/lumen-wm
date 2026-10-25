@@ -111,13 +111,15 @@ typedef enum {
     OB_SURFACE_INFO_ICON     = 1 << 6,
     OB_SURFACE_INFO_URGENT   = 1 << 7,
     OB_SURFACE_INFO_DECOR    = 1 << 8,
-    OB_SURFACE_INFO_ALL      = (1 << 9) - 1
+    OB_SURFACE_INFO_PROTOCOLS = 1 << 9,
+    OB_SURFACE_INFO_ALL      = (1 << 10) - 1
 } ObSurfaceInfoFields;
 
 /*! What a client says about itself. The backend reads it from WM_NORMAL_HINTS,
   _NET_WM_* and friends, or from xdg_toplevel requests. */
 typedef struct _ObSurfaceInfo {
-    gchar *title;
+    gchar *title;           /*!< NULL when it has none */
+    gchar *icon_title;      /*!< what to show when iconic; NULL for none */
     gchar *app_id;          /*!< WM_CLASS class, or xdg app_id */
     gchar *instance;        /*!< WM_CLASS name; NULL on Wayland */
     gchar *role;            /*!< WM_WINDOW_ROLE; NULL on Wayland */
@@ -131,12 +133,17 @@ typedef struct _ObSurfaceInfo {
     gfloat min_ratio, max_ratio; /*!< 0 for none */
 
     StrutPartial strut;     /*!< docks and panels; zero for none */
+    /*! the strut spans whole edges (legacy _NET_WM_STRUT): its start and
+      end are not set, and the core fills them in from the screen */
+    gboolean strut_whole_edges;
     gboolean undecorated;   /*!< asks for no decorations of ours */
     gboolean urgent;
 
     gboolean accepts_focus; /*!< WM_HINTS input */
     gboolean takes_focus;   /*!< WM_TAKE_FOCUS */
     gboolean can_close;     /*!< WM_DELETE_WINDOW; always on Wayland */
+    gboolean can_ping;      /*!< _NET_WM_PING; always on Wayland */
+    gboolean sync_resize;   /*!< _NET_WM_SYNC_REQUEST */
     gint pid;               /*!< 0 when not known */
 } ObSurfaceInfo;
 
@@ -205,6 +212,11 @@ struct _ObBackend {
     void (*surface_set_states)(ObSurfaceId s, ObSurfaceStates states);
     /*! Ask whether it still answers; the answer comes as pong(). */
     void (*surface_ping)(ObSurfaceId s, guint32 serial);
+    /*! Read what the client says about itself now, for the given fields
+      only; the others are left as they are. Free the strings with
+      backend_surface_info_clear(). */
+    void (*surface_info)(ObSurfaceId s, ObSurfaceInfoFields fields,
+                         ObSurfaceInfo *info);
 
     /* --- stacking --- */
 
@@ -260,6 +272,10 @@ struct _ObBackend {
     void (*publish_desktop_names)(const gchar *const *names);
     /*! desktop is DESKTOP_ALL for a surface on every desktop. */
     void (*publish_surface_desktop)(ObSurfaceId s, guint desktop);
+    /*! The title the core shows for it, with any " (host)" or
+      "Not Responding"; icon is NULL to leave that one as it is. */
+    void (*publish_surface_titles)(ObSurfaceId s, const gchar *title,
+                                   const gchar *icon);
     /*! One area per desktop. */
     void (*publish_workareas)(const Rect *areas, guint n);
 };
@@ -316,5 +332,7 @@ gboolean backend_startup(const gchar *display, gboolean replace);
 void backend_shutdown(void);
 /*! Start delivering the backend's events to the main loop. */
 void backend_listen(void);
+/*! Free the strings in info and zero it. */
+void backend_surface_info_clear(ObSurfaceInfo *info);
 
 #endif

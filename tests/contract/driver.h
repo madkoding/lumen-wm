@@ -50,6 +50,7 @@ void ct_pump(void);
 ct_win *ct_window_new(ct_win_type type, const char *title, ct_rect want);
 void ct_window_set_min_size(ct_win *w, int minw, int minh);
 void ct_window_set_parent(ct_win *w, ct_win *parent);
+void ct_window_set_title(ct_win *w, const char *title);
 /* Reserve this many pixels at the top of the screen (a dock). */
 void ct_window_set_strut(ct_win *w, int top);
 void ct_window_map(ct_win *w);
@@ -65,6 +66,8 @@ bool ct_window_has_state(ct_win *w, ct_state s);
 ct_rect ct_window_client(ct_win *w);
 /* the client area plus the decorations */
 ct_rect ct_window_frame(ct_win *w);
+/* the title shown to taskbars is exactly this */
+bool ct_window_title_is(ct_win *w, const char *title);
 /* -1 for a window on every desktop */
 int ct_window_desktop(ct_win *w);
 /* position in the stacking order of managed windows, 0 being the bottom;

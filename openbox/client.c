@@ -1658,35 +1658,25 @@ void client_get_type_and_transientness(ObClient *self)
 
 void client_update_protocols(ObClient *self)
 {
-    guint32 *proto;
-    guint num_ret, i;
+    ObSurfaceInfo info = { 0 };
 
-    self->focus_notify = FALSE;
-    self->delete_window = FALSE;
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_PROTOCOLS, &info);
 
-    if (OBT_PROP_GETA32(self->window, WM_PROTOCOLS, ATOM, &proto, &num_ret)) {
-        for (i = 0; i < num_ret; ++i) {
-            if (proto[i] == OBT_PROP_ATOM(WM_DELETE_WINDOW))
-                /* this means we can request the window to close */
-                self->delete_window = TRUE;
-            else if (proto[i] == OBT_PROP_ATOM(WM_TAKE_FOCUS))
-                /* if this protocol is requested, then the window will be
-                   notified whenever we want it to receive focus */
-                self->focus_notify = TRUE;
-            else if (proto[i] == OBT_PROP_ATOM(NET_WM_PING))
-                /* if this protocol is requested, then the window will allow
-                   pings to determine if it is still alive */
-                self->ping = TRUE;
+    /* this means we can request the window to close */
+    self->delete_window = info.can_close;
+    /* if this protocol is requested, then the window will be notified
+       whenever we want it to receive focus */
+    self->focus_notify = info.takes_focus;
+    /* if this protocol is requested, then the window will allow pings to
+       determine if it is still alive */
+    if (info.can_ping)
+        self->ping = TRUE;
 #ifdef SYNC
-            else if (proto[i] == OBT_PROP_ATOM(NET_WM_SYNC_REQUEST))
-                /* if this protocol is requested, then resizing the
-                   window will be synchronized between the frame and the
-                   client */
-                self->sync_request = TRUE;
+    /* if this protocol is requested, then resizing the window will be
+       synchronized between the frame and the client */
+    if (info.sync_resize)
+        self->sync_request = TRUE;
 #endif
-        }
-        g_free(proto);
-    }
 }
 
 #ifdef SYNC
@@ -2149,29 +2139,30 @@ void client_update_wmhints(ObClient *self)
 
 void client_update_title(ObClient *self)
 {
-    gchar *data = NULL;
+    ObSurfaceInfo info = { 0 };
+    gchar *data;
     gchar *visible = NULL;
 
     g_free(self->original_title);
 
-    /* try netwm */
-    if (!OBT_PROP_GETS_UTF8(self->window, NET_WM_NAME, &data)) {
-        /* try old x stuff */
-        if (!OBT_PROP_GETS(self->window, WM_NAME, &data)) {
-            if (self->transient) {
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_TITLE, &info);
+
+    data = info.title;
+    info.title = NULL;
+    if (!data) {
+        if (self->transient) {
    /*
    GNOME alert windows are not given titles:
    http://developer.gnome.org/projects/gup/hig/draft_hig_new/windows-alert.html
    */
-                data = g_strdup("");
-            } else {
-                if (self->class && *self->class)
-                    data = g_strdup(self->class);
-                else if (self->name && *self->name)
-                    data = g_strdup(self->name);
-                else
-                    data = g_strdup(_("Unnamed Window"));
-            }
+            data = g_strdup("");
+        } else {
+            if (self->class && *self->class)
+                data = g_strdup(self->class);
+            else if (self->name && *self->name)
+                data = g_strdup(self->name);
+            else
+                data = g_strdup(_("Unnamed Window"));
         }
     }
     self->original_title = g_strdup(data);
@@ -2192,7 +2183,7 @@ void client_update_title(ObClient *self)
     }
 
     if (!self->title || strcmp(self->title, visible)) {
-        OBT_PROP_SETS(self->window, NET_WM_VISIBLE_NAME, visible);
+        ob_backend->publish_surface_titles(self->window, visible, NULL);
         g_free(self->title);
         self->title = visible;
     } else
@@ -2202,13 +2193,10 @@ void client_update_title(ObClient *self)
         frame_adjust_title(self->frame);
 
     /* update the icon title */
-    data = NULL;
-
-    /* try netwm */
-    if (!OBT_PROP_GETS_UTF8(self->window, NET_WM_ICON_NAME, &data))
-        /* try old x stuff */
-        if (!OBT_PROP_GETS(self->window, WM_ICON_NAME, &data))
-            data = g_strdup(self->title);
+    data = info.icon_title;
+    info.icon_title = NULL;
+    if (!data)
+        data = g_strdup(self->title);
 
     if (self->client_machine) {
         visible = g_strdup_printf("%s (%s)", data, self->client_machine);
@@ -2226,56 +2214,34 @@ void client_update_title(ObClient *self)
     }
 
     if (!self->icon_title || strcmp(self->icon_title, visible)) {
-        OBT_PROP_SETS(self->window, NET_WM_VISIBLE_ICON_NAME, visible);
+        ob_backend->publish_surface_titles(self->window, NULL, visible);
         g_free(self->icon_title);
         self->icon_title = visible;
     } else
         g_free(visible);
+
+    backend_surface_info_clear(&info);
 }
 
 void client_update_strut(ObClient *self)
 {
-    guint num;
-    guint32 *data;
-    gboolean got = FALSE;
+    ObSurfaceInfo info = { 0 };
     StrutPartial strut;
 
-    if (OBT_PROP_GETA32(self->window, NET_WM_STRUT_PARTIAL, CARDINAL,
-                        &data, &num))
-    {
-        if (num == 12) {
-            got = TRUE;
-            STRUT_PARTIAL_SET(strut,
-                              data[0], data[2], data[1], data[3],
-                              data[4], data[5], data[8], data[9],
-                              data[6], data[7], data[10], data[11]);
-        }
-        g_free(data);
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_STRUT, &info);
+    strut = info.strut;
+
+    if (info.strut_whole_edges) {
+        /* use the screen's width/height */
+        const Rect *a = screen_physical_area_all_monitors();
+
+        STRUT_PARTIAL_SET(strut,
+                          strut.left, strut.top, strut.right, strut.bottom,
+                          a->y, a->y + a->height - 1,
+                          a->x, a->x + a->width - 1,
+                          a->y, a->y + a->height - 1,
+                          a->x, a->x + a->width - 1);
     }
-
-    if (!got &&
-        OBT_PROP_GETA32(self->window, NET_WM_STRUT, CARDINAL, &data, &num)) {
-        if (num == 4) {
-            const Rect *a;
-
-            got = TRUE;
-
-            /* use the screen's width/height */
-            a = screen_physical_area_all_monitors();
-
-            STRUT_PARTIAL_SET(strut,
-                              data[0], data[2], data[1], data[3],
-                              a->y, a->y + a->height - 1,
-                              a->x, a->x + a->width - 1,
-                              a->y, a->y + a->height - 1,
-                              a->x, a->x + a->width - 1);
-        }
-        g_free(data);
-    }
-
-    if (!got)
-        STRUT_PARTIAL_SET(strut, 0, 0, 0, 0,
-                          0, 0, 0, 0, 0, 0, 0, 0);
 
     if (!PARTIAL_STRUT_EQUAL(strut, self->strut)) {
         self->strut = strut;
