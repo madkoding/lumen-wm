@@ -7,6 +7,8 @@
 - The project is **Lumen Window Manager** ("Lumen" for short), based on Openbox. It installs as `lumen-wm` (package
   and binary) with an `openbox` symlink, and reads `~/.config/lumen` before `~/.config/openbox`. Source dirs,
   theme dirs (`openbox-3`), XML root nodes and X properties keep the Openbox names.
+- The look is based on LumaUI (https://hub.simplyluma.com/developer/agents/design-with-lumaui.md); keep that
+  credit in the README when touching branding.
 - Commits and pull request titles are semantic (`feat(shelf): …`, `fix(menu): …`, `docs: …`).
 
 ## Checks
