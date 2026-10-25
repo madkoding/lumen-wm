@@ -1730,88 +1730,39 @@ void client_update_opacity(ObClient *self)
         OBT_PROP_ERASE(self->frame->window, NET_WM_WINDOW_OPACITY);
 }
 
-void client_update_normal_hints(ObClient *realself)
+void client_update_normal_hints(ObClient *self)
 {
-    XSizeHints size = {0};
-    glong ret;
-    ObClient *self = g_new(ObClient, 1);
+    ObSurfaceInfo info = { 0 };
 
-    /* defaults */
-    realself->min_ratio = 0.0f;
-    realself->max_ratio = 0.0f;
-    SIZE_SET(realself->size_inc, 1, 1);
-    SIZE_SET(realself->base_size, -1, -1);
-    SIZE_SET(realself->min_size, 0, 0);
-    SIZE_SET(realself->max_size, G_MAXINT, G_MAXINT);
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_SIZE, &info);
 
-    memcpy(self, realself, sizeof(ObClient));
+    self->min_ratio = info.min_ratio;
+    self->max_ratio = info.max_ratio;
+    self->size_inc = info.inc;
+    self->base_size = info.base;
+    self->min_size = info.min;
+    self->max_size = info.max;
 
-    /* get the hints from the window */
-    if (XGetWMNormalHints(obt_display, self->window, &size, &ret)) {
-        /* normal windows can't request placement! har har
-        if (!client_normal(self))
-        */
-        self->positioned = (size.flags & (PPosition|USPosition));
-        self->sized = (size.flags & (PSize|USSize));
-
-        if (size.flags & PWinGravity)
-            self->gravity = size.win_gravity;
-
-        if (size.flags & PAspect) {
-            if ((unsigned int)size.min_aspect.x > 4096 ||
-                (unsigned int)size.min_aspect.y > 4096)
-                goto invalid_hints;
-            if (size.min_aspect.y)
-                self->min_ratio =
-                    (gfloat) size.min_aspect.x / size.min_aspect.y;
-            if (size.max_aspect.y)
-                self->max_ratio =
-                    (gfloat) size.max_aspect.x / size.max_aspect.y;
-        }
-
-        if (size.flags & PMinSize) {
-            if ((unsigned int)size.min_width > 4096 ||
-                (unsigned int)size.min_height > 4096)
-                goto invalid_hints;
-            SIZE_SET(self->min_size, size.min_width, size.min_height);
-        }
-
-        if (size.flags & PMaxSize) {
-            if ((unsigned int)size.max_width > 4096 ||
-                (unsigned int)size.max_height > 4096)
-                goto invalid_hints;
-            SIZE_SET(self->max_size, size.max_width, size.max_height);
-        }
-
-        if (size.flags & PBaseSize) {
-            if ((unsigned int)size.base_width > 4096 ||
-                (unsigned int)size.base_height > 4096)
-                goto invalid_hints;
-            SIZE_SET(self->base_size, size.base_width, size.base_height);
-        }
-
-        if (size.flags & PResizeInc && size.width_inc && size.height_inc) {
-            if ((unsigned int)size.width_inc > 4096 ||
-                (unsigned int)size.height_inc > 4096)
-                goto invalid_hints;
-            SIZE_SET(self->size_inc, size.width_inc, size.height_inc);
-        }
-
-        ob_debug("Normal hints: min size (%d %d) max size (%d %d)",
-                 self->min_size.width, self->min_size.height,
-                 self->max_size.width, self->max_size.height);
-        ob_debug("size inc (%d %d) base size (%d %d)",
-                 self->size_inc.width, self->size_inc.height,
-                 self->base_size.width, self->base_size.height);
+    if (!info.size_hints) {
+        ob_debug("Normal hints: not set, or corrupt");
+        return;
     }
-    else
-        ob_debug("Normal hints: not set");
-    memcpy(realself, self, sizeof(ObClient));
-    g_free(self);
-    return;
-invalid_hints:
-    g_free(self);
-    ob_debug("Normal hints: corruption detected, not setting anything");
+
+    /* normal windows can't request placement! har har
+    if (!client_normal(self))
+    */
+    self->positioned = info.has_position;
+    self->sized = info.has_size;
+
+    if (info.has_gravity)
+        self->gravity = info.gravity;
+
+    ob_debug("Normal hints: min size (%d %d) max size (%d %d)",
+             self->min_size.width, self->min_size.height,
+             self->max_size.width, self->max_size.height);
+    ob_debug("size inc (%d %d) base size (%d %d)",
+             self->size_inc.width, self->size_inc.height,
+             self->base_size.width, self->base_size.height);
 }
 
 static void client_setup_default_decor_and_functions(ObClient *self)
@@ -2050,35 +2001,30 @@ static void client_change_allowed_actions(ObClient *self)
 
 void client_update_wmhints(ObClient *self)
 {
-    XWMHints *hints;
+    ObSurfaceInfo info = { 0 };
 
-    /* assume a window takes input if it doesn't specify */
-    self->can_focus = TRUE;
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_HINTS, &info);
 
-    if ((hints = XGetWMHints(obt_display, self->window)) != NULL) {
+    self->can_focus = info.accepts_focus;
+
+    if (info.hints) {
         gboolean ur;
-
-        if (hints->flags & InputHint)
-            self->can_focus = hints->input;
 
         /* only do this when first managing the window *AND* when we aren't
            starting up! */
         if (ob_state() != OB_STATE_STARTING && self->frame == NULL)
-            if (hints->flags & StateHint)
-                self->iconic = hints->initial_state == IconicState;
+            if (info.has_initial_state)
+                self->iconic = info.starts_iconic;
 
         ur = self->urgent;
-        self->urgent = (hints->flags & XUrgencyHint);
+        self->urgent = info.urgent;
         if (self->urgent && !ur)
             client_hilite(self, TRUE);
         else if (!self->urgent && ur && self->demands_attention)
             client_hilite(self, FALSE);
 
-        if (!(hints->flags & WindowGroupHint))
-            hints->window_group = None;
-
         /* did the group state change? */
-        if (hints->window_group !=
+        if ((Window)info.group !=
             (self->group ? self->group->leader : None))
         {
             ObGroup *oldgroup = self->group;
@@ -2090,8 +2036,8 @@ void client_update_wmhints(ObClient *self)
             }
 
             /* add ourself to the group if we have one */
-            if (hints->window_group != None) {
-                self->group = group_add(hints->window_group, self);
+            if (info.group != OB_SURFACE_NONE) {
+                self->group = group_add((Window)info.group, self);
             }
 
             /* Put ourselves into the new group's transient tree, and remove
@@ -2128,10 +2074,8 @@ void client_update_wmhints(ObClient *self)
         }
 
         /* the WM_HINTS can contain an icon */
-        if (hints->flags & IconPixmapHint)
+        if (info.icon_in_hints)
             client_update_icons(self);
-
-        XFree(hints);
     }
 
     focus_cycle_addremove(self, TRUE);

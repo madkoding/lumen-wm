@@ -109,7 +109,7 @@ typedef enum {
     OB_SURFACE_INFO_SIZE     = 1 << 4,
     OB_SURFACE_INFO_STRUT    = 1 << 5,
     OB_SURFACE_INFO_ICON     = 1 << 6,
-    OB_SURFACE_INFO_URGENT   = 1 << 7,
+    OB_SURFACE_INFO_HINTS    = 1 << 7, /*!< focus, urgency, group, iconic */
     OB_SURFACE_INFO_DECOR    = 1 << 8,
     OB_SURFACE_INFO_PROTOCOLS = 1 << 9,
     OB_SURFACE_INFO_ALL      = (1 << 10) - 1
@@ -127,19 +127,36 @@ typedef struct _ObSurfaceInfo {
     ObSurfaceId parent;     /*!< transient for, or xdg parent */
     gboolean modal;
 
+    /*! FALSE when it gave no size hints, or nonsense ones; the sizes below
+      are then the defaults, and has_position, has_size and gravity are
+      not set */
+    gboolean size_hints;
     gboolean has_position;  /*!< the client asked for want.x and want.y */
+    gboolean has_size;      /*!< the client asked for want's size */
     Rect want;              /*!< where and how big it would like to be */
+    /*! defaults: min 0x0, max G_MAXINT, base -1x-1 (none), inc 1x1 */
     Size min, max, base, inc;
     gfloat min_ratio, max_ratio; /*!< 0 for none */
+    gboolean has_gravity;
+    gint gravity;           /*!< X's win_gravity values, which the core uses */
 
     StrutPartial strut;     /*!< docks and panels; zero for none */
     /*! the strut spans whole edges (legacy _NET_WM_STRUT): its start and
       end are not set, and the core fills them in from the screen */
     gboolean strut_whole_edges;
     gboolean undecorated;   /*!< asks for no decorations of ours */
-    gboolean urgent;
 
-    gboolean accepts_focus; /*!< WM_HINTS input */
+    /*! FALSE when it gave no WM_HINTS (X11); then only accepts_focus is
+      set */
+    gboolean hints;
+    gboolean accepts_focus; /*!< WM_HINTS input; TRUE when not given */
+    gboolean urgent;
+    gboolean has_initial_state;
+    gboolean starts_iconic; /*!< wants to be mapped iconic */
+    /*! the leader of its window group (X11), or OB_SURFACE_NONE */
+    ObSurfaceId group;
+    gboolean icon_in_hints; /*!< WM_HINTS carry an icon pixmap (X11) */
+
     gboolean takes_focus;   /*!< WM_TAKE_FOCUS */
     gboolean can_close;     /*!< WM_DELETE_WINDOW; always on Wayland */
     gboolean can_ping;      /*!< _NET_WM_PING; always on Wayland */
