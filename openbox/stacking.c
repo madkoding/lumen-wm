@@ -26,6 +26,7 @@
 #include "window.h"
 #include "event.h"
 #include "debug.h"
+#include "backend.h"
 #include "dock.h"
 #include "config.h"
 #include "obt/prop.h"
@@ -39,7 +40,7 @@ static gboolean pause_changes = FALSE;
 
 void stacking_set_list(void)
 {
-    Window *windows = NULL;
+    ObSurfaceId *windows = NULL;
     GList *it;
     guint i = 0;
 
@@ -51,15 +52,14 @@ void stacking_set_list(void)
     /* create an array of the window ids (from bottom to top,
        reverse order!) */
     if (stacking_list) {
-        windows = g_new(Window, g_list_length(stacking_list));
+        windows = g_new(ObSurfaceId, g_list_length(stacking_list));
         for (it = g_list_last(stacking_list); it; it = g_list_previous(it)) {
             if (WINDOW_IS_CLIENT(it->data))
                 windows[i++] = WINDOW_AS_CLIENT(it->data)->window;
         }
     }
 
-    OBT_PROP_SETA32(obt_root(ob_screen), NET_CLIENT_LIST_STACKING, WINDOW,
-                    (gulong*)windows, i);
+    ob_backend->publish_stacking(windows, i);
 
     g_free(windows);
 }

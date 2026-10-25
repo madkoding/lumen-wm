@@ -383,8 +383,7 @@ void screen_startup(gboolean reconfig)
             names[i] = g_strdup(it->data);
 
         /* set the root window property */
-        OBT_PROP_SETSS(obt_root(ob_screen),
-                       NET_DESKTOP_NAMES, (const gchar*const*)names);
+        ob_backend->publish_desktop_names((const gchar*const*)names);
 
         g_strfreev(names);
     }
@@ -507,7 +506,6 @@ void screen_resize(void)
 
 void screen_set_num_desktops(guint num)
 {
-    gulong *viewport;
     GList *it, *stacking_copy;
 
     g_assert(num > 0);
@@ -515,13 +513,7 @@ void screen_set_num_desktops(guint num)
     if (screen_num_desktops == num) return;
 
     screen_num_desktops = num;
-    OBT_PROP_SET32(obt_root(ob_screen), NET_NUMBER_OF_DESKTOPS, CARDINAL, num);
-
-    /* set the viewport hint */
-    viewport = g_new0(gulong, num * 2);
-    OBT_PROP_SETA32(obt_root(ob_screen),
-                    NET_DESKTOP_VIEWPORT, CARDINAL, viewport, num * 2);
-    g_free(viewport);
+    ob_backend->publish_desktop_count(num);
 
     /* the number of rows/columns will differ */
     screen_update_layout();
@@ -621,7 +613,7 @@ void screen_set_desktop(guint num, gboolean dofocus)
 
     if (previous == num) return;
 
-    OBT_PROP_SET32(obt_root(ob_screen), NET_CURRENT_DESKTOP, CARDINAL, num);
+    ob_backend->publish_current_desktop(num);
 
     /* This whole thing decides when/how to save the screen_last_desktop so
        that it can be restored later if you want */
@@ -1218,8 +1210,8 @@ void screen_update_desktop_names(void)
 
         /* if we changed any names, then set the root property so we can
            all agree on the names */
-        OBT_PROP_SETSS(obt_root(ob_screen), NET_DESKTOP_NAMES,
-                       (const gchar*const*)screen_desktop_names);
+        ob_backend->publish_desktop_names(
+            (const gchar*const*)screen_desktop_names);
     }
 
     /* resize the pager for these names */
@@ -1414,7 +1406,7 @@ static void get_xinerama_screens(Rect **xin_areas, guint *nxin)
 void screen_update_areas(void)
 {
     guint i, old_num_monitors = screen_num_monitors;
-    gulong *dims;
+    Rect *dims;
     GList *it, *onscreen;
 
     /* collect the clients that are on screen */
@@ -1489,19 +1481,15 @@ void screen_update_areas(void)
     VALIDATE_STRUTS(struts_bottom, bottom,
                     monitor_area[screen_num_monitors].height / 2);
 
-    dims = g_new(gulong, 4 * screen_num_desktops);
+    dims = g_new(Rect, screen_num_desktops);
     for (i = 0; i < screen_num_desktops; ++i) {
         Rect *area = screen_area(i, SCREEN_AREA_ALL_MONITORS, NULL);
-        dims[i*4+0] = area->x;
-        dims[i*4+1] = area->y;
-        dims[i*4+2] = area->width;
-        dims[i*4+3] = area->height;
+        dims[i] = *area;
         g_slice_free(Rect, area);
     }
 
     /* set the legacy workarea hint to the union of all the monitors */
-    OBT_PROP_SETA32(obt_root(ob_screen), NET_WORKAREA, CARDINAL,
-                    dims, 4 * screen_num_desktops);
+    ob_backend->publish_workareas(dims, screen_num_desktops);
 
     /* the area has changed, adjust all the windows if they need it */
     for (it = onscreen; it; it = g_list_next(it))

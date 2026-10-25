@@ -21,6 +21,7 @@
 #include "backend.h"
 #include "obt/display.h"
 #include "obt/xqueue.h"
+#include "obt/prop.h"
 
 static const ObBackendEvents *events;
 
@@ -88,6 +89,79 @@ static void x11_output_area(guint output, Rect *area)
     *area = outputs[output];
 }
 
+/* EWMH root properties, for pagers and taskbars */
+
+static Window root(void)
+{
+    return obt_root(DefaultScreen(obt_display));
+}
+
+static void set_window_list(Atom prop, const ObSurfaceId *wins, guint n)
+{
+    gulong *v = n ? g_new(gulong, n) : NULL;
+    guint i;
+
+    for (i = 0; i < n; ++i) v[i] = wins[i];
+    obt_prop_set_array32(root(), prop, OBT_PROP_ATOM(WINDOW), v, n);
+    g_free(v);
+}
+
+static void x11_publish_clients(const ObSurfaceId *mapped, guint n)
+{
+    set_window_list(OBT_PROP_ATOM(NET_CLIENT_LIST), mapped, n);
+}
+
+static void x11_publish_stacking(const ObSurfaceId *stacked, guint n)
+{
+    set_window_list(OBT_PROP_ATOM(NET_CLIENT_LIST_STACKING), stacked, n);
+}
+
+static void x11_publish_active(ObSurfaceId s)
+{
+    OBT_PROP_SET32(root(), NET_ACTIVE_WINDOW, WINDOW, (Window)s);
+}
+
+static void x11_publish_desktop_count(guint count)
+{
+    /* no viewports, so every desktop's is at 0,0 */
+    gulong *viewport = g_new0(gulong, count * 2);
+
+    OBT_PROP_SET32(root(), NET_NUMBER_OF_DESKTOPS, CARDINAL, count);
+    OBT_PROP_SETA32(root(), NET_DESKTOP_VIEWPORT, CARDINAL, viewport,
+                    count * 2);
+    g_free(viewport);
+}
+
+static void x11_publish_current_desktop(guint desktop)
+{
+    OBT_PROP_SET32(root(), NET_CURRENT_DESKTOP, CARDINAL, desktop);
+}
+
+static void x11_publish_desktop_names(const gchar *const *names)
+{
+    OBT_PROP_SETSS(root(), NET_DESKTOP_NAMES, names);
+}
+
+static void x11_publish_surface_desktop(ObSurfaceId s, guint desktop)
+{
+    OBT_PROP_SET32((Window)s, NET_WM_DESKTOP, CARDINAL, desktop);
+}
+
+static void x11_publish_workareas(const Rect *areas, guint n)
+{
+    gulong *dims = g_new(gulong, 4 * n);
+    guint i;
+
+    for (i = 0; i < n; ++i) {
+        dims[i*4+0] = areas[i].x;
+        dims[i*4+1] = areas[i].y;
+        dims[i*4+2] = areas[i].width;
+        dims[i*4+3] = areas[i].height;
+    }
+    OBT_PROP_SETA32(root(), NET_WORKAREA, CARDINAL, dims, 4 * n);
+    g_free(dims);
+}
+
 const ObBackend ob_backend_x11 = {
     .name = "x11",
     .caps = OB_BACKEND_CAP_CLIENT_POSITION |
@@ -102,4 +176,13 @@ const ObBackend ob_backend_x11 = {
 
     .output_count = x11_output_count,
     .output_area = x11_output_area,
+
+    .publish_clients = x11_publish_clients,
+    .publish_stacking = x11_publish_stacking,
+    .publish_active = x11_publish_active,
+    .publish_desktop_count = x11_publish_desktop_count,
+    .publish_current_desktop = x11_publish_current_desktop,
+    .publish_desktop_names = x11_publish_desktop_names,
+    .publish_surface_desktop = x11_publish_surface_desktop,
+    .publish_workareas = x11_publish_workareas,
 };

@@ -19,6 +19,7 @@
 
 #include "client.h"
 #include "debug.h"
+#include "backend.h"
 #include "startupnotify.h"
 #include "dock.h"
 #include "screen.h"
@@ -184,21 +185,20 @@ void client_remove_destroy_notify_data(ObClientCallback func, gpointer data)
 
 void client_set_list(void)
 {
-    Window *windows, *win_it;
+    ObSurfaceId *windows, *win_it;
     GList *it;
     guint size = g_list_length(client_list);
 
     /* create an array of the window ids */
     if (size > 0) {
-        windows = g_new(Window, size);
+        windows = g_new(ObSurfaceId, size);
         win_it = windows;
         for (it = client_list; it; it = g_list_next(it), ++win_it)
             *win_it = ((ObClient*)it->data)->window;
     } else
         windows = NULL;
 
-    OBT_PROP_SETA32(obt_root(ob_screen), NET_CLIENT_LIST, WINDOW,
-                    (gulong*)windows, size);
+    ob_backend->publish_clients(windows, size);
 
     if (windows)
         g_free(windows);
@@ -480,7 +480,7 @@ void client_manage(Window window, ObPrompt *prompt)
 
     /* set the initial value of the desktop hint, when one wasn't requested
        on map. */
-    OBT_PROP_SET32(self->window, NET_WM_DESKTOP, CARDINAL, self->desktop);
+    ob_backend->publish_surface_desktop(self->window, self->desktop);
 
     /* grab mouse bindings before showing the window */
     mouse_grab_for_client(self, TRUE);
@@ -1032,7 +1032,7 @@ static void client_restore_session_state(ObClient *self)
     self->desktop = (self->session->desktop == DESKTOP_ALL ?
                      self->session->desktop :
                      MIN(screen_num_desktops - 1, self->session->desktop));
-    OBT_PROP_SET32(self->window, NET_WM_DESKTOP, CARDINAL, self->desktop);
+    ob_backend->publish_surface_desktop(self->window, self->desktop);
 
     self->shaded = self->session->shaded;
     self->iconic = self->session->iconic;
@@ -3822,7 +3822,7 @@ static void client_set_desktop_recursive(ObClient *self,
 
         old = self->desktop;
         self->desktop = target;
-        OBT_PROP_SET32(self->window, NET_WM_DESKTOP, CARDINAL, target);
+        ob_backend->publish_surface_desktop(self->window, target);
         /* the frame can display the current desktop state */
         frame_adjust_state(self->frame);
         /* 'move' the window to the new desktop */
