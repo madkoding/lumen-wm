@@ -22,6 +22,7 @@
 #include "backend-x11.h"
 #include "openbox.h"
 #include "debug.h"
+#include "screen.h"
 #include "obrender/render.h"
 #include "obt/display.h"
 #include "obt/xqueue.h"
@@ -973,6 +974,44 @@ static void x11_publish_workareas(const Rect *areas, guint n)
     g_free(dims);
 }
 
+#define GRAB_PTR_MASK (ButtonPressMask | ButtonReleaseMask | PointerMotionMask)
+
+/* the core's grabs go on the support window, which never maps */
+static gboolean x11_grab_pointer(gboolean grab, gboolean owner_events,
+                                 gboolean confine, ObCursor cursor,
+                                 guint32 time)
+{
+    if (!grab) {
+        XUngrabPointer(obt_display, time);
+        return TRUE;
+    }
+    return XGrabPointer(obt_display, screen_support_win, owner_events,
+                        GRAB_PTR_MASK, GrabModeAsync, GrabModeAsync,
+                        confine ? root() : None, ob_cursor(cursor),
+                        time) == Success;
+}
+
+static gboolean x11_grab_keyboard(gboolean grab, guint32 time)
+{
+    if (!grab) {
+        XUngrabKeyboard(obt_display, time);
+        return TRUE;
+    }
+    return XGrabKeyboard(obt_display, screen_support_win, False,
+                         GrabModeAsync, GrabModeAsync, time) == Success;
+}
+
+static void x11_grab_server(gboolean grab)
+{
+    if (grab) {
+        XGrabServer(obt_display);
+        XSync(obt_display, FALSE);
+    } else {
+        XUngrabServer(obt_display);
+        XFlush(obt_display);
+    }
+}
+
 const ObBackend ob_backend_x11 = {
     .name = "x11",
     .caps = OB_BACKEND_CAP_CLIENT_POSITION |
@@ -996,6 +1035,10 @@ const ObBackend ob_backend_x11 = {
     .surface_info = x11_surface_info,
 
     .restack = x11_restack,
+
+    .grab_pointer = x11_grab_pointer,
+    .grab_keyboard = x11_grab_keyboard,
+    .grab_server = x11_grab_server,
 
     .publish_clients = x11_publish_clients,
     .publish_stacking = x11_publish_stacking,
