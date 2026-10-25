@@ -38,7 +38,8 @@ enum {
     NET_WM_STATE_FULLSCREEN, NET_WM_STATE_HIDDEN, NET_WM_STATE_ABOVE,
     NET_WM_WINDOW_TYPE, NET_WM_WINDOW_TYPE_NORMAL, NET_WM_WINDOW_TYPE_DOCK,
     NET_WM_WINDOW_TYPE_DIALOG, UTF8_STRING, NET_WM_VISIBLE_NAME,
-    MOTIF_WM_HINTS, NET_RESTACK_WINDOW, NET_MOVERESIZE_WINDOW, NUM_ATOMS
+    MOTIF_WM_HINTS, NET_RESTACK_WINDOW, NET_MOVERESIZE_WINDOW,
+    NET_WM_MOVERESIZE, NUM_ATOMS
 };
 
 static char *atom_names[NUM_ATOMS] = {
@@ -54,7 +55,7 @@ static char *atom_names[NUM_ATOMS] = {
     "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NORMAL",
     "_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_WINDOW_TYPE_DIALOG", "UTF8_STRING",
     "_NET_WM_VISIBLE_NAME", "_MOTIF_WM_HINTS", "_NET_RESTACK_WINDOW",
-    "_NET_MOVERESIZE_WINDOW",
+    "_NET_MOVERESIZE_WINDOW", "_NET_WM_MOVERESIZE",
 };
 
 static Atom atoms[NUM_ATOMS];
@@ -646,6 +647,31 @@ void ct_input_drag(ct_win *w, const char *mods, int dx, int dy)
     fake_mods(mods, strlen(mods), False);
     XFlush(dpy);
 }
+void ct_input_client_drag(ct_win *w, ct_edge edge, int dx, int dy)
+{
+    /* _NET_WM_MOVERESIZE directions */
+    const long dir = edge == CT_EDGE_MOVE ? 8 : 4;
+    ct_rect c = ct_window_client(w);
+    int x = c.x + c.w / 2, y = c.y + c.h / 2;
+    const int steps = 10;
+
+    XTestFakeMotionEvent(dpy, -1, x, y, 0);
+    fake_sync();
+    XTestFakeButtonEvent(dpy, 1, True, 0);
+    fake_sync();
+    /* as toolkits do: let go of the press's implicit grab, then ask */
+    XUngrabPointer(dpy, CurrentTime);
+    send_root(w->id, NET_WM_MOVERESIZE, x, y, dir, 1);
+    fake_sync();
+    for (int i = 1; i <= steps; ++i) {
+        XTestFakeMotionEvent(dpy, -1, x + dx * i / steps, y + dy * i / steps,
+                             0);
+        fake_sync();
+    }
+    XTestFakeButtonEvent(dpy, 1, False, 0);
+    fake_sync();
+}
+
 void ct_input_click(ct_win *w, int x, int y)
 {
     ct_rect c = ct_window_client(w);
@@ -660,6 +686,10 @@ void ct_input_click(ct_win *w, int x, int y)
 #else
 void ct_input_keys(const char *keys) { (void)keys; }
 void ct_input_click(ct_win *w, int x, int y) { (void)w; (void)x; (void)y; }
+void ct_input_client_drag(ct_win *w, ct_edge edge, int dx, int dy)
+{
+    (void)w; (void)edge; (void)dx; (void)dy;
+}
 void ct_input_drag(ct_win *w, const char *mods, int dx, int dy)
 {
     (void)w; (void)mods; (void)dx; (void)dy;
