@@ -157,6 +157,27 @@ typedef struct _ObShelfPin {
 } ObShelfPin;
 /*! The pinned applications, in order (ObShelfPin*) */
 extern GSList  *config_shelf_pins;
+
+/*! The media island of the shelf: what is playing, with previous, play/pause
+  and next buttons. NULL when <media> is not in rc.xml. */
+typedef struct _ObShelfMedia {
+    gchar *command;  /*!< prints status (Playing|Paused), title, artist and an
+                       image file, one per line; no output hides the island */
+    gchar *previous; /*!< the commands of the three buttons */
+    gchar *toggle;
+    gchar *next;
+    guint  interval; /*!< seconds between runs of command */
+} ObShelfMedia;
+extern ObShelfMedia *config_shelf_media;
+
+/*! The weather island of the shelf. NULL when <weather> is not in rc.xml. */
+typedef struct _ObShelfWeather {
+    gchar *command;  /*!< prints the temperature, the sky, then up to three
+                       lines "day|temperature|glyph" (sun, cloud, cloud-sun,
+                       rain, snow, storm, fog); no output hides the island */
+    guint  interval;
+} ObShelfWeather;
+extern ObShelfWeather *config_shelf_weather;
 /*! The number of milliseconds to wait before showing the dock */
 extern guint config_dock_show_delay;
 /*! The mouse button to be used to move dock apps */

@@ -194,6 +194,21 @@
     </pin>
     -->
   </pins>
+  <!-- optional islands between the dock and the clock. A command prints what
+       they show (see doc/shelf.md); no output hides the island. -->
+  <!--
+  <media>
+    <command>playerctl-shelf</command>
+    <previous>playerctl previous</previous>
+    <toggle>playerctl play-pause</toggle>
+    <next>playerctl next</next>
+    <interval>3</interval>
+  </media>
+  <weather>
+    <command>weather-shelf</command>
+    <interval>900</interval>
+  </weather>
+  -->
 </shelf>
 
 <dock>

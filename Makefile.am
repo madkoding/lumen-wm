@@ -182,6 +182,7 @@ openbox_openbox_CPPFLAGS = \
 	-DG_LOG_DOMAIN=\"Openbox\"
 openbox_openbox_LDADD = \
 	$(SHELF_LIBS) \
+	-lm \
 	$(XINERAMA_LIBS) \
 	$(XRANDR_LIBS) \
 	$(SM_LIBS) \
