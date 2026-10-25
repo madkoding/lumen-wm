@@ -198,7 +198,8 @@ ct_win *ct_window_new(ct_win_type type, const char *title, ct_rect want)
     w->id = XCreateSimpleWindow(dpy, root, want.x, want.y, want.w, want.h, 0,
                                 0, WhitePixel(dpy, DefaultScreen(dpy)));
     XSelectInput(dpy, w->id, StructureNotifyMask | PropertyChangeMask);
-    ct_window_set_title(w, title);
+    if (title)
+        ct_window_set_title(w, title);
     XSetWMHints(dpy, w->id, &wmhints);
     XSetWMProtocols(dpy, w->id, protocols, 1);
 
@@ -237,6 +238,13 @@ void ct_window_set_undecorated(ct_win *w)
     long hints[5] = { 1 << 1, 0, 0, 0, 0 };
     XChangeProperty(dpy, w->id, atoms[MOTIF_WM_HINTS], atoms[MOTIF_WM_HINTS],
                     32, PropModeReplace, (unsigned char *)hints, 5);
+}
+
+void ct_window_set_app_id(ct_win *w, const char *app_id)
+{
+    XClassHint hint = { .res_name = (char *)"contract",
+                        .res_class = (char *)app_id };
+    XSetClassHint(dpy, w->id, &hint);
 }
 
 void ct_window_set_title(ct_win *w, const char *title)

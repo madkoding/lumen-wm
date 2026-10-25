@@ -47,10 +47,13 @@ ct_caps ct_driver_caps(void);
 /* Handle what the window manager sent: configure, close requests... */
 void ct_pump(void);
 
+/* title may be NULL for a window that gives none */
 ct_win *ct_window_new(ct_win_type type, const char *title, ct_rect want);
 void ct_window_set_min_size(ct_win *w, int minw, int minh);
 void ct_window_set_parent(ct_win *w, ct_win *parent);
 void ct_window_set_title(ct_win *w, const char *title);
+/* The application it belongs to (WM_CLASS on X11, app_id on Wayland). */
+void ct_window_set_app_id(ct_win *w, const char *app_id);
 /* Ask for no decorations from the window manager (Motif hints on X11,
    client-side xdg-decoration on Wayland). */
 void ct_window_set_undecorated(ct_win *w);

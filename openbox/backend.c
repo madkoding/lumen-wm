@@ -52,5 +52,10 @@ void backend_surface_info_clear(ObSurfaceInfo *info)
     g_free(info->app_id);
     g_free(info->instance);
     g_free(info->role);
+    g_free(info->group_app_id);
+    g_free(info->group_instance);
+    g_free(info->session_id);
+    g_free(info->command);
+    g_free(info->machine);
     memset(info, 0, sizeof(*info));
 }

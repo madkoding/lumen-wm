@@ -104,7 +104,7 @@ typedef enum {
 /*! Which parts of ObSurfaceInfo changed. */
 typedef enum {
     OB_SURFACE_INFO_TITLE    = 1 << 0,
-    OB_SURFACE_INFO_CLASS    = 1 << 1,
+    OB_SURFACE_INFO_CLASS    = 1 << 1, /*!< class, role and session ids */
     OB_SURFACE_INFO_TYPE     = 1 << 2,
     OB_SURFACE_INFO_PARENT   = 1 << 3,
     OB_SURFACE_INFO_SIZE     = 1 << 4,
@@ -124,6 +124,14 @@ typedef struct _ObSurfaceInfo {
     gchar *app_id;          /*!< WM_CLASS class, or xdg app_id */
     gchar *instance;        /*!< WM_CLASS name; NULL on Wayland */
     gchar *role;            /*!< WM_WINDOW_ROLE; NULL on Wayland */
+    /*! the class and name of its group leader (X11); NULL for none */
+    gchar *group_app_id, *group_instance;
+    gchar *session_id;      /*!< SM_CLIENT_ID (X11); NULL for none */
+    /*! the command that started it, its words run together (X11) */
+    gchar *command;
+    /*! the host it runs on, as it says (WM_CLIENT_MACHINE); NULL when it
+      doesn't say */
+    gchar *machine;
     gboolean has_type;      /*!< FALSE: it named no type we know */
     ObSurfaceType type;
     /*! it wants no decorations and no functions at all
@@ -173,7 +181,7 @@ typedef struct _ObSurfaceInfo {
     gboolean can_close;     /*!< WM_DELETE_WINDOW; always on Wayland */
     gboolean can_ping;      /*!< _NET_WM_PING; always on Wayland */
     gboolean sync_resize;   /*!< _NET_WM_SYNC_REQUEST */
-    gint pid;               /*!< 0 when not known */
+    gint pid;               /*!< 0 when not known; X11 needs machine too */
 } ObSurfaceInfo;
 
 /*! Where on screen a canvas lives; this is its stacking layer. */

@@ -402,11 +402,79 @@ static void get_parent(Window w, ObSurfaceInfo *info)
         info->parent = (ObSurfaceId)t;
 }
 
+static void get_class(Window w, gchar **app_id, gchar **instance)
+{
+    gchar **ss;
+
+    g_free(*app_id);
+    g_free(*instance);
+    *app_id = *instance = NULL;
+
+    if (OBT_PROP_GETSS_TYPE(w, WM_CLASS, STRING_NO_CC, &ss)) {
+        if (ss[0]) {
+            *instance = g_strdup(ss[0]);
+            if (ss[1])
+                *app_id = g_strdup(ss[1]);
+        }
+        g_strfreev(ss);
+    }
+}
+
+static void get_ids(Window w, ObSurfaceInfo *info)
+{
+    guint32 leader, pid;
+    gchar **ss;
+
+    if (!OBT_PROP_GET32(w, WM_CLIENT_LEADER, WINDOW, &leader))
+        leader = None;
+
+    g_free(info->session_id);
+    info->session_id = NULL;
+    if (!OBT_PROP_GETS_XPCS(leader && leader != w ? leader : w, SM_CLIENT_ID,
+                            &info->session_id))
+        info->session_id = NULL;
+
+    get_class(w, &info->app_id, &info->instance);
+    if (leader)
+        get_class(leader, &info->group_app_id, &info->group_instance);
+    else {
+        g_free(info->group_app_id);
+        g_free(info->group_instance);
+        info->group_app_id = info->group_instance = NULL;
+    }
+
+    g_free(info->role);
+    if (!OBT_PROP_GETS_XPCS(w, WM_WINDOW_ROLE, &info->role))
+        info->role = NULL;
+
+    g_free(info->command);
+    info->command = NULL;
+    if ((leader && OBT_PROP_GETSS(leader, WM_COMMAND, &ss)) ||
+        OBT_PROP_GETSS(w, WM_COMMAND, &ss))
+    {
+        /* merge/mash them all together */
+        if (ss[0])
+            info->command = g_strjoinv("", ss);
+        g_strfreev(ss);
+    }
+
+    g_free(info->machine);
+    info->pid = 0;
+    if (!(leader && OBT_PROP_GETS(leader, WM_CLIENT_MACHINE, &info->machine))
+        && !OBT_PROP_GETS(w, WM_CLIENT_MACHINE, &info->machine))
+        info->machine = NULL;
+    /* the PID requires that the WM_CLIENT_MACHINE be set */
+    else if (OBT_PROP_GET32(w, NET_WM_PID, CARDINAL, &pid))
+        info->pid = pid;
+}
+
 static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
                              ObSurfaceInfo *info)
 {
     if (fields & OB_SURFACE_INFO_TITLE)
         get_titles((Window)s, info);
+    if (fields & OB_SURFACE_INFO_CLASS)
+        get_ids((Window)s, info);
     if (fields & OB_SURFACE_INFO_PROTOCOLS)
         get_protocols((Window)s, info);
     if (fields & OB_SURFACE_INFO_STRUT)
