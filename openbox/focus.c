@@ -18,6 +18,7 @@
 */
 
 #include "debug.h"
+#include "backend.h"
 #include "event.h"
 #include "openbox.h"
 #include "grab.h"
@@ -71,8 +72,6 @@ static void push_to_top(ObClient *client)
 
 void focus_set_client(ObClient *client)
 {
-    Window active;
-
     ob_debug_type(OB_DEBUG_FOCUS,
                   "focus_set_client 0x%lx", client ? client->window : 0);
 
@@ -96,10 +95,8 @@ void focus_set_client(ObClient *client)
     }
 
     /* set the NET_ACTIVE_WINDOW hint, but preserve it on shutdown */
-    if (ob_state() != OB_STATE_EXITING) {
-        active = client ? client->window : None;
-        OBT_PROP_SET32(obt_root(ob_screen), NET_ACTIVE_WINDOW, WINDOW, active);
-    }
+    if (ob_state() != OB_STATE_EXITING)
+        ob_backend->publish_active(client ? client->window : OB_SURFACE_NONE);
 
     /* when focus is moved to a new window, the last_user_time timestamp would
        no longer be valid, as it applies for the focused window */

@@ -240,12 +240,17 @@ struct _ObBackend {
 
     /* --- state for pagers and taskbars --- */
 
-    /*! Managed surfaces in the order they were mapped, and bottom first. */
-    void (*publish_clients)(const ObSurfaceId *mapped, guint n,
-                            const ObSurfaceId *stacked, guint m);
+    /*! Managed surfaces in the order they were mapped. */
+    void (*publish_clients)(const ObSurfaceId *mapped, guint n);
+    /*! Managed surfaces, bottom first. */
+    void (*publish_stacking)(const ObSurfaceId *stacked, guint n);
+    /*! OB_SURFACE_NONE when nothing has the focus. */
     void (*publish_active)(ObSurfaceId s);
-    void (*publish_desktops)(guint count, guint current,
-                             const gchar *const *names);
+    void (*publish_desktop_count)(guint count);
+    void (*publish_current_desktop)(guint desktop);
+    /*! NULL terminated. */
+    void (*publish_desktop_names)(const gchar *const *names);
+    /*! desktop is DESKTOP_ALL for a surface on every desktop. */
     void (*publish_surface_desktop)(ObSurfaceId s, guint desktop);
     /*! One area per desktop. */
     void (*publish_workareas)(const Rect *areas, guint n);
