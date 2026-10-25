@@ -1,12 +1,13 @@
 #!/bin/bash
 # Take a screenshot of the shelf under every bundled Openbox theme and check
-# that its text reads on its islands (contrast >= 4.5:1).
+# that its text reads on its islands (4.5:1), on the hovered tile (3:1) and that
+# the running mark shows (2:1).
 #
 #   tools/shelf-themes.sh [PREFIX [OUTPUT.png]]
 #
 # PREFIX is where Openbox is installed (default /usr/local); OUTPUT defaults to
-# docs/screenshots/shelf-themes.png; the menus (a tile's, the network's and the
-# volume's) go to the same name ending in -menus.png. ONLY=Onyx limits it to
+# docs/screenshots/shelf-themes.png; the menus (a tile's with its window submenu,
+# the network's, the volume's and the power's) go to the same name ending in -menus.png. ONLY=Onyx limits it to
 # one theme. Needs Xvfb, xdotool, xterm and ImageMagick.
 # Exits non-zero when a theme fails the contrast check.
 set -u
@@ -83,36 +84,43 @@ PY
     sleep 1.5
     xdotool mousemove 175 372; xdotool mousemove 181 376; sleep 0.7
     import -window root "$WORK/$t.png"
-    # the menus: right click a tile, click the network and the volume glyphs
+    # the menus: a tile's, its window submenu, then the glyphs'
+    # scene: button x crop-x crop-w [pointer x y to open a submenu]
     n=0
-    for scene in "3 120 0" "1 870 700" "1 903 700"; do
+    parts=()
+    for scene in "3 120 0 300" "3 120 0 480 130 327" "1 870 700 300" \
+                 "1 903 700 300" "1 938 700 300"; do
         set -- $scene
         xdotool mousemove "$2" 374 click "$1"; sleep 0.8
+        [ $# -ge 6 ] && { xdotool mousemove "$5" "$6"; sleep 1.2; }
         import -window root "$WORK/$t-menu$n.png"
-        convert "$WORK/$t-menu$n.png" -crop 300x200+"$3"+220 +repage \
+        convert "$WORK/$t-menu$n.png" -crop "$4"x270+"$3"+150 +repage \
                 "$WORK/$t-menu$n.png"
         xdotool key Escape; sleep 0.3
+        parts+=("$WORK/$t-menu$n.png")
         n=$((n + 1))
     done
-    convert "$WORK/$t-menu0.png" "$WORK/$t-menu1.png" "$WORK/$t-menu2.png" \
-            +append "$WORK/$t-menus.png"
+    convert "${parts[@]}" +append "$WORK/$t-menus.png"
     menus+=("$WORK/$t-menus.png")
     kill $op $xp 2>/dev/null; wait 2>/dev/null
 
     line=$(grep -m1 shelf-material "$WORK/$t.log")
-    c=$(sed -n 's/.* contrast=\([0-9.]*\) .*/\1/p' <<<"$line")
-    if [ -z "$c" ] || awk "BEGIN{exit !($c < 4.5)}"; then
-        echo "FAIL $t: text contrast ${c:-unknown}" >&2
+    val() { sed -n "s/.* $1=\([0-9.]*\).*/\1/p" <<<"$line"; }
+    c=$(val contrast); h=$(val hover_ink); a=$(val accent)
+    if [ -z "$c" ] || [ -z "$h" ] || [ -z "$a" ] ||
+       awk "BEGIN{exit !($c < 4.5 || $h < 3.0 || $a < 2.0)}"; then
+        echo "FAIL $t: text ${c:-?}:1 (>= 4.5), hover ${h:-?}:1 (>= 3)," \
+             "mark ${a:-?}:1 (>= 2)" >&2
         status=1
     else
-        echo "ok   $t: text contrast $c"
+        echo "ok   $t: text $c:1, hover $h:1, mark $a:1"
     fi
     shots+=("$WORK/$t.png")
 done
 
 montage -label '%t' "${shots[@]}" -tile 2x -geometry 900x+8+8 -pointsize 18 \
         -background '#1b1d21' -fill white "$OUT"
-montage -label '%t' "${menus[@]/%-menus.png/-menus.png}" -tile 2x \
+montage -label '%t' "${menus[@]/%-menus.png/-menus.png}" -tile 1x \
         -geometry +8+8 -pointsize 18 -background '#1b1d21' -fill white \
         "${OUT%.png}-menus.png"
 echo "wrote $OUT and ${OUT%.png}-menus.png"

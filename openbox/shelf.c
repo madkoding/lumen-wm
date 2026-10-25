@@ -265,7 +265,7 @@ static const Material *theme_material(void)
     m->shadow_mid_a = m->light ? mat_light.shadow_mid_a :
                                  mat_dark.shadow_mid_a;
     /* the selected item, but only when it stands out from the island */
-    if (contrast(hover, body) >= 1.12) {
+    if (contrast(hover, body) >= 1.12 && contrast(m->ink, hover) >= 3.0) {
         m->hover = hover;
         m->hover_a = 0.9;
     } else {
@@ -321,12 +321,16 @@ static const Material *override_material(const Material *base)
 static void dump_material(const Material *m)
 {
     g_printerr("shelf-material light=%d body=%.3f,%.3f,%.3f "
-               "ink=%.3f,%.3f,%.3f contrast=%.2f hover=%.2f accent=%.2f\n",
+               "ink=%.3f,%.3f,%.3f contrast=%.2f hover=%.2f accent=%.2f "
+               "hover_ink=%.2f\n",
                m->light, m->body.r, m->body.g, m->body.b,
                m->ink.r, m->ink.g, m->ink.b, contrast(m->ink, m->body),
                contrast(m->hover_fill.kind != G_SOLID ?
                         fill_mean(&m->hover_fill) : m->hover, m->body),
-               contrast(m->accent, m->body));
+               contrast(m->accent, m->body),
+               m->hover_a < 0.5 ? 21.0 :
+               contrast(m->ink, m->hover_fill.kind != G_SOLID ?
+                        fill_mean(&m->hover_fill) : m->hover));
 }
 
 typedef struct {
@@ -2049,6 +2053,12 @@ static void sys_menu_add(const gchar *label, const gchar *command,
     e->data.normal.enabled = enabled && command;
 }
 
+/* A line that only informs: a title, never a selectable entry */
+static void sys_menu_info(const gchar *label)
+{
+    menu_add_separator(shelf_menu, -1, label);
+}
+
 static gchar *replace_all(const gchar *s, const gchar *what, const gchar *with)
 {
     gchar **parts = g_strsplit(s, what, -1);
@@ -2137,7 +2147,7 @@ static void network_menu(void)
         g_string_free(name, TRUE);
         ++n;
     }
-    if (!n) sys_menu_add("No networks found", NULL, FALSE);
+    if (!n) sys_menu_info("No networks found");
     g_strfreev(lines);
     g_free(out);
     g_hash_table_destroy(seen);
@@ -2155,7 +2165,7 @@ static void volume_menu(void)
                      &out, NULL, NULL, NULL);
         if (out) g_strstrip(out);
         l = g_strdup_printf("Volume %s", out && *out ? out : "unknown");
-        sys_menu_add(l, NULL, FALSE);
+        sys_menu_info(l);
         g_free(l);
         g_free(out);
     }
@@ -2186,7 +2196,7 @@ static void show_status_menu(gint h, gint rx, gint ry)
         sys_menu_begin();
         l = g_strdup_printf("%d%%, %s", S.batt_pct,
                             S.batt_charging ? "charging" : "on battery");
-        sys_menu_add(l, NULL, FALSE);
+        sys_menu_info(l);
         g_free(l);
     } else {
         return;
