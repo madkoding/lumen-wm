@@ -288,6 +288,9 @@ typedef struct _ObInputEvent {
     /*! keys: the modifier mask the key itself is (Alt for an Alt key), 0
       for any other key */
     guint key_mod;
+    /*! key presses: the character it types through the input method,
+      when the core asked for text (menu accelerators); 0 otherwise */
+    gunichar text;
     guint button;           /*!< buttons */
     /*! where the pointer is, in layout coordinates */
     gint root_x, root_y;

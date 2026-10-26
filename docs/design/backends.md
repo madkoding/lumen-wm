@@ -145,7 +145,8 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       left in `mouse.c` and `keyboard.c` reads the XEvent itself (and asks the size of the window a click is
       let go over), and becomes the `button`, `motion` and `key` events when the backend reads the queue. The core's
       handlers take an `ObInputEvent` (keysym, keycode, button, modifiers and pointer position) instead of the
-      XEvent, one at a time: `moveresize_event()`, window cycling, `keyboard_event()` and `mouse_event()` do (done; a click
+      XEvent, one at a time: `moveresize_event()`, window cycling, `keyboard_event()`, `mouse_event()`, the menus and the prompts do (done;
+      a menu asks for `text`, the character a key types through the input method, for its accelerators; a click
       counts when `inside` says it was let go over the window it started in), and `backend_x11_input_event()` builds it, skipping
       to the last queued motion while a window moves. Next: move/resize (9).
    9. Move/resize: XSync and pointer warps go behind the backend. Done: `moveresize_start()` takes an

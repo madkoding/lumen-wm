@@ -84,7 +84,7 @@ typedef struct
 
 static void event_process(const XEvent *e, gpointer data);
 static void event_handle_root(XEvent *e);
-static gboolean event_handle_menu_input(XEvent *e);
+static gboolean event_handle_menu_input(const ObInputEvent *e);
 static void event_handle_menu(ObMenuFrame *frame, XEvent *e);
 static gboolean event_handle_prompt(ObPrompt *p, XEvent *e);
 static void event_handle_dock(ObDock *s, XEvent *e);
@@ -1220,34 +1220,37 @@ static ObMenuFrame* find_active_or_last_menu(void)
 
 static gboolean event_handle_prompt(ObPrompt *p, XEvent *e)
 {
-    switch (e->type) {
-    case ButtonPress:
-    case ButtonRelease:
-    case MotionNotify:
-        return prompt_mouse_event(p, e);
-        break;
-    case KeyPress:
-        return prompt_key_event(p, e);
-        break;
+    ObInputEvent input;
+
+    if (!backend_x11_input_event(e, FALSE, &input))
+        return FALSE;
+    switch (input.type) {
+    case OB_INPUT_BUTTON_PRESS:
+    case OB_INPUT_BUTTON_RELEASE:
+    case OB_INPUT_MOTION:
+        return prompt_mouse_event(p, &input);
+    case OB_INPUT_KEY_PRESS:
+        return prompt_key_event(p, &input);
+    default:
+        return FALSE;
     }
-    return FALSE;
 }
 
-static gboolean event_handle_menu_input(XEvent *ev)
+static gboolean event_handle_menu_input(const ObInputEvent *ev)
 {
     gboolean ret = FALSE;
 
-    if (ev->type == ButtonRelease || ev->type == ButtonPress) {
+    if (ev->type == OB_INPUT_BUTTON_RELEASE || ev->type == OB_INPUT_BUTTON_PRESS) {
         ObMenuEntryFrame *e;
 
-        if ((ev->xbutton.button < 4 || ev->xbutton.button > 5) &&
-            ((ev->type == ButtonRelease && menu_hide_delay_reached()) ||
-             ev->type == ButtonPress))
+        if ((ev->button < 4 || ev->button > 5) &&
+            ((ev->type == OB_INPUT_BUTTON_RELEASE && menu_hide_delay_reached()) ||
+             ev->type == OB_INPUT_BUTTON_PRESS))
         {
-            if ((e = menu_entry_frame_under(ev->xbutton.x_root,
-                                            ev->xbutton.y_root)))
+            if ((e = menu_entry_frame_under(ev->root_x,
+                                            ev->root_y)))
             {
-                if (ev->type == ButtonPress) {
+                if (ev->type == OB_INPUT_BUTTON_PRESS) {
                     /* We know this is a new press, so we don't have to
                      * block release events anymore */
                     menu_hide_delay_reset();
@@ -1256,35 +1259,35 @@ static gboolean event_handle_menu_input(XEvent *ev)
                         menu_frame_select(e->frame->child, NULL, TRUE);
                 }
                 menu_frame_select(e->frame, e, TRUE);
-                if (ev->type == ButtonRelease)
-                    menu_entry_frame_execute(e, ev->xbutton.state);
+                if (ev->type == OB_INPUT_BUTTON_RELEASE)
+                    menu_entry_frame_execute(e, ev->mods);
             }
             else
                 menu_frame_hide_all();
         }
         ret = TRUE;
     }
-    else if (ev->type == KeyPress || ev->type == KeyRelease) {
+    else if (ev->type == OB_INPUT_KEY_PRESS || ev->type == OB_INPUT_KEY_RELEASE) {
         guint mods;
         ObMenuFrame *frame;
 
         /* get the modifiers */
-        mods = obt_keyboard_only_modmasks(ev->xkey.state);
+        mods = obt_keyboard_only_modmasks(ev->mods);
 
         frame = find_active_or_last_menu();
         if (frame == NULL)
             g_assert_not_reached(); /* there is no active menu */
 
         /* Allow control while going thru the menu */
-        else if (ev->type == KeyPress && (mods & ~ControlMask) == 0) {
+        else if (ev->type == OB_INPUT_KEY_PRESS && (mods & ~ControlMask) == 0) {
             gunichar unikey;
             KeySym sym;
 
             frame->got_press = TRUE;
-            frame->press_keycode = ev->xkey.keycode;
+            frame->press_keycode = ev->keycode;
             frame->press_doexec = FALSE;
 
-            sym = obt_keyboard_keypress_to_keysym(ev);
+            sym = ev->keysym;
 
             if (sym == XK_Escape) {
                 menu_frame_hide_all();
@@ -1346,9 +1349,7 @@ static gboolean event_handle_menu_input(XEvent *ev)
 
             /* keyboard accelerator shortcuts. (if it was a valid key) */
             else if (frame->entries &&
-                     (unikey =
-                      obt_keyboard_keypress_to_unichar(menu_frame_ic(frame),
-                                                       ev)))
+                     (unikey = ev->text))
             {
                 GList *start;
                 GList *it;
@@ -1407,13 +1408,13 @@ static gboolean event_handle_menu_input(XEvent *ev)
            doesn't get sent to the focused application.
 
            Allow ControlMask only, and don't bother if the menu is empty */
-        else if (ev->type == KeyRelease && (mods & ~ControlMask) == 0) {
-            if (frame->press_keycode == ev->xkey.keycode &&
+        else if (ev->type == OB_INPUT_KEY_RELEASE && (mods & ~ControlMask) == 0) {
+            if (frame->press_keycode == ev->keycode &&
                 frame->got_press &&
                 frame->press_doexec)
             {
                 if (frame->selected)
-                    menu_entry_frame_execute(frame->selected, ev->xkey.state);
+                    menu_entry_frame_execute(frame->selected, ev->mods);
             }
         }
     }
@@ -1484,8 +1485,16 @@ static gboolean event_handle_user_input(ObClient *client, XEvent *e)
              e->type == MotionNotify || e->type == KeyPress ||
              e->type == KeyRelease);
 
+    backend_x11_input_event(e, moveresize_latest_motion(), &input);
+
     if (menu_frame_visible) {
-        if (event_handle_menu_input(e))
+        /* menus have keyboard accelerators: ask what the key types
+           (menus are always used through a grab, so use its input
+           context) */
+        if (e->type == KeyPress)
+            input.text = obt_keyboard_keypress_to_unichar(
+                grab_input_context(), e);
+        if (event_handle_menu_input(&input))
             /* don't use the event if the menu used it, but if the menu
                didn't use it and it's a keypress that is bound, it will
                close the menu and be used */
@@ -1494,9 +1503,6 @@ static gboolean event_handle_user_input(ObClient *client, XEvent *e)
 
     /* if the keyboard interactive action uses the event then dont
        use it for bindings. likewise is moveresize uses the event. */
-    /* skipping motions only matters to a move, which ends any interactive
-       action */
-    backend_x11_input_event(e, moveresize_latest_motion(), &input);
     if (actions_interactive_input_event(&input) || moveresize_event(&input))
         return TRUE;
 
