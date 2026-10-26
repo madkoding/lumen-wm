@@ -113,10 +113,17 @@ static struct wlr_scene_tree *content(WlrCanvas *c)
     return c->content;
 }
 
+/* the canvases alive: freeing one frees its children, as destroying an X
+   window does, and the core may free those again after */
+static GHashTable *alive;
+
 static WlrCanvas *canvas_make(struct wlr_scene_tree *parent,
                               ObCanvasLayer layer, ObCanvasFlags flags)
 {
     WlrCanvas *c = g_new0(WlrCanvas, 1);
+
+    if (!alive) alive = g_hash_table_new(g_direct_hash, g_direct_equal);
+    g_hash_table_add(alive, c);
 
     c->node.kind = WLR_NODE_CANVAS;
     c->layer = layer;
@@ -157,7 +164,10 @@ ObCanvasId lw_canvas_new_child(ObCanvasId parent, ObCanvasFlags flags)
 
 void lw_canvas_free(ObCanvasId id)
 {
-    WlrCanvas *c = canvas(id);
+    WlrCanvas *c;
+
+    if (!id || !alive || !g_hash_table_remove(alive, (gpointer)id)) return;
+    c = canvas(id);
 
     while (c->children)
         lw_canvas_free((ObCanvasId)c->children->data);
@@ -272,8 +282,11 @@ void lw_canvas_resize(ObCanvasId id, gint width, gint height)
 
 void lw_canvas_show(ObCanvasId id, gboolean show)
 {
-    WlrCanvas *c = canvas(id);
+    WlrCanvas *c;
 
+    /* a menu entry hides the icon it does not have */
+    if (!id) return;
+    c = canvas(id);
     c->shown = show;
     wlr_scene_node_set_enabled(&c->tree->node, show);
     lw_pointer_refresh(0);
