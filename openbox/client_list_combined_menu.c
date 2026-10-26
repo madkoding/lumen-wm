@@ -129,7 +129,7 @@ static void menu_execute(ObMenuEntry *self, ObMenuFrame *f,
     else {
         ObClient *t = self->data.normal.data;
         if (t) { /* it's set to NULL if its destroyed */
-            gboolean here = state & ShiftMask;
+            gboolean here = state & OB_MOD_SHIFT;
 
             client_activate(t, TRUE, here, TRUE, TRUE, TRUE);
             /* if the window is omnipresent then we need to go to its

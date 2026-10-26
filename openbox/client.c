@@ -1893,7 +1893,7 @@ void client_update_wmhints(ObClient *self)
 
         /* did the group state change? */
         if ((ObWindowId)info.group !=
-            (self->group ? self->group->leader : None))
+            (self->group ? self->group->leader : OB_SURFACE_NONE))
         {
             ObGroup *oldgroup = self->group;
 

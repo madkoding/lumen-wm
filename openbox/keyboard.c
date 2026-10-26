@@ -35,7 +35,6 @@
 #include "moveresize.h"
 #include "popup.h"
 #include "gettext.h"
-#include "obt/keyboard.h"
 
 #include <glib.h>
 
@@ -184,7 +183,7 @@ gboolean keyboard_process_interactive_grab(const XEvent *e, ObClient **client)
     gboolean cancel = FALSE;
     guint mods;
 
-    mods = obt_keyboard_only_modmasks(ev->xkey.state);
+    mods = ob_backend->only_modmasks(ev->xkey.state);
 
     if (istate.active) {
         if ((e->type == KeyRelease && !(istate.state & mods))) {
@@ -237,7 +236,7 @@ gboolean keyboard_event(ObClient *client, const ObInputEvent *e)
     else
         repeat_key = e->keycode;
 
-    mods = obt_keyboard_only_modmasks(e->mods);
+    mods = ob_backend->only_modmasks(e->mods);
 
     if (e->keycode == config_keyboard_reset_keycode &&
         mods == config_keyboard_reset_state)

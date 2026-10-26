@@ -40,9 +40,7 @@
 #include "group.h"
 #include "stacking.h"
 #include "backend.h"
-#include "obt/keyboard.h"
 
-#include <X11/keysym.h>
 #include <glib.h>
 
 #ifdef HAVE_SYS_SELECT_H
@@ -57,6 +55,7 @@
 
 #ifdef USE_SM
 #include <X11/ICE/ICElib.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
 #endif
 
 typedef struct
@@ -584,16 +583,16 @@ static gboolean event_handle_menu_input(const ObInputEvent *ev)
         ObMenuFrame *frame;
 
         /* get the modifiers */
-        mods = obt_keyboard_only_modmasks(ev->mods);
+        mods = ob_backend->only_modmasks(ev->mods);
 
         frame = find_active_or_last_menu();
         if (frame == NULL)
             g_assert_not_reached(); /* there is no active menu */
 
         /* Allow control while going thru the menu */
-        else if (ev->type == OB_INPUT_KEY_PRESS && (mods & ~ControlMask) == 0) {
+        else if (ev->type == OB_INPUT_KEY_PRESS && (mods & ~OB_MOD_CONTROL) == 0) {
             gunichar unikey;
-            KeySym sym;
+            guint32 sym;
 
             frame->got_press = TRUE;
             frame->press_keycode = ev->keycode;
@@ -601,12 +600,12 @@ static gboolean event_handle_menu_input(const ObInputEvent *ev)
 
             sym = ev->keysym;
 
-            if (sym == XK_Escape) {
+            if (sym == XKB_KEY_Escape) {
                 menu_frame_hide_all();
                 ret = TRUE;
             }
 
-            else if (sym == XK_Left) {
+            else if (sym == XKB_KEY_Left) {
                 /* Left goes to the parent menu */
                 if (frame->parent) {
                     /* remove focus from the child */
@@ -618,7 +617,7 @@ static gboolean event_handle_menu_input(const ObInputEvent *ev)
                 ret = TRUE;
             }
 
-            else if (sym == XK_Right || sym == XK_Return || sym == XK_KP_Enter)
+            else if (sym == XKB_KEY_Right || sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter)
             {
                 /* Right and enter goes to the selected submenu.
                    Enter executes instead if it's not on a submenu. */
@@ -632,29 +631,29 @@ static gboolean event_handle_menu_input(const ObInputEvent *ev)
                         /* move focus to the child menu */
                         menu_frame_select_next(frame->child);
                     }
-                    else if (sym != XK_Right) {
+                    else if (sym != XKB_KEY_Right) {
                         frame->press_doexec = TRUE;
                     }
                 }
                 ret = TRUE;
             }
 
-            else if (sym == XK_Up) {
+            else if (sym == XKB_KEY_Up) {
                 menu_frame_select_previous(frame);
                 ret = TRUE;
             }
 
-            else if (sym == XK_Down) {
+            else if (sym == XKB_KEY_Down) {
                 menu_frame_select_next(frame);
                 ret = TRUE;
             }
 
-            else if (sym == XK_Home) {
+            else if (sym == XKB_KEY_Home) {
                 menu_frame_select_first(frame);
                 ret = TRUE;
             }
 
-            else if (sym == XK_End) {
+            else if (sym == XKB_KEY_End) {
                 menu_frame_select_last(frame);
                 ret = TRUE;
             }
@@ -719,8 +718,8 @@ static gboolean event_handle_menu_input(const ObInputEvent *ev)
         /* Use KeyRelease events for running things so that the key release
            doesn't get sent to the focused application.
 
-           Allow ControlMask only, and don't bother if the menu is empty */
-        else if (ev->type == OB_INPUT_KEY_RELEASE && (mods & ~ControlMask) == 0) {
+           Allow OB_MOD_CONTROL only, and don't bother if the menu is empty */
+        else if (ev->type == OB_INPUT_KEY_RELEASE && (mods & ~OB_MOD_CONTROL) == 0) {
             if (frame->press_keycode == ev->keycode &&
                 frame->got_press &&
                 frame->press_doexec)

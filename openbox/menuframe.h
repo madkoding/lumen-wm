@@ -24,7 +24,6 @@
 #include "geom.h"
 #include "window.h"
 #include "obrender/render.h"
-#include "obt/keyboard.h"
 
 #include <glib.h>
 

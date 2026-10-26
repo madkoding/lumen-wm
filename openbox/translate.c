@@ -21,7 +21,6 @@
 #include "backend.h"
 #include "mouse.h"
 #include "gettext.h"
-#include "obt/keyboard.h"
 
 #include <glib.h>
 #include <string.h>
@@ -31,31 +30,31 @@ static guint translate_modifier(gchar *str)
 {
     guint mask = 0;
 
-    if (!g_ascii_strcasecmp("Mod1", str)) mask = Mod1Mask;
-    else if (!g_ascii_strcasecmp("Mod2", str)) mask = Mod2Mask;
-    else if (!g_ascii_strcasecmp("Mod3", str)) mask = Mod3Mask;
-    else if (!g_ascii_strcasecmp("Mod4", str)) mask = Mod4Mask;
-    else if (!g_ascii_strcasecmp("Mod5", str)) mask = Mod5Mask;
+    if (!g_ascii_strcasecmp("Mod1", str)) mask = OB_MOD_MOD1;
+    else if (!g_ascii_strcasecmp("Mod2", str)) mask = OB_MOD_MOD2;
+    else if (!g_ascii_strcasecmp("Mod3", str)) mask = OB_MOD_MOD3;
+    else if (!g_ascii_strcasecmp("Mod4", str)) mask = OB_MOD_MOD4;
+    else if (!g_ascii_strcasecmp("Mod5", str)) mask = OB_MOD_MOD5;
 
     else if (!g_ascii_strcasecmp("Control", str) ||
              !g_ascii_strcasecmp("C", str))
-        mask = obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_CONTROL);
+        mask = ob_backend->modkey_mask(OB_MODKEY_CONTROL);
     else if (!g_ascii_strcasecmp("Alt", str) ||
              !g_ascii_strcasecmp("A", str))
-        mask = obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_ALT);
+        mask = ob_backend->modkey_mask(OB_MODKEY_ALT);
     else if (!g_ascii_strcasecmp("Meta", str) ||
              !g_ascii_strcasecmp("M", str))
-        mask = obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_META);
+        mask = ob_backend->modkey_mask(OB_MODKEY_META);
     /* W = windows key, is linked to the Super_L/R buttons */
     else if (!g_ascii_strcasecmp("Super", str) ||
              !g_ascii_strcasecmp("W", str))
-        mask = obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_SUPER);
+        mask = ob_backend->modkey_mask(OB_MODKEY_SUPER);
     else if (!g_ascii_strcasecmp("Shift", str) ||
              !g_ascii_strcasecmp("S", str))
-        mask = obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_SHIFT);
+        mask = ob_backend->modkey_mask(OB_MODKEY_SHIFT);
     else if (!g_ascii_strcasecmp("Hyper", str) ||
              !g_ascii_strcasecmp("H", str))
-        mask = obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_HYPER);
+        mask = ob_backend->modkey_mask(OB_MODKEY_HYPER);
     else
         g_message(_("Invalid modifier key \"%s\" in key/mouse binding"), str);
 

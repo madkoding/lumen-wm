@@ -6,7 +6,8 @@
 #include "openbox/openbox.h"
 #include "openbox/misc.h"
 #include "gettext.h"
-#include "obt/keyboard.h"
+#include "openbox/backend.h"
+#include <xkbcommon/xkbcommon-keysyms.h>
 
 typedef struct {
     gboolean interactive;
@@ -259,8 +260,8 @@ static gboolean i_input_func(guint initial_state,
 {
     guint mods, initial_mods;
 
-    initial_mods = obt_keyboard_only_modmasks(initial_state);
-    mods = obt_keyboard_only_modmasks(e->mods);
+    initial_mods = ob_backend->only_modmasks(initial_state);
+    mods = ob_backend->only_modmasks(e->mods);
     if (e->type == OB_INPUT_KEY_RELEASE) {
         /* remove from the state the mask of the modifier key being
            released, if it is a modifier key being released that is */
@@ -268,16 +269,16 @@ static gboolean i_input_func(guint initial_state,
     }
 
     if (e->type == OB_INPUT_KEY_PRESS) {
-        KeySym sym = e->keysym;
+        guint32 sym = e->keysym;
 
         /* Escape cancels no matter what */
-        if (sym == XK_Escape) {
+        if (sym == XKB_KEY_Escape) {
             end_cycle(TRUE, e->mods, options);
             return FALSE;
         }
 
         /* There were no modifiers and they pressed enter */
-        else if ((sym == XK_Return || sym == XK_KP_Enter) && !initial_mods) {
+        else if ((sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) && !initial_mods) {
             end_cycle(FALSE, e->mods, options);
             return FALSE;
         }

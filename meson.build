@@ -54,6 +54,8 @@ xext = dependency('xext')
 xrandr = dependency('xrandr')
 xinerama = dependency('xinerama')
 xau = dependency('xau')
+# the core names keys by xkb keysyms (headers only)
+xkbcommon = dependency('xkbcommon')
 libm = cc.find_library('m', required: false)
 libsn = dependency('libstartup-notification-1.0', version: '>= 0.8',
                    required: get_option('startup-notification'))
@@ -277,7 +279,7 @@ executable('lumen-wm',
   version_h,
   c_args: paths + ['-DG_LOG_DOMAIN="Openbox"'],
   dependencies: [obrender, obt, cairo_xlib, x11, xext, xrandr, xinerama,
-                 glib, xml, libm, libsn, xcursor, sm, ice],
+                 glib, xml, xkbcommon, libm, libsn, xcursor, sm, ice],
   export_dynamic: true,
   install_rpath: rpath,
   install: true)

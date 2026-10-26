@@ -63,7 +63,7 @@ ObWindowId window_top(ObWindow *self)
         return WINDOW_AS_PROMPT(self)->super.window;
     }
     g_assert_not_reached();
-    return None;
+    return 0;
 }
 
 ObStackingLayer window_layer(ObWindow *self)
@@ -82,7 +82,7 @@ ObStackingLayer window_layer(ObWindow *self)
         break;
     }
     g_assert_not_reached();
-    return None;
+    return 0;
 }
 
 ObWindow* window_find(ObWindowId xwin)
@@ -99,7 +99,7 @@ void window_add(ObWindowId *xwin, ObWindow *win)
 
 void window_remove(ObWindowId xwin)
 {
-    g_assert(xwin != None);
+    g_assert(xwin != 0);
     g_hash_table_remove(window_map, &xwin);
 }
 

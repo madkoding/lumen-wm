@@ -47,10 +47,7 @@
 #include "gettext.h"
 #include "obrender/render.h"
 #include "obrender/theme.h"
-#include "obt/display.h"
 #include "obt/signal.h"
-#include "obt/prop.h"
-#include "obt/keyboard.h"
 #include "obt/xml.h"
 
 #ifdef HAVE_FCNTL_H
@@ -196,7 +193,7 @@ gint main(gint argc, gchar **argv)
             gchar *xml_error_string = NULL;
             ObPrompt *xmlprompt = NULL;
 
-            if (reconfigure) obt_keyboard_reload();
+            if (reconfigure) ob_backend->keymap_reload();
 
             {
                 ObtXmlInst *i;

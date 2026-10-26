@@ -49,6 +49,28 @@ typedef struct _ObBackend       ObBackend;
 typedef struct _ObBackendEvents ObBackendEvents;
 struct _RrFontSettings;
 
+/*! Modifier masks whose meaning is fixed: X11's and xkb's default
+  modifiers agree on them. Which of Mod1 to Mod5 Alt or Super is depends on
+  the keymap; ask modkey_mask(). */
+#define OB_MOD_SHIFT   (1 << 0)
+#define OB_MOD_LOCK    (1 << 1)
+#define OB_MOD_CONTROL (1 << 2)
+#define OB_MOD_MOD1    (1 << 3)
+#define OB_MOD_MOD2    (1 << 4)
+#define OB_MOD_MOD3    (1 << 5)
+#define OB_MOD_MOD4    (1 << 6)
+#define OB_MOD_MOD5    (1 << 7)
+
+/*! Modifier keys that may sit on any of the modifier masks. */
+typedef enum {
+    OB_MODKEY_SHIFT,
+    OB_MODKEY_CONTROL,
+    OB_MODKEY_ALT,
+    OB_MODKEY_META,
+    OB_MODKEY_SUPER,
+    OB_MODKEY_HYPER
+} ObModkey;
+
 #define OB_SURFACE_NONE ((ObSurfaceId)0)
 #define OB_CANVAS_NONE ((ObCanvasId)0)
 
@@ -663,6 +685,13 @@ struct _ObBackend {
       that must look like one (X11 XGrabServer; nothing on Wayland). The
       core counts nested grabs. */
     void (*grab_server)(gboolean grab);
+    /*! The modifier mask(s) a modifier key sets, left and right. */
+    guint (*modkey_mask)(ObModkey key);
+    /*! Only the modifiers in state that bindings look at: no lock keys
+      (Caps, Num and Scroll Lock) and no buttons. */
+    guint (*only_modmasks)(guint state);
+    /*! Read the keyboard map again (when the configuration is reloaded). */
+    void (*keymap_reload)(void);
     /*! The key that types the keysym called name (as in rc.xml). FALSE
       when no keysym has that name; keycode 0 when no key types it. */
     gboolean (*key_named)(const gchar *name, guint *keycode);
