@@ -50,6 +50,8 @@ void backend_x11_colormap_notify(const XColormapEvent *e);
 /*! A managed window's shape changed (ShapeNotify). Returns FALSE when e
   isn't that. */
 gboolean backend_x11_shape_notify(const XEvent *e);
+/*! The input method context for keys typed during a grab (menus). */
+struct _ObtIC *backend_x11_grab_input_context(void);
 /*! An XSync alarm went off. */
 void backend_x11_sync_alarm(const XEvent *e);
 

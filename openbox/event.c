@@ -1482,7 +1482,7 @@ static gboolean event_handle_user_input(ObClient *client, XEvent *e)
            context) */
         if (e->type == KeyPress)
             input.text = obt_keyboard_keypress_to_unichar(
-                grab_input_context(), e);
+                backend_x11_grab_input_context(), e);
         if (event_handle_menu_input(&input))
             /* don't use the event if the menu used it, but if the menu
                didn't use it and it's a keypress that is bound, it will

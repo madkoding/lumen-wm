@@ -62,6 +62,9 @@ static guint n_outputs;
 
 static Cursor cursors[OB_NUM_CURSORS];
 
+/* the input method context for keys typed during a grab */
+static ObtIC *grab_ic = NULL;
+
 static Cursor load_cursor(const gchar *name, guint fontval)
 {
     Cursor c = None;
@@ -699,6 +702,10 @@ static void x11_release_screen(void)
     /* don't keep this mode */
     OBT_PROP_ERASE(obt_root(ob_screen), NET_SHOWING_DESKTOP);
 
+    if (grab_ic) {
+        obt_keyboard_context_unref(grab_ic);
+        grab_ic = NULL;
+    }
     XDestroyWindow(obt_display, screen_support_win);
     screen_support_win = None;
 
@@ -1580,13 +1587,10 @@ static void x11_restack(guintptr above, const guintptr *top_first, guint n)
     guint i;
 
     for (i = 0; i < n; ++i) win[i + 1] = top_first[i];
-    if (above) {
-        win[0] = above;
-        XRestackWindows(obt_display, win, n + 1);
-    } else if (n) {
-        XRaiseWindow(obt_display, win[1]);
-        XRestackWindows(obt_display, win + 1, n);
-    }
+    /* the top is just below the support window, which stays above every
+       managed window */
+    win[0] = above ? (Window)above : screen_support_win;
+    XRestackWindows(obt_display, win, n + 1);
     g_free(win);
 }
 
@@ -2030,6 +2034,14 @@ const ObBackend ob_backend_x11 = {
 void backend_x11_colormap_notify(const XColormapEvent *e)
 {
     x11_colormap_changed(e->window, e->colormap);
+}
+
+ObtIC *backend_x11_grab_input_context(void)
+{
+    /* grabs go to the support window */
+    if (!grab_ic)
+        grab_ic = obt_keyboard_context_new(root(), screen_support_win);
+    return grab_ic;
 }
 
 gboolean backend_x11_shape_notify(const XEvent *e)

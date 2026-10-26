@@ -452,7 +452,6 @@ gboolean actions_interactive_input_event(const ObInputEvent *e)
     gboolean used = FALSE;
     if (interactive_act) {
         if (!interactive_act->i_input(interactive_initial_state, e,
-                                      grab_input_context(),
                                       interactive_act->options, &used))
         {
             used = TRUE; /* if it cancelled the action then it has to of

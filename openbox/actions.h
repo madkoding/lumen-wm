@@ -46,7 +46,6 @@ typedef gboolean (*ObActionsIPreFunc)(guint initial_state, gpointer options);
 typedef void     (*ObActionsIPostFunc)(gpointer options);
 typedef gboolean (*ObActionsIInputFunc)(guint initial_state,
                                         const ObInputEvent *e,
-                                        ObtIC *ic,
                                         gpointer options,
                                         gboolean *used);
 typedef void     (*ObActionsICancelFunc)(gpointer options);
