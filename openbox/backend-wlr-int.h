@@ -53,7 +53,8 @@ typedef enum {
 /*! What a scene node's data points to, so input can find its owner. */
 typedef enum {
     WLR_NODE_CANVAS = 1,
-    WLR_NODE_SURFACE
+    WLR_NODE_SURFACE,
+    WLR_NODE_LAYER              /* a layer-shell surface or its popups */
 } WlrNodeKind;
 
 typedef struct _WlrNodeData {
@@ -211,12 +212,25 @@ void lw_pass_click(guint32 time);
 gboolean lw_pointer_position(gint *x, gint *y);
 void lw_pointer_warp(gint x, gint y, gboolean swallow);
 void lw_set_cursor(ObCanvasId c, ObCursor cursor);
-/*! Give the keyboard to a client's surface, or to nobody. */
+/*! Give the keyboard to a client's surface, or to nobody. A layer surface
+  holding it keeps it until it lets go. */
 void lw_keyboard_focus(struct wlr_surface *s);
+/*! A layer surface took the keyboard or let go of it. */
+void lw_keyboard_refocus(void);
 /*! Look at what is under the pointer again (it moved, or the scene
   changed under it). */
 void lw_pointer_refresh(guint32 time);
 /*! Something that held the pointer or the keyboard went away. */
 void lw_input_forget(guintptr id);
+
+/* backend-wlr-layer.c: layer-shell */
+void lw_layers_startup(void);
+void lw_layers_shutdown(void);
+/*! The layer surface that has the keyboard, or NULL; exclusive: it keeps
+  it, and key bindings don't fire. */
+struct wlr_surface *lw_layer_keyboard(gboolean *exclusive);
+/*! A press on s, a layer surface, or elsewhere for NULL. */
+void lw_layer_clicked(struct wlr_surface *s);
+guint lw_reserved_edges(const StrutPartial **edges);
 
 #endif

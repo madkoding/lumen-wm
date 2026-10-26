@@ -67,6 +67,8 @@ static GSList *struts_top = NULL;
 static GSList *struts_left = NULL;
 static GSList *struts_right = NULL;
 static GSList *struts_bottom = NULL;
+/*! The backend's reserved edges, copied */
+static StrutPartial *reserved_struts = NULL;
 
 static ObPagerPopup **desktop_popup;
 static guint         desktop_popup_timer = 0;
@@ -1153,6 +1155,28 @@ void screen_update_areas(void)
 
     if (shelf_strut.bottom)
         ADD_STRUT_TO_LIST(struts_bottom, DESKTOP_ALL, &shelf_strut);
+
+    /* what the backend keeps for things it doesn't hand to the core
+       (layer-shell bars on Wayland); a copy, as the lists clamp them */
+    {
+        const StrutPartial *edges;
+        guint n = ob_backend->reserved_edges(&edges);
+
+        g_free(reserved_struts);
+        reserved_struts = g_new(StrutPartial, n);
+        if (n) memcpy(reserved_struts, edges, n * sizeof(StrutPartial));
+        for (i = 0; i < n; ++i) {
+            StrutPartial *r = &reserved_struts[i];
+            if (r->left)
+                ADD_STRUT_TO_LIST(struts_left, DESKTOP_ALL, r);
+            if (r->top)
+                ADD_STRUT_TO_LIST(struts_top, DESKTOP_ALL, r);
+            if (r->right)
+                ADD_STRUT_TO_LIST(struts_right, DESKTOP_ALL, r);
+            if (r->bottom)
+                ADD_STRUT_TO_LIST(struts_bottom, DESKTOP_ALL, r);
+        }
+    }
 
     if (config_margins.left)
         ADD_STRUT_TO_LIST(struts_left, DESKTOP_ALL, &config_margins);

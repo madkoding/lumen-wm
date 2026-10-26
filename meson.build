@@ -80,6 +80,8 @@ if use_wayland
   foreach p : [
       wl_protocol_dir / 'stable/xdg-shell/xdg-shell.xml',
       wl_protocol_dir / 'unstable/xdg-decoration/xdg-decoration-unstable-v1.xml',
+      # not in wayland-protocols; vendored from wlr-protocols
+      'protocols/wlr-layer-shell-unstable-v1.xml',
     ]
     protocol_headers += custom_target(fs.stem(p) + '-protocol.h',
       input: p, output: '@BASENAME@-protocol.h',
@@ -306,6 +308,7 @@ executable('lumen-wm',
     'openbox/backend-wlr.c',
     'openbox/backend-wlr-canvas.c',
     'openbox/backend-wlr-input.c',
+    'openbox/backend-wlr-layer.c',
     'openbox/backend-wlr-surface.c',
     protocol_headers,
   ] : [],

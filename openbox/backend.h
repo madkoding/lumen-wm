@@ -504,6 +504,11 @@ struct _ObBackend {
     void (*output_area)(guint output, Rect *area);
     /*! The size of the whole layout, every output included. */
     void (*layout_size)(gint *width, gint *height);
+    /*! Edges of the layout that things the core doesn't manage keep for
+      themselves (Wayland: layer-shell exclusive zones), as struts; the
+      backend owns the array until it says reserved_changed. X11 has
+      none: docks and panels there are clients with struts. */
+    guint (*reserved_edges)(const StrutPartial **edges);
 
     /* --- managed surfaces --- */
 
@@ -866,6 +871,8 @@ struct _ObBackendEvents {
     /*! Monitors came, went or changed; ask output_count() and
       output_area() again. */
     void (*outputs_changed)(void);
+    /*! What reserved_edges() says changed. */
+    void (*reserved_changed)(void);
 };
 
 /*! The backend in use, set by backend_startup(). */

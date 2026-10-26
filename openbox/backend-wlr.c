@@ -250,6 +250,7 @@ static gboolean lw_startup(const gchar *display, ObStartupFlags flags,
         lw_layers[i] = wlr_scene_tree_create(root);
 
     lw_surfaces_startup();
+    lw_layers_startup();
     lw_input_startup(backend);
 
     socket = wl_display_add_socket_auto(lw_display);
@@ -275,6 +276,7 @@ static void lw_shutdown(void)
     if (!lw_display) return;
     wl_display_destroy_clients(lw_display);
     lw_input_shutdown();
+    lw_layers_shutdown();
     lw_surfaces_shutdown();
     wl_list_remove(&new_output.link);
     wlr_backend_destroy(backend);
@@ -482,6 +484,7 @@ const ObBackend ob_backend_wlr = {
     .canvas_set_outline = lw_canvas_set_outline,
     .canvas_set_input = lw_canvas_set_input,
     .canvas_set_strut = lw_canvas_set_strut,
+    .reserved_edges = lw_reserved_edges,
     .canvas_set_shape = lw_canvas_set_shape,
     .canvas_set_opacity = lw_canvas_set_opacity,
     .font_settings = lw_font_settings,

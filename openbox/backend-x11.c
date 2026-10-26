@@ -219,6 +219,13 @@ static void x11_layout_size(gint *w, gint *h)
     *h = HeightOfScreen(ScreenOfDisplay(obt_display, ob_screen));
 }
 
+static guint x11_reserved_edges(const StrutPartial **edges)
+{
+    /* docks and panels are clients here, with struts of their own */
+    *edges = NULL;
+    return 0;
+}
+
 static void x11_publish_layout_size(gint w, gint h)
 {
     gulong geometry[2];
@@ -1979,6 +1986,7 @@ const ObBackend ob_backend_x11 = {
     .output_count = x11_output_count,
     .output_area = x11_output_area,
     .layout_size = x11_layout_size,
+    .reserved_edges = x11_reserved_edges,
 
     .existing_surfaces = x11_existing_surfaces,
     .surface_kind = x11_surface_kind,

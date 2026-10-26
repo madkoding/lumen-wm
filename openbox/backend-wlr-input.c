@@ -55,6 +55,9 @@ static struct wlr_xcursor_manager *xcursors;
 static struct wl_listener new_input, request_cursor, request_selection;
 static struct wl_listener motion, motion_absolute, button, axis, frame;
 static struct wl_listener new_vkeyboard, new_vpointer;
+/* what the core gave the keyboard; a layer surface may hold it instead */
+static struct wlr_surface *client_kbd;
+static struct wl_listener client_kbd_destroy;
 static GList *keyboards;
 static struct xkb_keymap *keymap;
 
@@ -272,7 +275,13 @@ static void keyboard_key(struct wl_listener *l, void *data)
     WlrSurface *focus = lw_focused_surface();
     gboolean to_core;
 
-    if (press)
+    struct wlr_surface *layer;
+    gboolean exclusive;
+
+    layer = lw_layer_keyboard(&exclusive);
+    if (press && layer)
+        to_core = kbd_grabbed || (!exclusive && key_bound(keycode, mods));
+    else if (press)
         to_core = kbd_grabbed || key_bound(keycode, mods) ||
             !focus || focus->internal;
     else
@@ -356,10 +365,28 @@ gboolean lw_grab_keyboard(gboolean grab, guint32 time)
     return TRUE;
 }
 
+static void client_kbd_gone(struct wl_listener *l, void *data)
+{
+    wl_list_remove(&client_kbd_destroy.link);
+    wl_list_init(&client_kbd_destroy.link);
+    client_kbd = NULL;
+}
+
 void lw_keyboard_focus(struct wlr_surface *s)
 {
-    struct wlr_keyboard *k = wlr_seat_get_keyboard(lw_seat);
+    wl_list_remove(&client_kbd_destroy.link);
+    wl_list_init(&client_kbd_destroy.link);
+    client_kbd = s;
+    if (s) wl_signal_add(&s->events.destroy, &client_kbd_destroy);
+    lw_keyboard_refocus();
+}
 
+void lw_keyboard_refocus(void)
+{
+    struct wlr_keyboard *k = wlr_seat_get_keyboard(lw_seat);
+    struct wlr_surface *s = lw_layer_keyboard(NULL);
+
+    if (!s) s = client_kbd;
     if (!s) {
         wlr_seat_keyboard_notify_clear_focus(lw_seat);
         return;
@@ -378,6 +405,7 @@ typedef struct {
     WlrSurface *surface;        /* the client hit, if any */
     struct wlr_surface *wl;     /* the client's wl_surface hit */
     gdouble sx, sy;             /* where in wl */
+    gboolean layer;             /* wl is a layer surface's */
 } Hit;
 
 static void owner_of(struct wlr_scene_node *n, Hit *hit)
@@ -385,6 +413,10 @@ static void owner_of(struct wlr_scene_node *n, Hit *hit)
     for (; n; n = n->parent ? &n->parent->node : NULL) {
         WlrNodeData *d = n->data;
         if (!d) continue;
+        if (d->kind == WLR_NODE_LAYER) {
+            hit->layer = hit->wl != NULL;
+            return;
+        }
         if (d->kind == WLR_NODE_CANVAS && !hit->canvas) {
             hit->canvas = (WlrCanvas*)d;
             return;
@@ -580,6 +612,13 @@ static void pointer_moved(guint32 time)
         return;
     }
 
+    if (hit.layer) {
+        crossing(crossing_over, 0, time, OB_CROSSING_NORMAL);
+        crossing_over = 0;
+        set_client_pointer(&hit, time);
+        return;
+    }
+
     /* crossings: canvases that ask, and clients */
     over = hit.surface ? hit_id(&hit) :
         (guintptr)taker(hit.canvas, OB_CANVAS_INPUT_CROSSING);
@@ -753,6 +792,13 @@ static void cursor_button(struct wl_listener *l, void *data)
         return;
     }
 
+    lw_layer_clicked(hit.layer ? hit.wl : NULL);
+    if (hit.layer) {
+        wlr_seat_pointer_notify_button(lw_seat, ev->time_msec, ev->button,
+                                       ev->state);
+        return;
+    }
+
     if (button) {
         ButtonBinding *b;
         guintptr over = 0;
@@ -808,7 +854,7 @@ static void cursor_axis(struct wl_listener *l, void *data)
     Hit hit;
 
     hit_test(&hit);
-    if (ptr_grabbed || implicit || !hit.surface) {
+    if (ptr_grabbed || implicit || (!hit.surface && !hit.layer)) {
         /* scrolling is buttons 4 to 7 to the core, as on X */
         guint b;
         guintptr over;
@@ -1013,6 +1059,8 @@ void lw_input_startup(struct wlr_backend *backend)
     struct wlr_virtual_pointer_manager_v1 *vpm;
 
     key_bindings = g_array_new(FALSE, FALSE, sizeof(KeyBinding));
+    client_kbd_destroy.notify = client_kbd_gone;
+    wl_list_init(&client_kbd_destroy.link);
     /* bindings are looked up before any keyboard shows up */
     keymap = make_keymap();
     core_keys = g_array_new(FALSE, FALSE, sizeof(guint));
