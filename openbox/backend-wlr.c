@@ -251,6 +251,7 @@ static gboolean lw_startup(const gchar *display, ObStartupFlags flags,
 
     lw_surfaces_startup();
     lw_layers_startup();
+    lw_toplevels_startup();
     lw_input_startup(backend);
 
     socket = wl_display_add_socket_auto(lw_display);
@@ -276,6 +277,7 @@ static void lw_shutdown(void)
     if (!lw_display) return;
     wl_display_destroy_clients(lw_display);
     lw_input_shutdown();
+    lw_toplevels_shutdown();
     lw_layers_shutdown();
     lw_surfaces_shutdown();
     wl_list_remove(&new_output.link);
@@ -514,15 +516,15 @@ const ObBackend ob_backend_wlr = {
     .request_serial_bump = lw_request_serial_bump,
 
     /* foreign-toplevel and ext-workspace carry these, later in phase 5 */
-    .publish_clients = nothing_ids,
-    .publish_stacking = nothing_ids,
-    .publish_active = nothing_surface,
+    .publish_clients = lw_publish_clients,
+    .publish_stacking = lw_publish_stacking,
+    .publish_active = lw_publish_active,
     .publish_desktop_count = nothing_uint,
     .publish_current_desktop = nothing_uint,
     .publish_desktop_names = nothing_names,
     .publish_surface_desktop = nothing_surface_uint,
     .publish_surface_icon = nothing_icon,
-    .publish_surface_titles = nothing_titles,
+    .publish_surface_titles = lw_publish_surface_titles,
     .publish_workareas = nothing_workareas,
     .publish_layout_size = nothing_size,
     .publish_last_desktop = nothing_uint,

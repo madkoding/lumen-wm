@@ -310,6 +310,7 @@ executable('lumen-wm',
     'openbox/backend-wlr-input.c',
     'openbox/backend-wlr-layer.c',
     'openbox/backend-wlr-surface.c',
+    'openbox/backend-wlr-toplevels.c',
     protocol_headers,
   ] : [],
   c_args: paths + ['-DG_LOG_DOMAIN="Openbox"'] +

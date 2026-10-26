@@ -35,6 +35,7 @@
 struct wlr_xdg_toplevel;
 struct wlr_xdg_toplevel_decoration_v1;
 struct wlr_surface;
+struct wlr_output;
 
 typedef struct _WlrCanvas WlrCanvas;
 typedef struct _WlrSurface WlrSurface;
@@ -168,6 +169,11 @@ void lw_surfaces_shutdown(void);
 WlrSurface *lw_surface_of(struct wlr_surface *s);
 /*! The wlr_surface to give the keyboard and pointer to, or NULL. */
 struct wlr_surface *lw_surface_wl(WlrSurface *s);
+/*! The xdg toplevel a managed surface is, or NULL (a dialog of the core's
+  own). */
+struct wlr_xdg_toplevel *lw_surface_toplevel(ObSurfaceId id);
+/*! The output under its middle, or NULL. */
+struct wlr_output *lw_surface_output(ObSurfaceId id);
 /*! A dialog canvas becomes a surface the core can manage. */
 WlrSurface *lw_surface_new_dialog(WlrCanvas *c);
 void lw_surface_free_dialog(WlrSurface *s);
@@ -232,5 +238,16 @@ struct wlr_surface *lw_layer_keyboard(gboolean *exclusive);
 /*! A press on s, a layer surface, or elsewhere for NULL. */
 void lw_layer_clicked(struct wlr_surface *s);
 guint lw_reserved_edges(const StrutPartial **edges);
+
+/* backend-wlr-toplevels.c: what taskbars see */
+void lw_toplevels_startup(void);
+void lw_toplevels_shutdown(void);
+void lw_publish_clients(const ObSurfaceId *ids, guint n);
+void lw_publish_stacking(const ObSurfaceId *ids, guint n);
+void lw_publish_active(ObSurfaceId id);
+void lw_publish_surface_titles(ObSurfaceId id, const gchar *title,
+                               const gchar *icon);
+void lw_toplevel_app_id(ObSurfaceId id, const gchar *app_id);
+void lw_toplevel_states(ObSurfaceId id, ObSurfaceStates states);
 
 #endif

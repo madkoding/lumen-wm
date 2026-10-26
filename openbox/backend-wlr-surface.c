@@ -23,6 +23,7 @@
 
 #include <string.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -76,6 +77,25 @@ static void emit_changed(WlrSurface *s, ObSurfaceInfoFields fields)
 struct wlr_surface *lw_surface_wl(WlrSurface *s)
 {
     return s && s->toplevel ? s->toplevel->base->surface : NULL;
+}
+
+struct wlr_xdg_toplevel *lw_surface_toplevel(ObSurfaceId id)
+{
+    WlrSurface *s = surface(id);
+
+    return s ? s->toplevel : NULL;
+}
+
+struct wlr_output *lw_surface_output(ObSurfaceId id)
+{
+    WlrSurface *s = surface(id);
+    gint x, y;
+
+    if (!s || !tree_of(s)) return NULL;
+    wlr_scene_node_coords(&tree_of(s)->node, &x, &y);
+    /* where its middle is */
+    return wlr_output_layout_output_at(lw_layout, x + s->width / 2,
+                                       y + s->height / 2);
 }
 
 WlrSurface *lw_surface_of(struct wlr_surface *ws)
@@ -298,6 +318,7 @@ static void set_app_id(struct wl_listener *l, void *data)
     WlrSurface *s = wl_container_of(l, s, set_app_id);
 
     emit_changed(s, OB_SURFACE_INFO_CLASS);
+    lw_toplevel_app_id(id_of(s), s->toplevel->app_id);
 }
 
 static void set_parent(struct wl_listener *l, void *data)
@@ -688,6 +709,7 @@ void lw_surface_set_states(ObSurfaceId id, ObSurfaceStates states)
 
     if (!s) return;
     s->states = states;
+    lw_toplevel_states(id, states);
     if (!(t = s->toplevel) || !t->base->initialized) return;
     wlr_xdg_toplevel_set_maximized(t,
         (states & OB_SURFACE_STATE_MAXIMIZED_HORZ) &&
