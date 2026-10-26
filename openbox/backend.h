@@ -95,6 +95,31 @@ typedef enum {
     OB_SURFACE_STATE_UNDECORATED    = 1 << 13
 } ObSurfaceStates;
 
+/*! What the user may do to a surface, for taskbars and pagers to offer
+  (_NET_WM_ALLOWED_ACTIONS on X11). */
+typedef enum {
+    OB_SURFACE_ACTION_CHANGE_DESKTOP = 1 << 0,
+    OB_SURFACE_ACTION_SHADE          = 1 << 1,
+    OB_SURFACE_ACTION_CLOSE          = 1 << 2,
+    OB_SURFACE_ACTION_MOVE           = 1 << 3,
+    OB_SURFACE_ACTION_MINIMIZE       = 1 << 4,
+    OB_SURFACE_ACTION_RESIZE         = 1 << 5,
+    OB_SURFACE_ACTION_FULLSCREEN     = 1 << 6,
+    OB_SURFACE_ACTION_MAXIMIZE       = 1 << 7,
+    OB_SURFACE_ACTION_ABOVE          = 1 << 8,
+    OB_SURFACE_ACTION_BELOW          = 1 << 9,
+    OB_SURFACE_ACTION_UNDECORATE     = 1 << 10
+} ObSurfaceActions;
+
+/*! What the per-application rules in rc.xml matched a surface by, as it
+  was when it showed up, for the user to look up later (obxprop). */
+typedef struct _ObSurfaceApp {
+    const gchar *role, *name, *class;
+    const gchar *group_name, *group_class;
+    const gchar *title;
+    const gchar *type;
+} ObSurfaceApp;
+
 /*! Who asked, so focus stealing prevention can weigh it. */
 typedef enum {
     OB_REQUEST_FROM_UNKNOWN,
@@ -398,6 +423,9 @@ struct _ObBackend {
       decoration, and tell it its size. The decoration is placed with
       canvas_place(). */
     void (*surface_configure)(ObSurfaceId s, const Rect *area);
+    /*! Give the screen's colors to the focused client (X11 colormaps), or
+      the default ones for OB_SURFACE_NONE. */
+    void (*surface_install_colors)(ObSurfaceId s);
     /*! Tell the client where it is on screen, in layout coordinates, when
       only it can't tell (X11: a synthetic ConfigureNotify, with its
       border). */
@@ -538,6 +566,11 @@ struct _ObBackend {
     void (*publish_workareas)(const Rect *areas, guint n);
     /*! How much the decoration adds around it on each side. */
     void (*publish_surface_extents)(ObSurfaceId s, const Strut *extents);
+    void (*publish_surface_actions)(ObSurfaceId s, ObSurfaceActions actions);
+    void (*publish_surface_app)(ObSurfaceId s, const ObSurfaceApp *app);
+    /*! It is out of sight: shaded, iconified or on another desktop (X11:
+      WM_STATE IconicState). */
+    void (*publish_surface_hidden)(ObSurfaceId s, gboolean hidden);
 };
 
 /*! What a backend tells the core. The core fills it in; the backend calls

@@ -22,6 +22,8 @@
 
 #include "backend.h"
 
+#include <X11/Xlib.h>
+
 /* backend-x11-surface.c: managed windows and the frames around them */
 void x11_surface_adopt(ObSurfaceId s, gboolean internal);
 void x11_surface_unwatch(ObSurfaceId s, gboolean internal);
@@ -40,6 +42,11 @@ void x11_canvas_show(ObCanvasId c, gboolean show);
 void x11_canvas_set_shape(ObCanvasId c, const Rect *inner, gboolean bounding,
                           gboolean input, const Rect *rects, guint n);
 void x11_get_shape(ObSurfaceId s, ObSurfaceInfo *info);
+void x11_surface_install_colors(ObSurfaceId s);
+void x11_colormap_changed(Window w, Colormap colormap);
 void x11_publish_surface_extents(ObSurfaceId s, const Strut *extents);
+void x11_publish_surface_actions(ObSurfaceId s, ObSurfaceActions actions);
+void x11_publish_surface_app(ObSurfaceId s, const ObSurfaceApp *app);
+void x11_publish_surface_hidden(ObSurfaceId s, gboolean hidden);
 
 #endif

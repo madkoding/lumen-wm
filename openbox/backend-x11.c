@@ -1775,6 +1775,7 @@ const ObBackend ob_backend_x11 = {
     .surface_configure = x11_surface_configure,
     .surface_send_geometry = x11_surface_send_geometry,
     .surface_show = x11_surface_show,
+    .surface_install_colors = x11_surface_install_colors,
     .surface_focus = x11_surface_focus,
     .surface_close = x11_surface_close,
     .surface_kill = x11_surface_kill,
@@ -1817,7 +1818,15 @@ const ObBackend ob_backend_x11 = {
     .publish_surface_titles = x11_publish_surface_titles,
     .publish_workareas = x11_publish_workareas,
     .publish_surface_extents = x11_publish_surface_extents,
+    .publish_surface_actions = x11_publish_surface_actions,
+    .publish_surface_app = x11_publish_surface_app,
+    .publish_surface_hidden = x11_publish_surface_hidden,
 };
+
+void backend_x11_colormap_notify(const XColormapEvent *e)
+{
+    x11_colormap_changed(e->window, e->colormap);
+}
 
 gboolean backend_x11_shape_notify(const XEvent *e)
 {

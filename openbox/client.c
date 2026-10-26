@@ -77,7 +77,6 @@ static void client_get_area(ObClient *self);
 static void client_get_desktop(ObClient *self);
 static void client_get_state(ObClient *self);
 static void client_get_shaped(ObClient *self);
-static void client_get_colormap(ObClient *self);
 static void client_set_desktop_recursive(ObClient *self,
                                          guint target,
                                          gboolean donthide,
@@ -228,7 +227,8 @@ void client_manage(Window window, ObPrompt *prompt)
     self->managed = TRUE;
 
     /* non-zero defaults */
-    self->wmstate = WithdrawnState; /* make sure it gets updated first time */
+    /* make sure it gets updated first time */
+    self->wmstate = OB_CLIENT_WM_STATE_NONE;
     self->gravity = NorthWestGravity;
     self->desktop = screen_num_desktops; /* always an invalid value */
 
@@ -1229,7 +1229,6 @@ static void client_get_all(ObClient *self, gboolean real)
 
     client_update_sync_request_counter(self);
 
-    client_get_colormap(self);
     client_update_strut(self);
     client_update_icons(self);
     client_update_icon_geometry(self);
@@ -1597,28 +1596,6 @@ void client_update_sync_request_counter(ObClient *self)
     self->sync_counter = info.sync_counter;
 }
 
-static void client_get_colormap(ObClient *self)
-{
-    XWindowAttributes wa;
-
-    if (XGetWindowAttributes(obt_display, self->window, &wa))
-        client_update_colormap(self, wa.colormap);
-}
-
-void client_update_colormap(ObClient *self, Colormap colormap)
-{
-    if (colormap == self->colormap) return;
-
-    ob_debug("Setting client %s colormap: 0x%x", self->title, colormap);
-
-    if (client_focused(self)) {
-        screen_install_colormap(self, FALSE); /* uninstall old one */
-        self->colormap = colormap;
-        screen_install_colormap(self, TRUE); /* install new one */
-    } else
-        self->colormap = colormap;
-}
-
 void client_update_opacity(ObClient *self)
 {
     ObSurfaceInfo info = { 0 };
@@ -1844,37 +1821,34 @@ void client_setup_decor_and_functions(ObClient *self, gboolean reconfig)
 
 static void client_change_allowed_actions(ObClient *self)
 {
-    gulong actions[12];
-    gint num = 0;
+    ObSurfaceActions actions = 0;
 
     /* desktop windows are kept on all desktops */
     if (self->type != OB_CLIENT_TYPE_DESKTOP)
-        actions[num++] = OBT_PROP_ATOM(NET_WM_ACTION_CHANGE_DESKTOP);
+        actions |= OB_SURFACE_ACTION_CHANGE_DESKTOP;
 
     if (self->functions & OB_CLIENT_FUNC_SHADE)
-        actions[num++] = OBT_PROP_ATOM(NET_WM_ACTION_SHADE);
+        actions |= OB_SURFACE_ACTION_SHADE;
     if (self->functions & OB_CLIENT_FUNC_CLOSE)
-        actions[num++] = OBT_PROP_ATOM(NET_WM_ACTION_CLOSE);
+        actions |= OB_SURFACE_ACTION_CLOSE;
     if (self->functions & OB_CLIENT_FUNC_MOVE)
-        actions[num++] = OBT_PROP_ATOM(NET_WM_ACTION_MOVE);
+        actions |= OB_SURFACE_ACTION_MOVE;
     if (self->functions & OB_CLIENT_FUNC_ICONIFY)
-        actions[num++] = OBT_PROP_ATOM(NET_WM_ACTION_MINIMIZE);
+        actions |= OB_SURFACE_ACTION_MINIMIZE;
     if (self->functions & OB_CLIENT_FUNC_RESIZE)
-        actions[num++] = OBT_PROP_ATOM(NET_WM_ACTION_RESIZE);
+        actions |= OB_SURFACE_ACTION_RESIZE;
     if (self->functions & OB_CLIENT_FUNC_FULLSCREEN)
-        actions[num++] = OBT_PROP_ATOM(NET_WM_ACTION_FULLSCREEN);
-    if (self->functions & OB_CLIENT_FUNC_MAXIMIZE) {
-        actions[num++] = OBT_PROP_ATOM(NET_WM_ACTION_MAXIMIZE_HORZ);
-        actions[num++] = OBT_PROP_ATOM(NET_WM_ACTION_MAXIMIZE_VERT);
-    }
+        actions |= OB_SURFACE_ACTION_FULLSCREEN;
+    if (self->functions & OB_CLIENT_FUNC_MAXIMIZE)
+        actions |= OB_SURFACE_ACTION_MAXIMIZE;
     if (self->functions & OB_CLIENT_FUNC_ABOVE)
-        actions[num++] = OBT_PROP_ATOM(NET_WM_ACTION_ABOVE);
+        actions |= OB_SURFACE_ACTION_ABOVE;
     if (self->functions & OB_CLIENT_FUNC_BELOW)
-        actions[num++] = OBT_PROP_ATOM(NET_WM_ACTION_BELOW);
+        actions |= OB_SURFACE_ACTION_BELOW;
     if (self->functions & OB_CLIENT_FUNC_UNDECORATE)
-        actions[num++] = OBT_PROP_ATOM(OB_WM_ACTION_UNDECORATE);
+        actions |= OB_SURFACE_ACTION_UNDECORATE;
 
-    OBT_PROP_SETA32(self->window, NET_WM_ALLOWED_ACTIONS, ATOM, actions, num);
+    ob_backend->publish_surface_actions(self->window, actions);
 
     /* make sure the window isn't breaking any rules now
 
@@ -2235,38 +2209,34 @@ const gchar *client_type_to_string(ObClient *self)
   changes them */
 static void client_save_app_rule_values(ObClient *self)
 {
-    OBT_PROP_SETS(self->window, OB_APP_ROLE, self->role);
-    OBT_PROP_SETS(self->window, OB_APP_NAME, self->name);
-    OBT_PROP_SETS(self->window, OB_APP_CLASS, self->class);
-    OBT_PROP_SETS(self->window, OB_APP_GROUP_NAME, self->group_name);
-    OBT_PROP_SETS(self->window, OB_APP_GROUP_CLASS, self->group_class);
-    OBT_PROP_SETS(self->window, OB_APP_TITLE, self->original_title);
+    ObSurfaceApp app;
 
-    OBT_PROP_SETS(self->window, OB_APP_TYPE, client_type_to_string(self));
+    app.role = self->role;
+    app.name = self->name;
+    app.class = self->class;
+    app.group_name = self->group_name;
+    app.group_class = self->group_class;
+    app.title = self->original_title;
+    app.type = client_type_to_string(self);
+    ob_backend->publish_surface_app(self->window, &app);
 }
 
 static void client_change_wm_state(ObClient *self)
 {
-    gulong state[2];
-    glong old;
+    ObClientWmState old;
 
     old = self->wmstate;
 
     if (self->shaded || self->iconic ||
         (self->desktop != DESKTOP_ALL && self->desktop != screen_desktop))
     {
-        self->wmstate = IconicState;
+        self->wmstate = OB_CLIENT_WM_STATE_HIDDEN;
     } else
-        self->wmstate = NormalState;
+        self->wmstate = OB_CLIENT_WM_STATE_SHOWN;
 
-    if (old != self->wmstate) {
-        OBT_PROP_MSG(ob_screen, self->window, KDE_WM_CHANGE_STATE,
-                     self->wmstate, 1, 0, 0, 0);
-
-        state[0] = self->wmstate;
-        state[1] = None;
-        OBT_PROP_SETA32(self->window, WM_STATE, WM_STATE, state, 2);
-    }
+    if (old != self->wmstate)
+        ob_backend->publish_surface_hidden(
+            self->window, self->wmstate == OB_CLIENT_WM_STATE_HIDDEN);
 }
 
 static void client_change_state(ObClient *self)
@@ -3565,18 +3535,13 @@ gboolean client_validate(ObClient *self)
     return TRUE;
 }
 
-void client_set_wm_state(ObClient *self, glong state)
+void client_set_wm_state(ObClient *self, gboolean hidden)
 {
-    if (state == self->wmstate) return; /* no change */
+    if (self->wmstate == (hidden ? OB_CLIENT_WM_STATE_HIDDEN
+                                 : OB_CLIENT_WM_STATE_SHOWN))
+        return; /* no change */
 
-    switch (state) {
-    case IconicState:
-        client_iconify(self, TRUE, TRUE, FALSE);
-        break;
-    case NormalState:
-        client_iconify(self, FALSE, TRUE, FALSE);
-        break;
-    }
+    client_iconify(self, hidden, TRUE, FALSE);
 }
 
 void client_set_state(ObClient *self, ObStateAction action,

@@ -1073,23 +1073,6 @@ gboolean screen_showing_desktop()
     return FALSE;
 }
 
-void screen_install_colormap(ObClient *client, gboolean install)
-{
-    if (client == NULL || client->colormap == None) {
-        if (install)
-            XInstallColormap(obt_display, RrColormap(ob_rr_inst));
-        else
-            XUninstallColormap(obt_display, RrColormap(ob_rr_inst));
-    } else {
-        obt_display_ignore_errors(TRUE);
-        if (install)
-            XInstallColormap(obt_display, client->colormap);
-        else
-            XUninstallColormap(obt_display, client->colormap);
-        obt_display_ignore_errors(FALSE);
-    }
-}
-
 typedef struct {
     guint desktop;
     StrutPartial *strut;

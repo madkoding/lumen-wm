@@ -21,6 +21,7 @@
 
 #include "backend-x11-int.h"
 #include "openbox.h"
+#include "debug.h"
 #include "obrender/render.h"
 #include "obt/display.h"
 #include "obt/prop.h"
@@ -47,9 +48,20 @@ typedef struct {
 /* Decor by frame, and by owner */
 static GHashTable *decor_frames, *decor_owners;
 
+typedef struct {
+    Window window;
+    Colormap colormap;
+} WindowColormap;
+
+/* the colormap of each managed window, and the window whose colormap is
+   installed */
+static GHashTable *colormaps;
+static Window colors_owner = None;
+
 void x11_surface_adopt(ObSurfaceId s, gboolean internal)
 {
     XSetWindowAttributes attrib;
+    XWindowAttributes wattrib;
 
     attrib.event_mask = CLIENT_EVENTMASK | (internal ? KeyPressMask : 0);
     attrib.do_not_propagate_mask = CLIENT_NOPROPAGATEMASK;
@@ -66,13 +78,24 @@ void x11_surface_adopt(ObSurfaceId s, gboolean internal)
     if (obt_display_extension_shape)
         XShapeSelectInput(obt_display, (Window)s, ShapeNotifyMask);
 #endif
+
+    if (XGetWindowAttributes(obt_display, (Window)s, &wattrib))
+        x11_colormap_changed((Window)s, wattrib.colormap);
 }
 
 void x11_surface_unwatch(ObSurfaceId s, gboolean internal)
 {
-    XSelectInput(obt_display, (Window)s, NoEventMask);
+    Window w = (Window)s;
+
+    XSelectInput(obt_display, w, NoEventMask);
     if (!internal)
-        XChangeSaveSet(obt_display, (Window)s, SetModeDelete);
+        XChangeSaveSet(obt_display, w, SetModeDelete);
+
+    if (colormaps) {
+        g_hash_table_remove(colormaps, &w);
+        if (colors_owner == w)
+            colors_owner = None;
+    }
 }
 
 void x11_surface_frame(ObSurfaceId s, ObCanvasId frame)
@@ -360,4 +383,120 @@ void x11_canvas_set_shape(ObCanvasId c, const Rect *inner, gboolean bounding,
 #else
     (void)c; (void)inner; (void)bounding; (void)input; (void)rects; (void)n;
 #endif
+}
+
+static Colormap colormap_of(Window w)
+{
+    WindowColormap *c = (w && colormaps) ? g_hash_table_lookup(colormaps, &w)
+                                         : NULL;
+    return c ? c->colormap : None;
+}
+
+static void install_colormap(Window w, gboolean install)
+{
+    Colormap c = colormap_of(w);
+
+    if (c == None) {
+        if (install)
+            XInstallColormap(obt_display, RrColormap(ob_rr_inst));
+        else
+            XUninstallColormap(obt_display, RrColormap(ob_rr_inst));
+    } else {
+        obt_display_ignore_errors(TRUE);
+        if (install)
+            XInstallColormap(obt_display, c);
+        else
+            XUninstallColormap(obt_display, c);
+        obt_display_ignore_errors(FALSE);
+    }
+}
+
+void x11_surface_install_colors(ObSurfaceId s)
+{
+    /* uninstall the old colormap, and install the new one */
+    install_colormap(colors_owner, FALSE);
+    colors_owner = (Window)s;
+    install_colormap(colors_owner, TRUE);
+}
+
+/* a managed window has a new colormap (ColormapNotify) */
+void x11_colormap_changed(Window w, Colormap colormap)
+{
+    gboolean installed;
+    WindowColormap *c;
+
+    if (colormap == colormap_of(w)) return;
+
+    ob_debug("Setting colormap of 0x%lx: 0x%lx", w, colormap);
+
+    if (!colormaps)
+        colormaps = g_hash_table_new_full(g_int_hash, g_int_equal,
+                                          NULL, g_free);
+    installed = w == colors_owner;
+    if (installed)
+        install_colormap(w, FALSE); /* uninstall old one */
+    c = g_new(WindowColormap, 1);
+    c->window = w;
+    c->colormap = colormap;
+    g_hash_table_replace(colormaps, &c->window, c);
+    if (installed)
+        install_colormap(w, TRUE); /* install new one */
+}
+
+void x11_publish_surface_actions(ObSurfaceId s, ObSurfaceActions actions)
+{
+    gulong a[12];
+    gint num = 0;
+
+    if (actions & OB_SURFACE_ACTION_CHANGE_DESKTOP)
+        a[num++] = OBT_PROP_ATOM(NET_WM_ACTION_CHANGE_DESKTOP);
+    if (actions & OB_SURFACE_ACTION_SHADE)
+        a[num++] = OBT_PROP_ATOM(NET_WM_ACTION_SHADE);
+    if (actions & OB_SURFACE_ACTION_CLOSE)
+        a[num++] = OBT_PROP_ATOM(NET_WM_ACTION_CLOSE);
+    if (actions & OB_SURFACE_ACTION_MOVE)
+        a[num++] = OBT_PROP_ATOM(NET_WM_ACTION_MOVE);
+    if (actions & OB_SURFACE_ACTION_MINIMIZE)
+        a[num++] = OBT_PROP_ATOM(NET_WM_ACTION_MINIMIZE);
+    if (actions & OB_SURFACE_ACTION_RESIZE)
+        a[num++] = OBT_PROP_ATOM(NET_WM_ACTION_RESIZE);
+    if (actions & OB_SURFACE_ACTION_FULLSCREEN)
+        a[num++] = OBT_PROP_ATOM(NET_WM_ACTION_FULLSCREEN);
+    if (actions & OB_SURFACE_ACTION_MAXIMIZE) {
+        a[num++] = OBT_PROP_ATOM(NET_WM_ACTION_MAXIMIZE_HORZ);
+        a[num++] = OBT_PROP_ATOM(NET_WM_ACTION_MAXIMIZE_VERT);
+    }
+    if (actions & OB_SURFACE_ACTION_ABOVE)
+        a[num++] = OBT_PROP_ATOM(NET_WM_ACTION_ABOVE);
+    if (actions & OB_SURFACE_ACTION_BELOW)
+        a[num++] = OBT_PROP_ATOM(NET_WM_ACTION_BELOW);
+    if (actions & OB_SURFACE_ACTION_UNDECORATE)
+        a[num++] = OBT_PROP_ATOM(OB_WM_ACTION_UNDECORATE);
+
+    OBT_PROP_SETA32((Window)s, NET_WM_ALLOWED_ACTIONS, ATOM, a, num);
+}
+
+void x11_publish_surface_app(ObSurfaceId s, const ObSurfaceApp *app)
+{
+    Window w = (Window)s;
+
+    OBT_PROP_SETS(w, OB_APP_ROLE, app->role);
+    OBT_PROP_SETS(w, OB_APP_NAME, app->name);
+    OBT_PROP_SETS(w, OB_APP_CLASS, app->class);
+    OBT_PROP_SETS(w, OB_APP_GROUP_NAME, app->group_name);
+    OBT_PROP_SETS(w, OB_APP_GROUP_CLASS, app->group_class);
+    OBT_PROP_SETS(w, OB_APP_TITLE, app->title);
+    OBT_PROP_SETS(w, OB_APP_TYPE, app->type);
+}
+
+void x11_publish_surface_hidden(ObSurfaceId s, gboolean hidden)
+{
+    gulong state[2];
+
+    OBT_PROP_MSG(ob_screen, (Window)s, KDE_WM_CHANGE_STATE,
+                 hidden ? IconicState : NormalState, 1, 0, 0, 0);
+
+    state[0] = hidden ? IconicState : NormalState;
+    state[1] = None;
+    OBT_PROP_SETA32((Window)s, WM_STATE, WM_STATE, state, 2);
 }

@@ -1149,7 +1149,7 @@ static void event_handle_client(ObClient *client, XEvent *e)
         backend_x11_property_notify(&e->xproperty);
         break;
     case ColormapNotify:
-        client_update_colormap(client, e->xcolormap.colormap);
+        backend_x11_colormap_notify(&e->xcolormap);
         break;
     default:
         /* the client changed its outline */

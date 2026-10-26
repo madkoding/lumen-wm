@@ -189,7 +189,7 @@ static void request_iconify(ObSurfaceId s, gboolean iconic)
     ObClient *client = client_of(s);
 
     if (client)
-        client_set_wm_state(client, iconic ? IconicState : NormalState);
+        client_set_wm_state(client, iconic);
 }
 
 static void request_activate(ObSurfaceId s, ObRequestSource from,

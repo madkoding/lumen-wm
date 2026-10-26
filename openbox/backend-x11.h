@@ -45,6 +45,8 @@ guint32 backend_x11_event_time(const XEvent *e);
   window. */
 gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
                                  ObInputEvent *out);
+/*! A managed window's colormap changed. */
+void backend_x11_colormap_notify(const XColormapEvent *e);
 /*! A managed window's shape changed (ShapeNotify). Returns FALSE when e
   isn't that. */
 gboolean backend_x11_shape_notify(const XEvent *e);
