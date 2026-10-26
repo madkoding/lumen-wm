@@ -236,8 +236,9 @@ static void request_resize(struct wl_listener *l, void *data)
     lw_end();
 }
 
-static void request_states(WlrSurface *s, ObSurfaceStates state,
-                           gboolean on)
+/*! first and second: one state each, as the core takes them */
+static void request_states(WlrSurface *s, ObSurfaceStates first,
+                           ObSurfaceStates second, gboolean on)
 {
     if (!s->managed) {
         /* xdg-shell wants an answer to every state request */
@@ -247,7 +248,7 @@ static void request_states(WlrSurface *s, ObSurfaceStates state,
     }
     lw_begin(0);
     lw_events->request_states(id_of(s), on ? OB_STATE_ACTION_ADD :
-                               OB_STATE_ACTION_REMOVE, state, 0,
+                               OB_STATE_ACTION_REMOVE, first, second,
                                OB_REQUEST_FROM_APPLICATION);
     lw_end();
     /* the core may have said no */
@@ -259,7 +260,7 @@ static void request_maximize(struct wl_listener *l, void *data)
 {
     WlrSurface *s = wl_container_of(l, s, request_maximize);
 
-    request_states(s, OB_SURFACE_STATE_MAXIMIZED_HORZ |
+    request_states(s, OB_SURFACE_STATE_MAXIMIZED_HORZ,
                    OB_SURFACE_STATE_MAXIMIZED_VERT,
                    s->toplevel->requested.maximized);
 }
@@ -268,7 +269,7 @@ static void request_fullscreen(struct wl_listener *l, void *data)
 {
     WlrSurface *s = wl_container_of(l, s, request_fullscreen);
 
-    request_states(s, OB_SURFACE_STATE_FULLSCREEN,
+    request_states(s, OB_SURFACE_STATE_FULLSCREEN, 0,
                    s->toplevel->requested.fullscreen);
 }
 
@@ -277,7 +278,7 @@ static void request_minimize(struct wl_listener *l, void *data)
     WlrSurface *s = wl_container_of(l, s, request_minimize);
 
     if (!s->managed) {
-        request_states(s, 0, FALSE);
+        request_states(s, 0, 0, FALSE);
         return;
     }
     lw_begin(0);
