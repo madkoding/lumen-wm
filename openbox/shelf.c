@@ -2476,26 +2476,30 @@ static void move_pin(gint from, gint to)
     pins_changed();
 }
 
-gboolean shelf_event(const XEvent *e)
+gboolean shelf_exposed(ObCanvasId c)
+{
+    if (!S.win || c != (ObCanvasId)S.win) return FALSE;
+    paint();
+    return TRUE;
+}
+
+gboolean shelf_input(const ObInputEvent *e)
 {
     gint h;
 
-    if (!S.win || e->xany.window != S.win) return FALSE;
+    if (!S.win || e->over != (guintptr)S.win) return FALSE;
 
     switch (e->type) {
-    case Expose:
-        if (!e->xexpose.count) paint();
-        break;
-    case MotionNotify:
-        h = hit(e->xmotion.x, e->xmotion.y);
-        if (S.press && ABS(e->xmotion.x - S.press_x) > 6) S.dragging = TRUE;
+    case OB_INPUT_MOTION:
+        h = hit(e->x, e->y);
+        if (S.press && ABS(e->x - S.press_x) > 6) S.dragging = TRUE;
         if (h != S.hover) { S.hover = h; paint(); }
         break;
-    case ButtonRelease:
-        if (e->xbutton.button == 1 && S.press) {
+    case OB_INPUT_BUTTON_RELEASE:
+        if (e->button == 1 && S.press) {
             gint from = S.press;
             S.press = 0;
-            h = hit(e->xbutton.x, e->xbutton.y);
+            h = hit(e->x, e->y);
             if (!S.dragging) {
                 if (h == from) tile_click(&g_array_index(S.tiles, Tile, from - 1));
             } else if (h > 0) {
@@ -2504,16 +2508,16 @@ gboolean shelf_event(const XEvent *e)
             S.dragging = FALSE;
         }
         break;
-    case LeaveNotify:
+    case OB_INPUT_LEAVE:
         if (S.hover != -1) { S.hover = -1; paint(); }
         break;
-    case ButtonPress:
-        h = hit(e->xbutton.x, e->xbutton.y);
-        if (h == 0 && e->xbutton.button == 1) {
+    case OB_INPUT_BUTTON_PRESS:
+        h = hit(e->x, e->y);
+        if (h == 0 && e->button == 1) {
             show_menu("root-menu", S.wx + S.dock_x,
                       S.wy + S.island_y - MENU_GAP, NULL);
         } else if (h <= HIT_NET && h >= HIT_BATT) {
-            guint b = e->xbutton.button;
+            guint b = e->button;
             if (h == HIT_VOL && config_shelf_volume) {
                 const gchar *cmd = b == 2 ? config_shelf_volume->toggle :
                                    b == 4 ? config_shelf_volume->up :
@@ -2522,13 +2526,13 @@ gboolean shelf_event(const XEvent *e)
                     launch(cmd);
                     g_timeout_add(200, refresh_status_later, NULL);
                 } else if (b == 1)
-                    show_status_menu(h, e->xbutton.x_root,
+                    show_status_menu(h, e->root_x,
                                      S.wy + S.island_y - MENU_GAP);
             } else if (b == 1) {
-                show_status_menu(h, e->xbutton.x_root,
+                show_status_menu(h, e->root_x,
                                  S.wy + S.island_y - MENU_GAP);
             }
-        } else if (h <= HIT_PREV && e->xbutton.button == 1) {
+        } else if (h <= HIT_PREV && e->button == 1) {
             const gchar *cmd = h == HIT_PREV ? config_shelf_media->previous :
                                h == HIT_TOGGLE ? config_shelf_media->toggle :
                                config_shelf_media->next;
@@ -2539,15 +2543,17 @@ gboolean shelf_event(const XEvent *e)
             }
         } else if (h > 0) {
             Tile *t = &g_array_index(S.tiles, Tile, h - 1);
-            if (e->xbutton.button == 3) {
+            if (e->button == 3) {
                 show_tile_menu(t, S.wx + t->x, S.wy + S.island_y - MENU_GAP);
-            } else if (e->xbutton.button == 1) {
+            } else if (e->button == 1) {
                 /* acts on release: a drag moves a pin instead */
                 S.press = h;
-                S.press_x = e->xbutton.x;
+                S.press_x = e->x;
                 S.dragging = FALSE;
             }
         }
+        break;
+    default:
         break;
     }
     return TRUE;

@@ -95,6 +95,64 @@ typedef enum {
     OB_SURFACE_STATE_UNDECORATED    = 1 << 13
 } ObSurfaceStates;
 
+/*! How the backend starts. */
+typedef enum {
+    /*! when the core claims the screen, replace a running window manager
+      (X11) instead of failing */
+    OB_STARTUP_REPLACE = 1 << 0,
+    /*! for debugging: report errors where they happen (X11 synchronous
+      requests) */
+    OB_STARTUP_SYNC    = 1 << 1
+} ObStartupFlags;
+
+/*! What the window manager before this one left, to carry on from it
+  (X11: the root window's properties). */
+typedef struct _ObPreviousState {
+    gboolean has_names;     /*!< it named the desktops */
+    gboolean has_count;
+    guint count;            /*!< how many desktops */
+    gboolean has_current;
+    guint current;          /*!< the desktop shown */
+    gboolean has_last;
+    guint last;             /*!< the desktop shown before that one */
+    ObSurfaceId active;     /*!< what had the focus, or OB_SURFACE_NONE */
+} ObPreviousState;
+
+/*! What a new surface is, to manage it as. */
+typedef enum {
+    OB_SURFACE_KIND_GONE,       /*!< it went away before it could be
+                                  managed */
+    OB_SURFACE_KIND_UNMANAGED,  /*!< it places itself (X11
+                                  override-redirect) */
+    OB_SURFACE_KIND_CLIENT,
+    OB_SURFACE_KIND_DOCKAPP     /*!< OB_BACKEND_CAP_DOCKAPPS */
+} ObSurfaceKind;
+
+/*! What the user may do to a surface, for taskbars and pagers to offer
+  (_NET_WM_ALLOWED_ACTIONS on X11). */
+typedef enum {
+    OB_SURFACE_ACTION_CHANGE_DESKTOP = 1 << 0,
+    OB_SURFACE_ACTION_SHADE          = 1 << 1,
+    OB_SURFACE_ACTION_CLOSE          = 1 << 2,
+    OB_SURFACE_ACTION_MOVE           = 1 << 3,
+    OB_SURFACE_ACTION_MINIMIZE       = 1 << 4,
+    OB_SURFACE_ACTION_RESIZE         = 1 << 5,
+    OB_SURFACE_ACTION_FULLSCREEN     = 1 << 6,
+    OB_SURFACE_ACTION_MAXIMIZE       = 1 << 7,
+    OB_SURFACE_ACTION_ABOVE          = 1 << 8,
+    OB_SURFACE_ACTION_BELOW          = 1 << 9,
+    OB_SURFACE_ACTION_UNDECORATE     = 1 << 10
+} ObSurfaceActions;
+
+/*! What the per-application rules in rc.xml matched a surface by, as it
+  was when it showed up, for the user to look up later (obxprop). */
+typedef struct _ObSurfaceApp {
+    const gchar *role, *name, *class;
+    const gchar *group_name, *group_class;
+    const gchar *title;
+    const gchar *type;
+} ObSurfaceApp;
+
 /*! Who asked, so focus stealing prevention can weigh it. */
 typedef enum {
     OB_REQUEST_FROM_UNKNOWN,
@@ -160,7 +218,9 @@ typedef enum {
     OB_SURFACE_INFO_USER_TIME = 1 << 14,
     OB_SURFACE_INFO_SYNC     = 1 << 15, /*!< its resize sync counter */
     OB_SURFACE_INFO_OPACITY  = 1 << 16, /*!< how opaque it asks to be */
-    OB_SURFACE_INFO_ALL      = (1 << 17) - 1
+    OB_SURFACE_INFO_GEOMETRY = 1 << 17, /*!< where it is, as it came */
+    OB_SURFACE_INFO_SHAPE    = 1 << 18, /*!< its outline (X11 Shape) */
+    OB_SURFACE_INFO_ALL      = (1 << 19) - 1
 } ObSurfaceInfoFields;
 
 /*! One size of a client's icon. */
@@ -252,6 +312,15 @@ typedef struct _ObSurfaceInfo {
     guint32 sync_counter;
     gboolean has_opacity;   /*!< FALSE: it leaves that to the compositor */
     guint32 opacity;        /*!< 0 is clear, 0xffffffff opaque */
+    /*! where it is, in layout coordinates, and its border (X11), before
+      the window manager touches it; has_area is FALSE when it is gone */
+    gboolean has_area;
+    Rect area;
+    gint border;
+    gboolean argb;          /*!< it draws with an alpha channel */
+    /*! it is not a rectangle, and takes input only in part of itself
+      (X11 Shape) */
+    gboolean shaped, shaped_input;
 
     ObIcon *icons;          /*!< every size it offers; NULL for none */
     guint n_icons;
@@ -272,12 +341,21 @@ typedef enum {
     OB_INPUT_KEY_RELEASE,
     OB_INPUT_BUTTON_PRESS,
     OB_INPUT_BUTTON_RELEASE,
-    OB_INPUT_MOTION
+    OB_INPUT_MOTION,
+    OB_INPUT_ENTER,         /*!< the pointer came into over */
+    OB_INPUT_LEAVE          /*!< the pointer went out of over */
 } ObInputType;
 
+/*! Why the pointer entered or left. */
+typedef enum {
+    OB_CROSSING_NORMAL,     /*!< it moved, or what was under it changed */
+    OB_CROSSING_GRAB,       /*!< a grab started: it stays put, but its
+                              events go to the grab */
+    OB_CROSSING_UNGRAB      /*!< the grab ended */
+} ObCrossingMode;
+
 /*! Something the user did, as the core's input handlers (move/resize,
-  bindings, menus) see it. The backend's key, button and motion events
-  carry the same. */
+  bindings, menus) see it, from the backend's input event. */
 typedef struct _ObInputEvent {
     ObInputType type;
     guint32 time;
@@ -294,12 +372,24 @@ typedef struct _ObInputEvent {
     guint button;           /*!< buttons */
     /*! where the pointer is, in layout coordinates */
     gint root_x, root_y;
-    /*! buttons and motion: the canvas or surface it happened over (X11:
-      the event's window), and where in it */
+    /*! buttons, motion and crossings: the canvas or surface it happened
+      over (X11: the event's window), and where in it */
     guintptr over;
     gint x, y;
     /*! buttons: x, y lie inside over, borders included */
     gboolean inside;
+    /*! crossings: why */
+    ObCrossingMode crossing;
+    /*! crossings: it went between over and something inside it (X11:
+      NotifyInferior), so it did not really leave over */
+    gboolean inferior;
+    /*! leaves: what the pointer enters next, when the backend already
+      knows (X11: an EnterNotify waiting in the queue); 0 otherwise */
+    guintptr next_over;
+    /*! button presses over the desktop: the window the pointer is really
+      on (X11: the event's subwindow, a press that got to the root through
+      it), 0 when it is the desktop itself */
+    guintptr under;
 } ObInputEvent;
 
 /*! A picture the core drew, in premultiplied ARGB32 (cairo's
@@ -320,10 +410,8 @@ struct _ObBackend {
 
     /* --- lifetime --- */
 
-    /*! Connect, and report to events from then on. replace: when the core
-      claims the screen, replace a running window manager (X11) instead of
-      failing. */
-    gboolean (*startup)(const gchar *display, gboolean replace,
+    /*! Connect, and report to events from then on. */
+    gboolean (*startup)(const gchar *display, ObStartupFlags flags,
                         const ObBackendEvents *events);
     void (*shutdown)(void);
     /*! Become the screen's window manager and tell clients what we
@@ -336,6 +424,16 @@ struct _ObBackend {
     GSource *(*event_source)(void);
     /*! Milliseconds since some fixed point, comparable to event times. */
     guint32 (*time)(void);
+    /*! Ask the window manager already running to reconfigure (1),
+      restart (2) or exit (3), for --reconfigure, --restart and --exit
+      (X11: an _OB_CONTROL message). */
+    void (*request_running)(guint what);
+    void (*previous_state)(ObPreviousState *state);
+    /*! The desktop names and layout that pagers set (X11: root window
+      properties); NULL, or FALSE, when they set none. g_strfreev() the
+      names. */
+    gchar **(*desktop_names)(void);
+    gboolean (*desktop_layout)(ObDesktopLayout *layout);
 
     /* --- outputs --- */
 
@@ -345,12 +443,60 @@ struct _ObBackend {
     /*! An output's area in layout coordinates, as output_count() last
       found it. */
     void (*output_area)(guint output, Rect *area);
+    /*! The size of the whole layout, every output included. */
+    void (*layout_size)(gint *width, gint *height);
 
     /* --- managed surfaces --- */
 
-    /*! Place the client's own area, in layout coordinates, and tell it its
-      size. The frame around it is placed with canvas_place(). */
+    /*! The surfaces already on screen when the window manager starts, to
+      manage; g_free() the list. */
+    ObSurfaceId *(*existing_surfaces)(guint *n);
+    /*! What it is. For a dock app, icon is what it shows in the dock (its
+      own window or its icon window, on X11). */
+    ObSurfaceKind (*surface_kind)(ObSurfaceId s, ObSurfaceId *icon);
+    /*! Dock apps (OB_BACKEND_CAP_DOCKAPPS): put icon, what the dock shows,
+      in the dock's canvas at x, y and keep it alive if the window manager
+      goes away; name is the window it came as, which may be icon. */
+    void (*dockapp_adopt)(ObSurfaceId icon, ObSurfaceId name,
+                          ObCanvasId dock, gint x, gint y);
+    /*! Stop managing a dock app; reparent: hand it back to the desktop
+      (FALSE when it is gone). */
+    void (*dockapp_release)(ObSurfaceId icon, ObSurfaceId name,
+                            gboolean reparent);
+    /*! Start managing it: hear about what it changes, and keep it alive
+      if the window manager goes away (X11: the save set). internal: one
+      of the core's own windows (a prompt), which also takes its keys. */
+    void (*surface_adopt)(ObSurfaceId s, gboolean internal);
+    /*! Stop hearing about it, before it is hidden for the last time. */
+    void (*surface_unwatch)(ObSurfaceId s, gboolean internal);
+    /*! Put it in the decoration canvas made for it, at 0, 0. */
+    void (*surface_frame)(ObSurfaceId s, ObCanvasId frame);
+    /*! Take it out of its decoration, to area in layout coordinates,
+      unless the client already took itself out. */
+    void (*surface_unframe)(ObSurfaceId s, const Rect *area);
+    /*! Let go of it for good: take back what the window manager told it.
+      exiting: the window manager quits, and the next one must find the
+      surface where this one found it (X11: mapped). */
+    void (*surface_release)(ObSurfaceId s, gboolean exiting);
+    /*! Whether it is still there: the client hasn't destroyed or hidden it
+      in what the backend has yet to report. ignore_hides: how many hides
+      the core caused itself and still expects. */
+    gboolean (*surface_alive)(ObSurfaceId s, gint ignore_hides);
+    /*! Its border (X11 only): 0 while it is managed, and the one it came
+      with when it is let go. */
+    void (*surface_set_border)(ObSurfaceId s, gint width);
+    /*! Place the client's own area inside its decoration, relative to the
+      decoration, and tell it its size. The decoration is placed with
+      canvas_place(). */
     void (*surface_configure)(ObSurfaceId s, const Rect *area);
+    /*! Give the screen's colors to the focused client (X11 colormaps), or
+      the default ones for OB_SURFACE_NONE. */
+    void (*surface_install_colors)(ObSurfaceId s);
+    /*! Tell the client where it is on screen, in layout coordinates, when
+      only it can't tell (X11: a synthetic ConfigureNotify, with its
+      border). */
+    void (*surface_send_geometry)(ObSurfaceId s, const Rect *area,
+                                  gint border);
     void (*surface_show)(ObSurfaceId s, gboolean show);
     /*! Give it the keyboard. input: hand it the keyboard focus; take_focus:
       tell it to take the focus itself (ICCCM WM_TAKE_FOCUS, X11 only).
@@ -393,8 +539,9 @@ struct _ObBackend {
     /*! owner: the surface a decoration frames, or OB_SURFACE_NONE. */
     ObCanvasId (*canvas_new)(ObCanvasLayer layer, ObSurfaceId owner);
     void (*canvas_free)(ObCanvasId c);
-    /*! outer: the whole canvas. For a decoration, inner is the hole the
-      client shows through, relative to outer; NULL otherwise. */
+    /*! outer: the whole canvas, or NULL to leave it where it is. For a
+      decoration, inner is where the client shows through, relative to
+      outer, or NULL to leave the client where it is. */
     void (*canvas_place)(ObCanvasId c, const Rect *outer, const Rect *inner);
     void (*canvas_show)(ObCanvasId c, gboolean show);
     /*! Show this picture, scaled by the output's scale; damage, in canvas
@@ -407,10 +554,16 @@ struct _ObBackend {
     /*! Reserve an edge of the output, as a strut or a layer-shell
       exclusive zone. */
     void (*canvas_set_strut)(ObCanvasId c, const StrutPartial *strut);
+    /*! Cut a decoration to its client's outline (X11 Shape): where the
+      client sits (inner, relative to the canvas) plus rects, the
+      decorations around it. bounding and input: follow the client's
+      outline and its input shape; FALSE makes that one whole again. */
+    void (*canvas_set_shape)(ObCanvasId c, const Rect *inner,
+                             gboolean bounding, gboolean input,
+                             const Rect *rects, guint n);
     /*! Show it, and the surface a decoration frames, this opaque (as
       ObSurfaceInfo's opacity); set FALSE leaves that to the compositor.
-      Until the frames are canvases, the core passes a frame's window, as
-      it does to restack. */
+      A decoration's id is the one restack takes for the frame. */
     void (*canvas_set_opacity)(ObCanvasId c, gboolean set, guint32 opacity);
 
     /* --- input --- */
@@ -428,6 +581,9 @@ struct _ObBackend {
       that must look like one (X11 XGrabServer; nothing on Wayland). The
       core counts nested grabs. */
     void (*grab_server)(gboolean grab);
+    /*! The key that types the keysym called name (as in rc.xml). FALSE
+      when no keysym has that name; keycode 0 when no key types it. */
+    gboolean (*key_named)(const gchar *name, guint *keycode);
     /*! Make sure a key binding reaches the core whichever surface has the
       focus, with any lock key on or off. keycode and mods are xkb's (on
       X11, the server's keycodes and modifier masks). */
@@ -450,10 +606,17 @@ struct _ObBackend {
     /*! Move the pointer there. swallow: drop the motion this makes, so the
       core doesn't take it for the user's. */
     void (*pointer_warp)(gint x, gint y, gboolean swallow);
-    /*! Send what the core asked for so far and wait until it is done
-      (X11 XSync), so the screen keeps up with the pointer. */
-    void (*flush)(void);
+    /*! Send what the core asked for so far; wait: and wait until it is
+      done (X11 XSync), so the screen keeps up with the pointer. */
+    void (*flush)(gboolean wait);
     void (*set_cursor)(ObCanvasId c, ObCursor cursor);
+    /*! The serial events caused by the core's next requests carry, or a
+      later one (X11: NextRequest). The core ignores pointer crossings
+      that its own moves and restacks cause by their serials. */
+    gulong (*request_serial)(void);
+    /*! Make the events still to come carry a serial past every one
+      request_serial() gave so far (X11: a request that does nothing). */
+    void (*request_serial_bump)(void);
 
     /* --- state for pagers and taskbars --- */
 
@@ -477,25 +640,52 @@ struct _ObBackend {
                                    const gchar *icon);
     /*! One area per desktop. */
     void (*publish_workareas)(const Rect *areas, guint n);
+    void (*publish_layout_size)(gint width, gint height);
+    void (*publish_last_desktop)(guint desktop);
+    void (*publish_showing_desktop)(gboolean showing);
+    /*! For tools that edit the configuration (obconf): the rc.xml in use,
+      NULL for none, and the theme's name. */
+    void (*publish_config_file)(const gchar *path);
+    void (*publish_theme)(const gchar *name);
+    /*! How much the decoration adds around it on each side. */
+    void (*publish_surface_extents)(ObSurfaceId s, const Strut *extents);
+    void (*publish_surface_actions)(ObSurfaceId s, ObSurfaceActions actions);
+    void (*publish_surface_app)(ObSurfaceId s, const ObSurfaceApp *app);
+    /*! It is out of sight: shaded, iconified or on another desktop (X11:
+      WM_STATE IconicState). */
+    void (*publish_surface_hidden)(ObSurfaceId s, gboolean hidden);
 };
 
 /*! What a backend tells the core. The core fills it in; the backend calls
   it from its event source. */
 struct _ObBackendEvents {
+    /*! The backend starts reporting one event: what follows until end()
+      came from it. time: when it happened, 0 when unknown; serial: see
+      request_serial(). */
+    void (*begin)(guint32 time, gulong serial);
+    void (*end)(void);
+
     /*! A client wants to be shown (X11 MapRequest, a first buffer on
       Wayland). The core asks surface_info() about a new one and decides
       where, configures it and shows it, or leaves it alone (for one, when
       it is a dock app); one it already manages is shown again if it was
       iconified. */
     void (*surface_new)(ObSurfaceId s);
-    /*! The client is gone (destroyed, or on X11 reparented away). */
+    /*! The client is gone (destroyed, or on X11 reparented away). This,
+      surface_withdrawn and surface_changed (OB_SURFACE_INFO_GEOMETRY, when
+      it resizes itself) come for dock apps too. */
     void (*surface_gone)(ObSurfaceId s);
     /*! The client changed what it says about itself; ask surface_info()
       for the new values. time: when, in event time. */
     void (*surface_changed)(ObSurfaceId s, ObSurfaceInfoFields changed,
                             guint32 time);
+    /*! A window not managed yet asks what its frame will be
+      (_NET_REQUEST_FRAME_EXTENTS); the core answers with
+      publish_surface_extents(). */
+    void (*request_frame_extents)(ObSurfaceId s);
     /*! The client hid itself (X11 unmap, a null buffer on Wayland). */
     void (*surface_withdrawn)(ObSurfaceId s);
+    /*! It answered surface_ping(). */
     void (*pong)(ObSurfaceId s, guint32 serial);
     /*! It drew the size sync_request() asked about. */
     void (*surface_synced)(ObSurfaceId s);
@@ -529,7 +719,24 @@ struct _ObBackendEvents {
       button: the one held down, or 0 for the keyboard. */
     void (*request_move_resize)(ObSurfaceId s, ObMoveResize edge, gint x,
                                 gint y, guint button);
+    /*! A pager switches desktops. time: when the user asked, or 0 when it
+      doesn't say. */
     void (*request_desktop)(guint desktop, guint32 time);
+    /*! A pager asks for count desktops. */
+    void (*request_desktop_count)(guint count);
+    /*! A pager shows the desktop, or stops showing it. */
+    void (*request_show_desktop)(gboolean show);
+    /*! Pagers changed the desktop names or layout; ask desktop_names() or
+      desktop_layout(). */
+    void (*desktop_names_changed)(void);
+    void (*desktop_layout_changed)(void);
+    /*! Another instance asked this one to reconfigure (1), restart (2) or
+      exit (3) (request_running()). */
+    void (*running_requested)(guint what);
+    /*! Another window manager takes over the screen (X11: --replace). */
+    void (*replaced)(void);
+    /*! The keyboard map changed; key bindings are looked up again. */
+    void (*keymap_changed)(void);
     /*! desktop is DESKTOP_ALL for every desktop; it may be out of range. */
     void (*request_surface_desktop)(ObSurfaceId s, guint desktop);
 
@@ -543,13 +750,12 @@ struct _ObBackendEvents {
       that isn't managed); the core gives it to a window. refocus: the one
       that had it may get it back. */
     void (*focus_lost)(gboolean refocus);
-    void (*key)(guint32 keysym, guint mods, gboolean press, guint32 time);
-    /*! over: the canvas or surface under the pointer, x and y relative to
-      it. */
-    void (*button)(guintptr over, gint x, gint y, guint button, guint mods,
-                   gboolean press, guint32 time);
-    void (*motion)(guintptr over, gint x, gint y, guint mods, guint32 time);
-    void (*enter)(guintptr over, gboolean entered, guint32 time);
+    /*! A key, button, motion or crossing. */
+    void (*input)(const ObInputEvent *e);
+    /*! A canvas needs drawing again (X11: Expose). */
+    void (*canvas_exposed)(ObCanvasId c);
+    /*! Monitors came, went or changed; ask output_count() and
+      output_area() again. */
     void (*outputs_changed)(void);
 };
 
@@ -561,7 +767,7 @@ extern const ObBackendEvents ob_backend_events;
 extern const ObBackend ob_backend_x11;
 
 /*! Pick the backend and start it. */
-gboolean backend_startup(const gchar *display, gboolean replace);
+gboolean backend_startup(const gchar *display, ObStartupFlags flags);
 void backend_shutdown(void);
 /*! Start delivering the backend's events to the main loop. */
 void backend_listen(void);

@@ -48,7 +48,6 @@
 #include "obrender/render.h"
 #include "obrender/theme.h"
 #include "obt/display.h"
-#include "obt/xqueue.h"
 #include "obt/signal.h"
 #include "obt/prop.h"
 #include "obt/keyboard.h"
@@ -79,10 +78,6 @@
 #endif
 #include <errno.h>
 
-#include <X11/cursorfont.h>
-#if USE_XCURSOR
-#include <X11/Xcursor/Xcursor.h>
-#endif
 
 RrInstance   *ob_rr_inst;
 RrImageCache *ob_rr_icons;
@@ -104,7 +99,6 @@ static gboolean  restart = FALSE;
 static gchar    *restart_path = NULL;
 
 const gchar *const ob_config_domains[] = { "lumen", "openbox", NULL };
-static Cursor    cursors[OB_NUM_CURSORS];
 static gint      exitcode = 0;
 static guint     remote_control = 0;
 static gboolean  being_replaced = FALSE;
@@ -115,7 +109,6 @@ static void signal_handler(gint signal, gpointer data);
 static void remove_args(gint *argc, gchar **argv, gint index, gint num);
 static void parse_env();
 static void parse_args(gint *argc, gchar **argv);
-static Cursor load_cursor(const gchar *name, guint fontval);
 static void run_startup_cmd(void);
 
 gint main(gint argc, gchar **argv)
@@ -152,15 +145,15 @@ gint main(gint argc, gchar **argv)
     if (!remote_control)
         session_startup(argc, argv);
 
-    if (!backend_startup(NULL, ob_replace_wm))
+    if (!backend_startup(NULL, (ob_replace_wm ? OB_STARTUP_REPLACE : 0) |
+                               (xsync ? OB_STARTUP_SYNC : 0)))
         ob_exit_with_error(_("Failed to open the display from the DISPLAY environment variable."));
 
     if (remote_control) {
         /* Send client message telling the OB process to:
          * remote_control = 1 -> reconfigure
          * remote_control = 2 -> restart */
-        OBT_PROP_MSG(ob_screen, obt_root(ob_screen),
-                     OB_CONTROL, remote_control, 0, 0, 0, 0);
+        ob_backend->request_running(remote_control);
         backend_shutdown();
         exit(EXIT_SUCCESS);
     }
@@ -179,8 +172,6 @@ gint main(gint argc, gchar **argv)
     obt_signal_add_callback(SIGTTIN, signal_handler, NULL);
     obt_signal_add_callback(SIGTTOU, signal_handler, NULL);
 
-    ob_screen = DefaultScreen(obt_display);
-
     ob_rr_inst = RrInstanceNew(obt_display, ob_screen);
     if (ob_rr_inst == NULL)
         ob_exit_with_error(_("Failed to initialize the obrender library."));
@@ -189,37 +180,6 @@ gint main(gint argc, gchar **argv)
        and the alt-tab icon
     */
     ob_rr_icons = RrImageCacheNew(3);
-
-    XSynchronize(obt_display, xsync);
-
-    /* check for locale support */
-    if (!XSupportsLocale())
-        g_message(_("X server does not support locale."));
-    if (!XSetLocaleModifiers(""))
-        g_message(_("Cannot set locale modifiers for the X server."));
-
-    /* set the DISPLAY environment variable for any lauched children, to the
-       display we're using, so they open in the right place. */
-    g_setenv("DISPLAY", DisplayString(obt_display), TRUE);
-
-    /* create available cursors */
-    cursors[OB_CURSOR_NONE] = None;
-    cursors[OB_CURSOR_POINTER] = load_cursor("left_ptr", XC_left_ptr);
-    cursors[OB_CURSOR_BUSYPOINTER] = load_cursor("left_ptr_watch",XC_left_ptr);
-    cursors[OB_CURSOR_BUSY] = load_cursor("watch", XC_watch);
-    cursors[OB_CURSOR_MOVE] = load_cursor("fleur", XC_fleur);
-    cursors[OB_CURSOR_NORTH] = load_cursor("top_side", XC_top_side);
-    cursors[OB_CURSOR_NORTHEAST] = load_cursor("top_right_corner",
-                                               XC_top_right_corner);
-    cursors[OB_CURSOR_EAST] = load_cursor("right_side", XC_right_side);
-    cursors[OB_CURSOR_SOUTHEAST] = load_cursor("bottom_right_corner",
-                                               XC_bottom_right_corner);
-    cursors[OB_CURSOR_SOUTH] = load_cursor("bottom_side", XC_bottom_side);
-    cursors[OB_CURSOR_SOUTHWEST] = load_cursor("bottom_left_corner",
-                                               XC_bottom_left_corner);
-    cursors[OB_CURSOR_WEST] = load_cursor("left_side", XC_left_side);
-    cursors[OB_CURSOR_NORTHWEST] = load_cursor("top_left_corner",
-                                               XC_top_left_corner);
 
     if (screen_annex()) { /* it will be ours! */
 
@@ -260,15 +220,14 @@ gint main(gint argc, gchar **argv)
                     config_file = NULL;
                 }
 
-                if (config_file) {
-                    gchar *p = g_filename_to_utf8(config_file, -1,
-                                                  NULL, NULL, NULL);
-                    if (p)
-                        OBT_PROP_SETS(obt_root(ob_screen), OB_CONFIG_FILE, p);
+                {
+                    gchar *p = config_file ?
+                        g_filename_to_utf8(config_file, -1, NULL, NULL, NULL)
+                        : NULL;
+                    /* for tools that edit the configuration (obconf) */
+                    ob_backend->publish_config_file(p);
                     g_free(p);
                 }
-                else
-                    OBT_PROP_ERASE(obt_root(ob_screen), OB_CONFIG_FILE);
 
                 if (obt_xml_last_error(i)) {
                     xml_error_string = g_strdup_printf(
@@ -299,8 +258,7 @@ gint main(gint argc, gchar **argv)
                 if (ob_rr_theme == NULL)
                     ob_exit_with_error(_("Unable to load a theme."));
 
-                OBT_PROP_SETS(obt_root(ob_screen), OB_THEME,
-                              ob_rr_theme->name);
+                ob_backend->publish_theme(ob_rr_theme->name);
             }
 
             if (reconfigure) {
@@ -340,16 +298,17 @@ gint main(gint argc, gchar **argv)
                    missed */
                 backend_listen();
 
-                guint32 xid;
+                ObPreviousState prev;
                 ObWindow *w;
 
                 /* get all the existing windows */
                 window_manage_all();
 
                 /* focus what was focused if a wm was already running */
-                if (OBT_PROP_GET32(obt_root(ob_screen),
-                                   NET_ACTIVE_WINDOW, WINDOW, &xid) &&
-                    (w = window_find(xid)) && WINDOW_IS_CLIENT(w))
+                ob_backend->previous_state(&prev);
+                if (prev.active &&
+                    (w = window_find((Window)prev.active)) &&
+                    WINDOW_IS_CLIENT(w))
                 {
                     client_focus(WINDOW_AS_CLIENT(w));
                 }
@@ -422,7 +381,7 @@ gint main(gint argc, gchar **argv)
         } while (reconfigure);
     }
 
-    XSync(obt_display, FALSE);
+    ob_backend->flush(TRUE);
 
     RrThemeFree(ob_rr_theme);
     RrImageCacheUnref(ob_rr_icons);
@@ -723,18 +682,6 @@ static void parse_args(gint *argc, gchar **argv)
     }
 }
 
-static Cursor load_cursor(const gchar *name, guint fontval)
-{
-    Cursor c = None;
-
-#if USE_XCURSOR
-    c = XcursorLibraryLoadCursor(obt_display, name);
-#endif
-    if (c == None)
-        c = XCreateFontCursor(obt_display, fontval);
-    return c;
-}
-
 void ob_exit_with_error(const gchar *msg)
 {
     g_message("%s", msg);
@@ -771,12 +718,6 @@ void ob_exit_replace(void)
     exitcode = 0;
     being_replaced = TRUE;
     g_main_loop_quit(ob_main_loop);
-}
-
-Cursor ob_cursor(ObCursor cursor)
-{
-    g_assert(cursor < OB_NUM_CURSORS);
-    return cursors[cursor];
 }
 
 ObState ob_state(void)

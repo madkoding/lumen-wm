@@ -56,6 +56,14 @@ typedef enum
 } ObClientType;
 
 /*! The things the user can do to the client window */
+/*! What pagers were last told about a client being in sight */
+typedef enum
+{
+    OB_CLIENT_WM_STATE_NONE,   /*!< nothing yet */
+    OB_CLIENT_WM_STATE_SHOWN,  /*!< WM_STATE NormalState */
+    OB_CLIENT_WM_STATE_HIDDEN  /*!< WM_STATE IconicState */
+} ObClientWmState;
+
 typedef enum
 {
     OB_CLIENT_FUNC_RESIZE     = 1 << 0, /*!< Allow user resizing */
@@ -204,16 +212,13 @@ struct _ObClient
     /*! Window decoration and functionality hints */
     ObMwmHints mwmhints;
 
-    /*! The client's specified colormap */
-    Colormap colormap;
 
     /*! Where to place the decorated window in relation to the undecorated
       window */
     gint gravity;
 
-    /*! The state of the window, one of WithdrawnState, IconicState, or
-      NormalState */
-    glong wmstate;
+    /*! Whether pagers were last told it is in sight (WM_STATE) */
+    ObClientWmState wmstate;
 
     /*! True if the client supports the delete_window protocol */
     gboolean delete_window;
@@ -572,8 +577,8 @@ void client_showhide(ObClient *self);
 */
 gboolean client_validate(ObClient *self);
 
-/*! Sets the wm_state to the specified value */
-void client_set_wm_state(ObClient *self, glong state);
+/*! The client asks to be iconified, or shown again (WM_CHANGE_STATE) */
+void client_set_wm_state(ObClient *self, gboolean hidden);
 
 /*! Adjusts the window's net_state
   This should not be called as part of the window mapping process! It is for
@@ -628,10 +633,10 @@ void client_update_transient_for(ObClient *self);
 void client_update_protocols(ObClient *self);
 /*! Updates the window's sync request counter for resizes */
 void client_update_sync_request_counter(ObClient *self);
-/*! Updates the window's colormap */
-void client_update_colormap(ObClient *self, Colormap colormap);
 /*! Updates the requested opacity for the window from the client. */
 void client_update_opacity(ObClient *self);
+/*! Read the client's outline again and cut its frame to it */
+void client_update_shape(ObClient *self);
 /*! Updates the WMNormalHints and adjusts things if they change */
 void client_update_normal_hints(ObClient *self);
 

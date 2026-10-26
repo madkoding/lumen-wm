@@ -884,6 +884,26 @@ void ct_input_client_drag(ct_win *w, ct_edge edge, int dx, int dy)
     fake_sync();
 }
 
+void ct_input_point(ct_win *w)
+{
+    int scr = DefaultScreen(dpy);
+    ct_rect c = w ? ct_window_client(w) :
+        (ct_rect){ 0, 0, DisplayWidth(dpy, scr), DisplayHeight(dpy, scr) };
+    const int steps = 5;
+    Window root, child;
+    int x, y, wx, wy;
+    unsigned int mask;
+
+    /* glide there, as a hand does, so it crosses what is on the way */
+    XQueryPointer(dpy, RootWindow(dpy, scr), &root, &child, &x, &y, &wx, &wy,
+                  &mask);
+    for (int i = 1; i <= steps; ++i) {
+        XTestFakeMotionEvent(dpy, -1, x + (c.x + c.w / 2 - x) * i / steps,
+                             y + (c.y + c.h / 2 - y) * i / steps, 0);
+        fake_sync();
+    }
+    XFlush(dpy);
+}
 void ct_input_click(ct_win *w, int x, int y)
 {
     ct_rect c = ct_window_client(w);
@@ -927,6 +947,7 @@ void ct_input_keys(const char *keys) { (void)keys; }
 void ct_input_root_click(int button) { (void)button; }
 void ct_input_title_click(ct_win *w, int count) { (void)w; (void)count; }
 void ct_input_click(ct_win *w, int x, int y) { (void)w; (void)x; (void)y; }
+void ct_input_point(ct_win *w) { (void)w; }
 void ct_input_client_drag(ct_win *w, ct_edge edge, int dx, int dy)
 {
     (void)w; (void)edge; (void)dx; (void)dy;

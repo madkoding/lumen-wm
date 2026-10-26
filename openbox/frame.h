@@ -83,6 +83,8 @@ struct _ObFrame
 {
     struct _ObClient *client;
 
+    /*! the decoration canvas the client sits in (canvas_new); a Window
+      while the decorations below are windows of their own */
     Window    window;
 
     Strut     size;    /* the size of the frame */
@@ -142,8 +144,6 @@ struct _ObFrame
     Window    tllresize;
     Window    trtresize;
     Window    trrresize;
-
-    Colormap  colormap;
 
     gint      icon_on;    /* if the window icon button is on */
     gint      label_on;   /* if the window title is on */
@@ -210,7 +210,6 @@ void frame_show(ObFrame *self);
 void frame_hide(ObFrame *self);
 void frame_adjust_theme(ObFrame *self);
 #ifdef SHAPE
-void frame_adjust_shape_kind(ObFrame *self, int kind);
 #endif
 void frame_adjust_shape(ObFrame *self);
 void frame_adjust_area(ObFrame *self, gboolean moved,

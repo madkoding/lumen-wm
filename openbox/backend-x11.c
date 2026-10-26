@@ -19,7 +19,7 @@
    moves here one area at a time (docs/design/backends.md). */
 
 #include "backend.h"
-#include "backend-x11.h"
+#include "backend-x11-int.h"
 #include "openbox.h"
 #include "debug.h"
 #include "screen.h"
@@ -33,13 +33,20 @@
 #include "obt/keyboard.h"
 
 #include <X11/Xatom.h>
+#include <X11/cursorfont.h>
+#if USE_XCURSOR
+#include <X11/Xcursor/Xcursor.h>
+#endif
+#ifdef SHAPE
+#include <X11/extensions/shape.h>
+#endif
 #ifdef SYNC
 #include <X11/extensions/sync.h>
 #endif
 #include <string.h>
 #include <unistd.h>
 
-static const ObBackendEvents *events;
+const ObBackendEvents *x11_events;
 static gboolean replace; /* take over from a running window manager */
 
 /* never shown: it holds the WM_Sn selection, takes the focus when no
@@ -52,18 +59,203 @@ static Window root(void);
 static Rect *outputs;
 static guint n_outputs;
 
-static gboolean x11_startup(const gchar *display, gboolean rep,
+static Cursor cursors[OB_NUM_CURSORS];
+
+/* the input method context for keys typed during a grab */
+static ObtIC *grab_ic = NULL;
+
+static Cursor load_cursor(const gchar *name, guint fontval)
+{
+    Cursor c = None;
+
+#if USE_XCURSOR
+    c = XcursorLibraryLoadCursor(obt_display, name);
+#endif
+    if (c == None)
+        c = XCreateFontCursor(obt_display, fontval);
+    return c;
+}
+
+Cursor x11_cursor(ObCursor cursor)
+{
+    g_assert(cursor < OB_NUM_CURSORS);
+    return cursors[cursor];
+}
+
+static gboolean x11_startup(const gchar *display, ObStartupFlags flags,
                             const ObBackendEvents *ev)
 {
-    replace = rep;
-    events = ev;
-    return obt_display_open(display);
+    replace = !!(flags & OB_STARTUP_REPLACE);
+    x11_events = ev;
+    if (!obt_display_open(display))
+        return FALSE;
+
+    ob_screen = DefaultScreen(obt_display);
+
+    XSynchronize(obt_display, !!(flags & OB_STARTUP_SYNC));
+
+#ifdef XKB
+    /* a held key repeats presses only, so bindings can tell them apart */
+    XkbSetDetectableAutoRepeat(obt_display, True, NULL);
+#endif
+
+    /* check for locale support */
+    if (!XSupportsLocale())
+        g_message(_("X server does not support locale."));
+    if (!XSetLocaleModifiers(""))
+        g_message(_("Cannot set locale modifiers for the X server."));
+
+    /* set the DISPLAY environment variable for any lauched children, to the
+       display we're using, so they open in the right place. */
+    g_setenv("DISPLAY", DisplayString(obt_display), TRUE);
+
+    /* create available cursors */
+    cursors[OB_CURSOR_NONE] = None;
+    cursors[OB_CURSOR_POINTER] = load_cursor("left_ptr", XC_left_ptr);
+    cursors[OB_CURSOR_BUSYPOINTER] = load_cursor("left_ptr_watch",XC_left_ptr);
+    cursors[OB_CURSOR_BUSY] = load_cursor("watch", XC_watch);
+    cursors[OB_CURSOR_MOVE] = load_cursor("fleur", XC_fleur);
+    cursors[OB_CURSOR_NORTH] = load_cursor("top_side", XC_top_side);
+    cursors[OB_CURSOR_NORTHEAST] = load_cursor("top_right_corner",
+                                               XC_top_right_corner);
+    cursors[OB_CURSOR_EAST] = load_cursor("right_side", XC_right_side);
+    cursors[OB_CURSOR_SOUTHEAST] = load_cursor("bottom_right_corner",
+                                               XC_bottom_right_corner);
+    cursors[OB_CURSOR_SOUTH] = load_cursor("bottom_side", XC_bottom_side);
+    cursors[OB_CURSOR_SOUTHWEST] = load_cursor("bottom_left_corner",
+                                               XC_bottom_left_corner);
+    cursors[OB_CURSOR_WEST] = load_cursor("left_side", XC_left_side);
+    cursors[OB_CURSOR_NORTHWEST] = load_cursor("top_left_corner",
+                                               XC_top_left_corner);
+    return TRUE;
+}
+
+static void x11_set_cursor(ObCanvasId c, ObCursor cursor)
+{
+    XSetWindowAttributes a;
+
+    /* OB_CANVAS_NONE is the desktop */
+    a.cursor = x11_cursor(cursor);
+    XChangeWindowAttributes(obt_display, c ? (Window)c : root(), CWCursor,
+                            &a);
+}
+
+static void x11_request_running(guint what)
+{
+    OBT_PROP_MSG(ob_screen, root(), OB_CONTROL, what, 0, 0, 0, 0);
+    XFlush(obt_display);
+}
+
+static void x11_previous_state(ObPreviousState *st)
+{
+    guint32 d, xid;
+    gchar **names;
+
+    st->has_names = OBT_PROP_GETSS_UTF8(root(), NET_DESKTOP_NAMES, &names);
+    if (st->has_names)
+        g_strfreev(names);
+    st->has_count = OBT_PROP_GET32(root(), NET_NUMBER_OF_DESKTOPS, CARDINAL,
+                                   &d);
+    st->count = st->has_count ? d : 0;
+    st->has_current = OBT_PROP_GET32(root(), NET_CURRENT_DESKTOP, CARDINAL,
+                                     &d);
+    st->current = st->has_current ? d : 0;
+    st->has_last = OBT_PROP_GET32(root(), OB_LAST_DESKTOP, CARDINAL, &d);
+    st->last = st->has_last ? d : 0;
+    st->active = OBT_PROP_GET32(root(), NET_ACTIVE_WINDOW, WINDOW, &xid) ?
+        (ObSurfaceId)xid : OB_SURFACE_NONE;
+}
+
+static gchar **x11_desktop_names(void)
+{
+    gchar **names;
+
+    if (!OBT_PROP_GETSS(root(), NET_DESKTOP_NAMES, &names))
+        return NULL;
+    return names;
+}
+
+static gboolean x11_desktop_layout(ObDesktopLayout *l)
+{
+    guint32 *data;
+    guint num;
+    gboolean ok = FALSE;
+
+    if (!OBT_PROP_GETA32(root(), NET_DESKTOP_LAYOUT, CARDINAL, &data, &num))
+        return FALSE;
+
+    if (num == 3 || num == 4) {
+        ok = TRUE;
+        if (data[0] == OBT_PROP_ATOM(NET_WM_ORIENTATION_VERT))
+            l->orientation = OB_ORIENTATION_VERT;
+        else if (data[0] == OBT_PROP_ATOM(NET_WM_ORIENTATION_HORZ))
+            l->orientation = OB_ORIENTATION_HORZ;
+        else
+            ok = FALSE;
+
+        if (num < 4)
+            l->start_corner = OB_CORNER_TOPLEFT;
+        else if (data[3] == OBT_PROP_ATOM(NET_WM_TOPLEFT))
+            l->start_corner = OB_CORNER_TOPLEFT;
+        else if (data[3] == OBT_PROP_ATOM(NET_WM_TOPRIGHT))
+            l->start_corner = OB_CORNER_TOPRIGHT;
+        else if (data[3] == OBT_PROP_ATOM(NET_WM_BOTTOMRIGHT))
+            l->start_corner = OB_CORNER_BOTTOMRIGHT;
+        else if (data[3] == OBT_PROP_ATOM(NET_WM_BOTTOMLEFT))
+            l->start_corner = OB_CORNER_BOTTOMLEFT;
+        else
+            ok = FALSE;
+
+        l->columns = data[1];
+        l->rows = data[2];
+    }
+    g_free(data);
+    return ok;
+}
+
+static void x11_layout_size(gint *w, gint *h)
+{
+    *w = WidthOfScreen(ScreenOfDisplay(obt_display, ob_screen));
+    *h = HeightOfScreen(ScreenOfDisplay(obt_display, ob_screen));
+}
+
+static void x11_publish_layout_size(gint w, gint h)
+{
+    gulong geometry[2];
+
+    geometry[0] = w;
+    geometry[1] = h;
+    OBT_PROP_SETA32(root(), NET_DESKTOP_GEOMETRY, CARDINAL, geometry, 2);
+}
+
+static void x11_publish_last_desktop(guint desktop)
+{
+    OBT_PROP_SET32(root(), OB_LAST_DESKTOP, CARDINAL, desktop);
+}
+
+static void x11_publish_showing_desktop(gboolean showing)
+{
+    OBT_PROP_SET32(root(), NET_SHOWING_DESKTOP, CARDINAL, !!showing);
+}
+
+static void x11_publish_config_file(const gchar *path)
+{
+    if (path)
+        OBT_PROP_SETS(root(), OB_CONFIG_FILE, path);
+    else
+        OBT_PROP_ERASE(root(), OB_CONFIG_FILE);
+}
+
+static void x11_publish_theme(const gchar *name)
+{
+    OBT_PROP_SETS(root(), OB_THEME, name);
 }
 
 static void x11_shutdown(void)
 {
+    x11_events_stop();
     obt_display_close();
-    events = NULL;
+    x11_events = NULL;
     g_free(outputs);
     outputs = NULL;
     n_outputs = 0;
@@ -71,7 +263,7 @@ static void x11_shutdown(void)
 
 /* --- time --- */
 
-guint32 backend_x11_event_time(const XEvent *e)
+guint32 x11_event_time(const XEvent *e)
 {
     Time t = CurrentTime;
 
@@ -117,13 +309,24 @@ static gboolean find_timestamp(XEvent *e, gpointer data)
 {
     Time *t = data;
 
-    *t = backend_x11_event_time(e);
+    *t = x11_event_time(e);
     return *t != CurrentTime;
 }
 
-gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
-                                 ObInputEvent *out)
+static gboolean find_enter(XEvent *e, gpointer data)
 {
+    if (e->type != EnterNotify) return FALSE;
+    *(Window*)data = e->xcrossing.window;
+    return TRUE;
+}
+
+gboolean x11_input_event(const XEvent *e, ObInputEvent *out)
+{
+    out->crossing = OB_CROSSING_NORMAL;
+    out->inferior = FALSE;
+    out->next_over = 0;
+    out->under = 0;
+
     switch (e->type) {
     case KeyPress:
     case KeyRelease:
@@ -133,8 +336,8 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         out->mods = e->xkey.state;
         out->keycode = e->xkey.keycode;
         out->keysym = e->type == KeyPress ?
-            obt_keyboard_keypress_to_keysym(e) : NoSymbol;
-        out->key_mod = obt_keyboard_keyevent_to_modmask(e);
+            obt_keyboard_keypress_to_keysym((XEvent*)e) : NoSymbol;
+        out->key_mod = obt_keyboard_keyevent_to_modmask((XEvent*)e);
         out->text = 0;
         out->button = 0;
         out->root_x = e->xkey.x_root;
@@ -158,6 +361,8 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         out->root_x = e->xbutton.x_root;
         out->root_y = e->xbutton.y_root;
         out->over = e->xbutton.window;
+        out->under = e->xbutton.window == root() ?
+            e->xbutton.subwindow : None;
         out->x = e->xbutton.x;
         out->y = e->xbutton.y;
         {
@@ -175,19 +380,6 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         }
         return TRUE;
     case MotionNotify:
-        if (latest_motion) {
-            XEvent ce;
-            ObtXQueueWindowType wt;
-
-            wt.window = e->xmotion.window;
-            wt.type = MotionNotify;
-            while (xqueue_remove_local(&ce, xqueue_match_window_type, &wt)) {
-                e->xmotion.x = ce.xmotion.x;
-                e->xmotion.y = ce.xmotion.y;
-                e->xmotion.x_root = ce.xmotion.x_root;
-                e->xmotion.y_root = ce.xmotion.y_root;
-            }
-        }
         out->type = OB_INPUT_MOTION;
         out->time = e->xmotion.time;
         out->mods = e->xmotion.state;
@@ -202,6 +394,34 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         out->x = e->xmotion.x;
         out->y = e->xmotion.y;
         out->inside = FALSE;
+        return TRUE;
+    case EnterNotify:
+    case LeaveNotify:
+        out->type = e->type == EnterNotify ? OB_INPUT_ENTER : OB_INPUT_LEAVE;
+        out->time = e->xcrossing.time;
+        out->mods = e->xcrossing.state;
+        out->keycode = 0;
+        out->keysym = NoSymbol;
+        out->key_mod = 0;
+        out->text = 0;
+        out->button = 0;
+        out->root_x = e->xcrossing.x_root;
+        out->root_y = e->xcrossing.y_root;
+        out->over = e->xcrossing.window;
+        out->x = e->xcrossing.x;
+        out->y = e->xcrossing.y;
+        out->inside = FALSE;
+        out->crossing = e->xcrossing.mode == NotifyGrab ? OB_CROSSING_GRAB :
+            e->xcrossing.mode == NotifyUngrab ? OB_CROSSING_UNGRAB :
+            OB_CROSSING_NORMAL;
+        out->inferior = e->xcrossing.detail == NotifyInferior;
+        if (e->type == LeaveNotify) {
+            Window next = None;
+
+            /* the enter that goes with this leave is queued with it */
+            xqueue_exists_local(find_enter, &next);
+            out->next_over = next;
+        }
         return TRUE;
     default:
         return FALSE;
@@ -476,6 +696,10 @@ static void x11_release_screen(void)
     /* don't keep this mode */
     OBT_PROP_ERASE(obt_root(ob_screen), NET_SHOWING_DESKTOP);
 
+    if (grab_ic) {
+        obt_keyboard_context_unref(grab_ic);
+        grab_ic = NULL;
+    }
     XDestroyWindow(obt_display, screen_support_win);
     screen_support_win = None;
 
@@ -485,7 +709,7 @@ static void x11_release_screen(void)
 
 static GSource *x11_event_source(void)
 {
-    /* event.c reads the queue through its xqueue callback */
+    x11_events_listen();
     return xqueue_source_new();
 }
 
@@ -1087,6 +1311,10 @@ static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
         if (info->has_opacity)
             info->opacity = o;
     }
+    if (fields & OB_SURFACE_INFO_GEOMETRY)
+        x11_get_geometry(s, info);
+    if (fields & OB_SURFACE_INFO_SHAPE)
+        x11_get_shape(s, info);
 }
 
 /* --- events --- */
@@ -1146,7 +1374,7 @@ static ObSurfaceInfoFields property_fields(Atom a)
     return 0;
 }
 
-gboolean backend_x11_property_notify(const XPropertyEvent *e)
+gboolean x11_property_notify(const XPropertyEvent *e)
 {
     ObSurfaceInfoFields f = property_fields(e->atom);
     struct skip_property s;
@@ -1158,7 +1386,7 @@ gboolean backend_x11_property_notify(const XPropertyEvent *e)
     s.window = e->window;
     s.prop = e->atom;
     if (!xqueue_exists_local(skip_property_change, &s))
-        events->surface_changed((ObSurfaceId)e->window, f, e->time);
+        x11_events->surface_changed((ObSurfaceId)e->window, f, e->time);
     return TRUE;
 }
 
@@ -1206,7 +1434,7 @@ static gboolean more_client_message_event(Window window, Atom msgtype)
     return xqueue_exists_local(xqueue_match_window_message, &wm);
 }
 
-gboolean backend_x11_client_message(const XClientMessageEvent *e)
+gboolean x11_client_message(const XClientMessageEvent *e)
 {
     const ObSurfaceId s = (ObSurfaceId)e->window;
     const Atom msgtype = e->message_type;
@@ -1214,13 +1442,13 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
     if (msgtype == OBT_PROP_ATOM(WM_CHANGE_STATE)) {
         if (!more_client_message_event(e->window, msgtype)) {
             if (e->data.l[0] == IconicState)
-                events->request_iconify(s, TRUE);
+                x11_events->request_iconify(s, TRUE);
             else if (e->data.l[0] == NormalState)
-                events->request_iconify(s, FALSE);
+                x11_events->request_iconify(s, FALSE);
         }
     } else if (msgtype == OBT_PROP_ATOM(NET_WM_DESKTOP)) {
         if (!more_client_message_event(e->window, msgtype))
-            events->request_surface_desktop(s, (guint)e->data.l[0]);
+            x11_events->request_surface_desktop(s, (guint)e->data.l[0]);
     } else if (msgtype == OBT_PROP_ATOM(NET_WM_STATE)) {
         const Atom action = e->data.l[0];
         ObStateAction a;
@@ -1236,7 +1464,7 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
             /* an invalid action was passed to the client message, ignore
                it */
             return TRUE;
-        events->request_states(s, a, atom_state(e->data.l[1]),
+        x11_events->request_states(s, a, atom_state(e->data.l[1]),
                                atom_state(e->data.l[2]),
                                request_source(e->data.l[3]));
     } else if (msgtype == OBT_PROP_ATOM(NET_MOVERESIZE_WINDOW)) {
@@ -1254,7 +1482,7 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
         if (flags & 1 << 11) req.fields |= OB_CONFIGURE_HEIGHT;
         RECT_SET(req.want, e->data.l[1], e->data.l[2],
                  e->data.l[3], e->data.l[4]);
-        events->request_geometry(s, &req, request_source(flags >> 12 & 0xf));
+        x11_events->request_geometry(s, &req, request_source(flags >> 12 & 0xf));
     } else if (msgtype == OBT_PROP_ATOM(NET_RESTACK_WINDOW)) {
         const glong detail = e->data.l[2];
         ObStackMode mode;
@@ -1270,13 +1498,13 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
                           "with invalid detail %ld", e->window, detail);
             return TRUE;
         }
-        events->request_restack(s, (guintptr)e->data.l[1], mode,
+        x11_events->request_restack(s, (guintptr)e->data.l[1], mode,
                                 request_source(e->data.l[0]));
     } else if (msgtype == OBT_PROP_ATOM(NET_CLOSE_WINDOW)) {
-        events->request_close(s, request_source(e->data.l[1]));
+        x11_events->request_close(s, request_source(e->data.l[1]));
     } else if (msgtype == OBT_PROP_ATOM(NET_ACTIVE_WINDOW)) {
         const ObRequestSource from = request_source(e->data.l[0]);
-        events->request_activate(s, from,
+        x11_events->request_activate(s, from,
                                  from == OB_REQUEST_FROM_UNKNOWN ?
                                  0 : (guint32)e->data.l[1]);
     } else if (msgtype == OBT_PROP_ATOM(NET_WM_MOVERESIZE)) {
@@ -1286,14 +1514,14 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
                  e->window, dir);
         /* ObMoveResize has _NET_WM_MOVERESIZE's order */
         if (dir >= OB_MOVERESIZE_SIZE_TOPLEFT && dir <= OB_MOVERESIZE_CANCEL)
-            events->request_move_resize(s, (ObMoveResize)dir, e->data.l[0],
+            x11_events->request_move_resize(s, (ObMoveResize)dir, e->data.l[0],
                                         e->data.l[1], e->data.l[3]);
     } else
         return FALSE;
     return TRUE;
 }
 
-void backend_x11_configure_request(const XConfigureRequestEvent *e)
+void x11_configure_request(const XConfigureRequestEvent *e)
 {
     ObConfigureRequest req;
 
@@ -1317,7 +1545,7 @@ void backend_x11_configure_request(const XConfigureRequestEvent *e)
     }
     req.gravity = 0;
 
-    events->request_configure((ObSurfaceId)e->window, &req);
+    x11_events->request_configure((ObSurfaceId)e->window, &req);
 }
 
 /* compositors read it off the frame */
@@ -1330,9 +1558,31 @@ static void x11_canvas_set_opacity(ObCanvasId c, gboolean set,
         OBT_PROP_ERASE((Window)c, NET_WM_WINDOW_OPACITY);
 }
 
-static void x11_flush(void)
+static gboolean x11_key_named(const gchar *name, guint *keycode)
 {
-    XSync(obt_display, FALSE);
+    KeySym sym = XStringToKeysym(name);
+
+    if (sym == NoSymbol) return FALSE;
+    *keycode = XKeysymToKeycode(obt_display, sym);
+    return TRUE;
+}
+
+static void x11_flush(gboolean wait)
+{
+    if (wait)
+        XSync(obt_display, FALSE);
+    else
+        XFlush(obt_display);
+}
+
+static gulong x11_request_serial(void)
+{
+    return NextRequest(obt_display);
+}
+
+static void x11_request_serial_bump(void)
+{
+    OBT_PROP_ERASE(screen_support_win, MOTIF_WM_HINTS);
 }
 
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)
@@ -1341,13 +1591,10 @@ static void x11_restack(guintptr above, const guintptr *top_first, guint n)
     guint i;
 
     for (i = 0; i < n; ++i) win[i + 1] = top_first[i];
-    if (above) {
-        win[0] = above;
-        XRestackWindows(obt_display, win, n + 1);
-    } else if (n) {
-        XRaiseWindow(obt_display, win[1]);
-        XRestackWindows(obt_display, win + 1, n);
-    }
+    /* the top is just below the support window, which stays above every
+       managed window */
+    win[0] = above ? (Window)above : screen_support_win;
+    XRestackWindows(obt_display, win, n + 1);
     g_free(win);
 }
 
@@ -1460,7 +1707,7 @@ static gboolean x11_grab_pointer(gboolean grab, gboolean owner_events,
     }
     return XGrabPointer(obt_display, screen_support_win, owner_events,
                         GRAB_PTR_MASK, GrabModeAsync, GrabModeAsync,
-                        confine ? root() : None, ob_cursor(cursor),
+                        confine ? root() : None, x11_cursor(cursor),
                         time) == Success;
 }
 
@@ -1527,7 +1774,7 @@ static void x11_bind_button(guintptr over, guint button, guint mods,
     for (i = 0; i < N_LOCK_MASKS; ++i)
         XGrabButton(obt_display, button, mods | locks[i], (Window)over,
                     False, mask, hold ? GrabModeSync : GrabModeAsync,
-                    GrabModeAsync, None, ob_cursor(cursor));
+                    GrabModeAsync, None, x11_cursor(cursor));
     obt_display_ignore_errors(FALSE);
     if (obt_display_error_occured)
         ob_debug("Failed to grab button %d modifiers %d", button, mods);
@@ -1675,13 +1922,13 @@ static void x11_sync_stop(void)
 #endif
 }
 
-void backend_x11_sync_alarm(const XEvent *e)
+void x11_sync_alarm(const XEvent *e)
 {
 #ifdef SYNC
     const XSyncAlarmNotifyEvent *se = (const XSyncAlarmNotifyEvent*)e;
 
     if (sync_alarm != None && se->alarm == sync_alarm)
-        events->surface_synced((ObSurfaceId)sync_window);
+        x11_events->surface_synced((ObSurfaceId)sync_window);
 #else
     (void)e;
 #endif
@@ -1710,12 +1957,32 @@ const ObBackend ob_backend_x11 = {
     .shutdown = x11_shutdown,
     .event_source = x11_event_source,
     .time = x11_time,
+    .request_running = x11_request_running,
+    .previous_state = x11_previous_state,
+    .desktop_names = x11_desktop_names,
+    .desktop_layout = x11_desktop_layout,
     .claim_screen = x11_claim_screen,
     .release_screen = x11_release_screen,
 
     .output_count = x11_output_count,
     .output_area = x11_output_area,
+    .layout_size = x11_layout_size,
 
+    .existing_surfaces = x11_existing_surfaces,
+    .surface_kind = x11_surface_kind,
+    .dockapp_adopt = x11_dockapp_adopt,
+    .dockapp_release = x11_dockapp_release,
+    .surface_adopt = x11_surface_adopt,
+    .surface_unwatch = x11_surface_unwatch,
+    .surface_frame = x11_surface_frame,
+    .surface_unframe = x11_surface_unframe,
+    .surface_release = x11_surface_release,
+    .surface_alive = x11_surface_alive,
+    .surface_set_border = x11_surface_set_border,
+    .surface_configure = x11_surface_configure,
+    .surface_send_geometry = x11_surface_send_geometry,
+    .surface_show = x11_surface_show,
+    .surface_install_colors = x11_surface_install_colors,
     .surface_focus = x11_surface_focus,
     .surface_close = x11_surface_close,
     .surface_kill = x11_surface_kill,
@@ -1728,12 +1995,21 @@ const ObBackend ob_backend_x11 = {
 
     .restack = x11_restack,
     .flush = x11_flush,
+    .set_cursor = x11_set_cursor,
+    .request_serial = x11_request_serial,
+    .request_serial_bump = x11_request_serial_bump,
 
+    .canvas_new = x11_canvas_new,
+    .canvas_free = x11_canvas_free,
+    .canvas_place = x11_canvas_place,
+    .canvas_show = x11_canvas_show,
+    .canvas_set_shape = x11_canvas_set_shape,
     .canvas_set_opacity = x11_canvas_set_opacity,
 
     .grab_pointer = x11_grab_pointer,
     .grab_keyboard = x11_grab_keyboard,
     .grab_server = x11_grab_server,
+    .key_named = x11_key_named,
     .bind_key = x11_bind_key,
     .unbind_all_keys = x11_unbind_all_keys,
     .bind_button = x11_bind_button,
@@ -1752,28 +2028,66 @@ const ObBackend ob_backend_x11 = {
     .publish_surface_icon = x11_publish_surface_icon,
     .publish_surface_titles = x11_publish_surface_titles,
     .publish_workareas = x11_publish_workareas,
+    .publish_surface_extents = x11_publish_surface_extents,
+    .publish_layout_size = x11_publish_layout_size,
+    .publish_last_desktop = x11_publish_last_desktop,
+    .publish_showing_desktop = x11_publish_showing_desktop,
+    .publish_config_file = x11_publish_config_file,
+    .publish_theme = x11_publish_theme,
+    .publish_surface_actions = x11_publish_surface_actions,
+    .publish_surface_app = x11_publish_surface_app,
+    .publish_surface_hidden = x11_publish_surface_hidden,
 };
 
-void backend_x11_map_event(const XEvent *e)
+void x11_colormap_notify(const XColormapEvent *e)
+{
+    x11_colormap_changed(e->window, e->colormap);
+}
+
+ObtIC *x11_grab_input_context(void)
+{
+    /* grabs go to the support window */
+    if (!grab_ic)
+        grab_ic = obt_keyboard_context_new(root(), screen_support_win);
+    return grab_ic;
+}
+
+gboolean x11_shape_notify(const XEvent *e)
+{
+#ifdef SHAPE
+    if (obt_display_extension_shape &&
+        e->type == obt_display_extension_shape_basep)
+    {
+        const XShapeEvent *se = (const XShapeEvent*)e;
+
+        x11_events->surface_changed((ObSurfaceId)se->window,
+                                OB_SURFACE_INFO_SHAPE, se->time);
+        return TRUE;
+    }
+#endif
+    return FALSE;
+}
+
+void x11_map_event(const XEvent *e)
 {
     switch (e->type) {
     case MapRequest:
         ob_debug("MapRequest for 0x%lx", e->xmaprequest.window);
-        events->surface_new((ObSurfaceId)e->xmaprequest.window);
+        x11_events->surface_new((ObSurfaceId)e->xmaprequest.window);
         break;
     case UnmapNotify:
         ob_debug("UnmapNotify for window 0x%lx eventwin 0x%lx "
                  "fromconfigure %d", e->xunmap.window, e->xunmap.event,
                  e->xunmap.from_configure);
-        events->surface_withdrawn((ObSurfaceId)e->xunmap.window);
+        x11_events->surface_withdrawn((ObSurfaceId)e->xunmap.window);
         break;
     case DestroyNotify:
         ob_debug("DestroyNotify for window 0x%lx", e->xdestroywindow.window);
-        events->surface_gone((ObSurfaceId)e->xdestroywindow.window);
+        x11_events->surface_gone((ObSurfaceId)e->xdestroywindow.window);
         break;
     case ReparentNotify:
         ob_debug("ReparentNotify for window 0x%lx", e->xreparent.window);
-        events->surface_gone((ObSurfaceId)e->xreparent.window);
+        x11_events->surface_gone((ObSurfaceId)e->xreparent.window);
         break;
     }
 }

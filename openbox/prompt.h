@@ -50,7 +50,6 @@ struct _ObPrompt
     gint ref;
 
     ObtIC *ic;
-    guint event_mask;
 
     /* keep a copy of this because we re-render things that may need it
        (i.e. the buttons) */

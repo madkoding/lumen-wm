@@ -75,7 +75,8 @@ void dock_manage(Window icon_win, Window name_win);
 void dock_unmanage_all(void);
 void dock_unmanage(ObDockApp *app, gboolean reparent);
 
-void dock_app_drag(ObDockApp *app, XMotionEvent *e);
+/*! The pointer drags app to x, y (in layout coordinates). */
+void dock_app_drag(ObDockApp *app, gint x, gint y);
 void dock_app_configure(ObDockApp *app, gint w, gint h);
 
 void dock_get_area(Rect *a);

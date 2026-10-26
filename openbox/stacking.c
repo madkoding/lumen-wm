@@ -87,7 +87,7 @@ static void do_restack(GList *wins, GList *before)
     win = g_new(guintptr, g_list_length(wins) + 1);
 
     if (before == stacking_list)
-        win[0] = screen_support_win;
+        win[0] = OB_SURFACE_NONE;
     else if (!before)
         win[0] = window_top(g_list_last(stacking_list)->data);
     else
@@ -126,7 +126,7 @@ void stacking_temp_raise(ObWindow *window)
     g_assert(window_layer(window) < OB_STACKING_LAYER_INTERNAL);
 
     /* find the window to drop it underneath */
-    win[0] = screen_support_win;
+    win[0] = OB_SURFACE_NONE;
     for (it = stacking_list; it; it = g_list_next(it)) {
         ObWindow *w = it->data;
         if (window_layer(w) >= OB_STACKING_LAYER_INTERNAL)
@@ -151,7 +151,7 @@ void stacking_restore(void)
     gulong start;
 
     win = g_new(guintptr, g_list_length(stacking_list) + 1);
-    win[0] = screen_support_win;
+    win[0] = OB_SURFACE_NONE;
     for (i = 1, it = stacking_list; it; ++i, it = g_list_next(it))
         win[i] = window_top(it->data);
     start = event_start_ignore_all_enters();
@@ -444,8 +444,6 @@ void stacking_below(ObWindow *window, ObWindow *below)
 
 void stacking_add(ObWindow *win)
 {
-    g_assert(screen_support_win != None); /* make sure I dont break this in the
-                                             future */
     /* don't add windows that are being unmanaged ! */
     if (WINDOW_IS_CLIENT(win)) g_assert(WINDOW_AS_CLIENT(win)->managed);
 

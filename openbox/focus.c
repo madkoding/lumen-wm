@@ -76,9 +76,9 @@ void focus_set_client(ObClient *client)
     if (focus_client == client)
         return;
 
-    /* uninstall the old colormap, and install the new one */
-    screen_install_colormap(focus_client, FALSE);
-    screen_install_colormap(client, TRUE);
+    /* its colors, on displays that have only so many */
+    ob_backend->surface_install_colors(client ? client->window
+                                              : OB_SURFACE_NONE);
 
     focus_client = client;
 

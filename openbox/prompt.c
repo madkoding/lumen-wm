@@ -130,9 +130,6 @@ ObPrompt* prompt_new(const gchar *msg, const gchar *title,
     if (title)
         OBT_PROP_SETS(self->super.window, NET_WM_NAME, title);
 
-    /* listen for key presses on the window */
-    self->event_mask = KeyPressMask;
-
     /* set up the text message widow */
     self->msg.text = g_strdup(msg);
     self->msg.window = XCreateWindow(obt_display, self->super.window,

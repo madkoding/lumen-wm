@@ -673,6 +673,49 @@ static void alt_drag_moves(void)
     ct_window_destroy(w);
 }
 
+/* With focus following the mouse (configs/follow-mouse.sed), pointing at a
+   window focuses it, and pointing at the desktop leaves the focus where it
+   is. The pointer coming back from a grab (here the window menu, A-space in
+   rc.xml) does not move the focus. */
+static void follow_mouse_focuses(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT);
+    ct_win *a = mapped(CT_WIN_NORMAL, "follow a", SMALL);
+    ct_win *b = mapped(CT_WIN_NORMAL, "follow b",
+                       (ct_rect){ SMALL.x + SMALL.w + 100, SMALL.y,
+                                  SMALL.w, SMALL.h });
+    CT_EVENTUALLY(ct_window_focused(b));
+    /* the middle of each is not under the other */
+    ct_rect ca = ct_window_client(a), cb = ct_window_client(b);
+    CT_CHECK(!ct_rect_contains(ct_window_frame(b),
+                               (ct_rect){ ca.x + ca.w / 2, ca.y + ca.h / 2,
+                                          1, 1 }));
+    CT_CHECK(!ct_rect_contains(ct_window_frame(a),
+                               (ct_rect){ cb.x + cb.w / 2, cb.y + cb.h / 2,
+                                          1, 1 }));
+
+    ct_input_point(a);
+    CT_EVENTUALLY(ct_window_focused(a));
+    ct_input_point(b);
+    CT_EVENTUALLY(ct_window_focused(b));
+    ct_input_point(NULL);
+    ct_settle();
+    CT_CHECK(ct_window_focused(b));
+
+    ct_input_point(a);
+    CT_EVENTUALLY(ct_window_focused(a));
+    ct_request_activate(b);
+    CT_EVENTUALLY(ct_window_focused(b));
+    int popups = ct_popup_count();
+    ct_input_keys("A-space");
+    CT_EVENTUALLY(ct_popup_count() > popups);
+    ct_input_keys("Escape");
+    ct_settle();
+    CT_CHECK(ct_window_focused(b));
+    ct_window_destroy(a);
+    ct_window_destroy(b);
+}
+
 const ct_case ct_cases[] = {
     { "wm_announced", wm_announced },
     { "map_manages", map_manages },
@@ -715,5 +758,6 @@ const ct_case ct_cases[] = {
     { "synced_resize_follows_pointer", synced_resize_follows_pointer },
     { "keyboard_move_steps", keyboard_move_steps },
     { "opacity_follows_client", opacity_follows_client },
+    { "follow_mouse_focuses", follow_mouse_focuses, "follow-mouse" },
     { NULL, NULL }
 };

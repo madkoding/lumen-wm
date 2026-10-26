@@ -18,6 +18,7 @@
 */
 
 #include "openbox.h"
+#include "backend.h"
 #include "mouse.h"
 #include "gettext.h"
 #include "obt/keyboard.h"
@@ -108,7 +109,6 @@ gboolean translate_key(const gchar *str, guint *state, guint *keycode)
     gchar *l;
     gint i;
     gboolean ret = FALSE;
-    KeySym sym;
 
     parsed = g_strsplit(str, "-", -1);
 
@@ -140,12 +140,10 @@ gboolean translate_key(const gchar *str, guint *state, guint *keycode)
         }
     } else {
         /* figure out the keycode */
-        sym = XStringToKeysym(l);
-        if (sym == NoSymbol) {
+        if (!ob_backend->key_named(l, keycode)) {
             g_message(_("Invalid key name \"%s\" in key binding"), l);
             goto translation_fail;
         }
-        *keycode = XKeysymToKeycode(obt_display, sym);
     }
     if (!*keycode) {
         g_message(_("Requested key \"%s\" does not exist on the display"), l);

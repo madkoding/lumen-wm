@@ -1,6 +1,7 @@
 #!/bin/sh
 # Run the contract tests on X11: starts Xvfb and Lumen with the default
-# configuration, then the cases.
+# configuration, then the cases; then, for each configs/NAME.sed, Lumen again
+# with data/rc.xml changed by it, and the cases written for NAME.
 #
 #   tests/contract/run.sh [PREFIX [CASE...]]
 #
@@ -36,16 +37,40 @@ done
 export DISPLAY=$DISP
 
 mkdir -p "$WORK/home"
-HOME=$WORK/home XDG_CONFIG_HOME=$WORK/home/.config \
-    XDG_DATA_DIRS=$PREFIX/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share} \
-    "$WM" --sm-disable --config-file "$ROOT/data/rc.xml" \
-    >"$WORK/wm.log" 2>&1 &
-wm=$!
+start_wm() {
+    HOME=$WORK/home XDG_CONFIG_HOME=$WORK/home/.config \
+        XDG_DATA_DIRS=$PREFIX/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share} \
+        "$WM" --sm-disable --config-file "$1" >"$WORK/wm.log" 2>&1 &
+    wm=$!
+}
+stop_wm() {
+    kill $wm 2>/dev/null
+    wait $wm 2>/dev/null
+    wm=
+}
+run_cases() {
+    "$CONTRACT" "$@"
+    s=$?
+    if [ $s -ne 0 ]; then
+        echo "# window manager log:"
+        sed 's/^/#   /' "$WORK/wm.log"
+        [ $s -gt $status ] && status=$s
+    fi
+}
 
-"$CONTRACT" "$@"
-status=$?
-if [ $status -ne 0 ]; then
-    echo "# window manager log:"
-    sed 's/^/#   /' "$WORK/wm.log"
-fi
+status=0
+start_wm "$ROOT/data/rc.xml"
+run_cases "$@"
+for conf in "$HERE"/configs/*.sed; do
+    [ -e "$conf" ] || continue
+    name=$(basename "$conf" .sed)
+    stop_wm
+    sed -f "$conf" "$ROOT/data/rc.xml" >"$WORK/rc-$name.xml"
+    if cmp -s "$ROOT/data/rc.xml" "$WORK/rc-$name.xml"; then
+        echo "Bail out! configs/$name.sed changes nothing in data/rc.xml"
+        exit 2
+    fi
+    start_wm "$WORK/rc-$name.xml"
+    run_cases --config "$name" "$@"
+done
 exit $status

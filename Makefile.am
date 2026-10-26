@@ -246,7 +246,9 @@ openbox_lumen_wm_SOURCES = \
 	openbox/backend.h \
 	openbox/backend-events.c \
 	openbox/backend-x11.c \
-	openbox/backend-x11.h \
+	openbox/backend-x11-event.c \
+	openbox/backend-x11-int.h \
+	openbox/backend-x11-surface.c \
 	openbox/client.c \
 	openbox/client.h \
 	openbox/client_list_menu.c \
@@ -601,6 +603,7 @@ dist_noinst_DATA = \
 	tools/themeupdate/themeupdate.py \
 	tests/contract/README.md \
 	tests/contract/run.sh \
+	tests/contract/configs/follow-mouse.sed \
 	tests/hideshow.py \
 	tests/Makefile \
 	tests/aspect.c \

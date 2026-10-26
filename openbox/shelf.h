@@ -19,6 +19,7 @@
 #define __shelf_h
 
 #include "geom.h"
+#include "backend.h"
 
 #include <glib.h>
 #include <X11/Xlib.h>
@@ -53,8 +54,10 @@ void shelf_shutdown(gboolean reconfig);
 /*! Registers the menu of the dock tiles (Pin, Unpin). Called by menu_startup */
 void shelf_menu_startup(void);
 
-/*! Gives the shelf a chance to take an X event. Returns TRUE when the event
-  was for the shelf and must not be processed any further. */
-gboolean shelf_event(const XEvent *e);
+/*! Gives the shelf a chance to take an input event. Returns TRUE when it
+  was over the shelf and must not be processed any further. */
+gboolean shelf_input(const ObInputEvent *e);
+/*! Draws the shelf again when c is its canvas. */
+gboolean shelf_exposed(ObCanvasId c);
 
 #endif

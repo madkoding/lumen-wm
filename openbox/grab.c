@@ -23,27 +23,23 @@
 #include "screen.h"
 #include "debug.h"
 #include "backend.h"
-#include "obt/display.h"
-#include "obt/keyboard.h"
 
 #include <glib.h>
-#include <X11/Xlib.h>
 
 static guint kgrabs = 0;
 static guint pgrabs = 0;
 /*! The time at which the last grab was made */
-static Time  grab_time = CurrentTime;
+static guint32 grab_time = 0; /* 0 for none, as X's CurrentTime */
 static gint passive_count = 0;
-static ObtIC *ic = NULL;
 
 /* grab.h's grab_keyboard() and grab_pointer() macros would take the backend
    calls of the same names, hence (*ob_backend->grab_...)(). */
 
-static Time ungrab_time(void)
+static guint32 ungrab_time(void)
 {
-    Time t = event_time();
-    if (grab_time == CurrentTime ||
-        !(t == CurrentTime || event_time_after(t, grab_time)))
+    guint32 t = event_time();
+    if (grab_time == 0 ||
+        !(t == 0 || event_time_after(t, grab_time)))
         /* When the time moves backward on the server, then we can't use
            the grab time because that will be in the future. So instead we
            have to use CurrentTime.
@@ -52,13 +48,8 @@ static Time ungrab_time(void)
            is earlier than the last-pointer-grab time or is later than the
            current X server time."
         */
-        t = CurrentTime; /*grab_time;*/
+        t = 0; /*grab_time;*/
     return t;
-}
-
-static Window grab_window(void)
-{
-    return screen_support_win;
 }
 
 gboolean grab_on_keyboard(void)
@@ -69,11 +60,6 @@ gboolean grab_on_keyboard(void)
 gboolean grab_on_pointer(void)
 {
     return pgrabs > 0;
-}
-
-ObtIC *grab_input_context(void)
-{
-    return ic;
 }
 
 gboolean grab_keyboard_full(gboolean grab)
@@ -141,14 +127,10 @@ gint grab_server(gboolean grab)
 
 void grab_startup(gboolean reconfig)
 {
-    ic = obt_keyboard_context_new(obt_root(ob_screen), grab_window());
 }
 
 void grab_shutdown(gboolean reconfig)
 {
-    obt_keyboard_context_unref(ic);
-    ic = NULL;
-
     if (reconfig) return;
 
     while (ungrab_keyboard());

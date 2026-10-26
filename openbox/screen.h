@@ -48,12 +48,6 @@ extern Window screen_support_win;
 /*! The last time at which the user changed desktops */
 extern Time screen_desktop_user_time;
 
-typedef struct ObDesktopLayout {
-    ObOrientation orientation;
-    ObCorner start_corner;
-    guint rows;
-    guint columns;
-} ObDesktopLayout;
 extern ObDesktopLayout screen_desktop_layout;
 
 /*! An array of gchar*'s which are desktop names in UTF-8 format */
@@ -108,10 +102,6 @@ void screen_update_layout(void);
 
 /*! Get desktop names from the root window property */
 void screen_update_desktop_names(void);
-
-/*! Installs or uninstalls a colormap for a client. If client is NULL, then
-  it handles the root colormap. */
-void screen_install_colormap(struct _ObClient *client, gboolean install);
 
 void screen_update_areas(void);
 

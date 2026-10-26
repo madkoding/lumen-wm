@@ -16,8 +16,7 @@
 */
 
 /* The core half of event handling: what the core does when a backend
-   reports something (ObBackendEvents). event.c, the X11 half, still handles
-   what hasn't moved here yet (docs/design/backends.md, step 7). */
+   reports something (ObBackendEvents). Input goes on to event.c. */
 
 #include "backend.h"
 #include "client.h"
@@ -30,11 +29,24 @@
 #include "frame.h"
 #include "stacking.h"
 #include "moveresize.h"
+#include "shelf.h"
+#include "openbox.h"
+#include "keyboard.h"
+#include "ping.h"
+#include "dock.h"
 
 static ObClient *client_of(ObSurfaceId s)
 {
     ObWindow *w = window_find((Window)s);
     return w && WINDOW_IS_CLIENT(w) ? WINDOW_AS_CLIENT(w) : NULL;
+}
+
+/* a client that is still there: what a client asks or says about itself
+   can be queued after it went away */
+static ObClient *live_client_of(ObSurfaceId s)
+{
+    ObClient *client = client_of(s);
+    return client && client_validate(client) ? client : NULL;
 }
 
 static void surface_new(ObSurfaceId s)
@@ -52,15 +64,28 @@ static void surface_new(ObSurfaceId s)
 static void surface_gone(ObSurfaceId s)
 {
     ObClient *client = client_of(s);
+    ObDockApp *app;
 
-    if (client) client_unmanage(client);
+    if (client)
+        client_unmanage(client);
+    else if ((app = dock_find_dockapp((Window)s)))
+        dock_unmanage(app, FALSE);
 }
 
 static void surface_withdrawn(ObSurfaceId s)
 {
     ObClient *client = client_of(s);
+    ObDockApp *app;
 
-    if (!client) return;
+    if (!client) {
+        if ((app = dock_find_dockapp((Window)s))) {
+            if (app->ignore_unmaps)
+                app->ignore_unmaps--;
+            else
+                dock_unmanage(app, TRUE);
+        }
+        return;
+    }
 
     /* the core hid it itself (X11: unmapping it to reparent or iconify) */
     if (client->ignore_unmaps) {
@@ -71,12 +96,30 @@ static void surface_withdrawn(ObSurfaceId s)
     client_unmanage(client);
 }
 
+/* a dock app resized itself */
+static void dockapp_changed(ObDockApp *app, ObSurfaceId s,
+                            ObSurfaceInfoFields changed)
+{
+    ObSurfaceInfo info = { 0 };
+
+    if (!(changed & OB_SURFACE_INFO_GEOMETRY)) return;
+
+    ob_backend->surface_info(s, OB_SURFACE_INFO_GEOMETRY, &info);
+    if (info.has_area)
+        dock_app_configure(app, info.area.width, info.area.height);
+}
+
 static void surface_changed(ObSurfaceId s, ObSurfaceInfoFields changed,
                             guint32 time)
 {
-    ObClient *client = client_of(s);
+    ObClient *client = live_client_of(s);
+    ObDockApp *app;
 
-    if (!client) return;
+    if (!client) {
+        if ((app = dock_find_dockapp((Window)s)))
+            dockapp_changed(app, s, changed);
+        return;
+    }
 
     if (changed & OB_SURFACE_INFO_SIZE) {
         int x, y, w, h, lw, lh;
@@ -145,6 +188,8 @@ static void surface_changed(ObSurfaceId s, ObSurfaceInfoFields changed,
     }
     if (changed & OB_SURFACE_INFO_OPACITY)
         client_update_opacity(client);
+    if (changed & OB_SURFACE_INFO_SHAPE)
+        client_update_shape(client);
     if (changed & OB_SURFACE_INFO_USER_TIME && client == focus_client) {
         ObSurfaceInfo info = { 0 };
 
@@ -163,7 +208,7 @@ static void request_states(ObSurfaceId s, ObStateAction action,
                            ObSurfaceStates first, ObSurfaceStates second,
                            ObRequestSource from)
 {
-    ObClient *client = client_of(s);
+    ObClient *client = live_client_of(s);
     gulong ignore_start = 0;
 
     (void)from;
@@ -184,16 +229,16 @@ static void request_states(ObSurfaceId s, ObStateAction action,
 
 static void request_iconify(ObSurfaceId s, gboolean iconic)
 {
-    ObClient *client = client_of(s);
+    ObClient *client = live_client_of(s);
 
     if (client)
-        client_set_wm_state(client, iconic ? IconicState : NormalState);
+        client_set_wm_state(client, iconic);
 }
 
 static void request_activate(ObSurfaceId s, ObRequestSource from,
                              guint32 time)
 {
-    ObClient *client = client_of(s);
+    ObClient *client = live_client_of(s);
 
     if (!client) return;
 
@@ -232,7 +277,7 @@ static void request_activate(ObSurfaceId s, ObRequestSource from,
 
 static void request_close(ObSurfaceId s, ObRequestSource from)
 {
-    ObClient *client = client_of(s);
+    ObClient *client = live_client_of(s);
 
     (void)from;
     if (!client) return;
@@ -243,7 +288,7 @@ static void request_close(ObSurfaceId s, ObRequestSource from)
 
 static void request_surface_desktop(ObSurfaceId s, guint desktop)
 {
-    ObClient *client = client_of(s);
+    ObClient *client = live_client_of(s);
 
     if (client && (desktop < screen_num_desktops || desktop == DESKTOP_ALL))
         client_set_desktop(client, desktop, FALSE, FALSE);
@@ -454,7 +499,7 @@ static void request_configure(ObSurfaceId s, const ObConfigureRequest *req)
 static void request_geometry(ObSurfaceId s, const ObConfigureRequest *req,
                              ObRequestSource from)
 {
-    ObClient *client = client_of(s);
+    ObClient *client = live_client_of(s);
 
     (void)from;
     if (!client) return;
@@ -513,7 +558,7 @@ static void request_geometry(ObSurfaceId s, const ObConfigureRequest *req,
 static void request_restack(ObSurfaceId s, guintptr sibling_id,
                             ObStackMode mode, ObRequestSource from)
 {
-    ObClient *client = client_of(s);
+    ObClient *client = live_client_of(s);
     ObWindow *sibling = NULL;
     gulong ignore_start = 0;
 
@@ -597,7 +642,7 @@ static void surface_synced(ObSurfaceId s)
 static void request_move_resize(ObSurfaceId s, ObMoveResize edge, gint x,
                                 gint y, guint button)
 {
-    ObClient *client = client_of(s);
+    ObClient *client = live_client_of(s);
 
     if (!client) return;
 
@@ -607,12 +652,81 @@ static void request_move_resize(ObSurfaceId s, ObMoveResize edge, gint x,
         moveresize_end(TRUE);
 }
 
+static void request_frame_extents(ObSurfaceId s)
+{
+    /* Pretend to manage the client, getting information used to
+       determine its decorations */
+    ObClient *c = client_fake_manage((Window)s);
+
+    ob_backend->publish_surface_extents(s, &c->frame->size);
+
+    /* Free the pretend client */
+    client_fake_unmanage(c);
+}
+
+static void pong(ObSurfaceId s, guint32 serial)
+{
+    ping_got_pong(serial);
+}
+
+static void request_desktop(guint desktop, guint32 time)
+{
+    if (desktop >= screen_num_desktops) return;
+
+    if (time)
+        event_set_source_time(time);
+    screen_set_desktop(desktop, TRUE);
+}
+
+static void request_desktop_count(guint count)
+{
+    if (count > 0 && count <= 1000)
+        screen_set_num_desktops(count);
+}
+
+static void request_show_desktop(gboolean show)
+{
+    screen_show_desktop(show ? SCREEN_SHOW_DESKTOP_UNTIL_WINDOW
+                             : SCREEN_SHOW_DESKTOP_NO, NULL);
+}
+
+static void running_requested(guint what)
+{
+    if (what == 1)
+        ob_reconfigure();
+    else if (what == 2)
+        ob_restart();
+    else if (what == 3)
+        ob_exit(0);
+}
+
+static void replaced(void)
+{
+    ob_debug("Another WM has requested to replace us. Exiting.");
+    ob_exit_replace();
+}
+
+static void keymap_changed(void)
+{
+    ob_set_state(OB_STATE_RECONFIGURING);
+    keyboard_rebind();
+    ob_set_state(OB_STATE_RUNNING);
+}
+
+static void canvas_exposed(ObCanvasId c)
+{
+    shelf_exposed(c);
+}
+
 const ObBackendEvents ob_backend_events = {
+    .begin = event_begin,
+    .end = event_end,
     .surface_new = surface_new,
     .surface_synced = surface_synced,
     .surface_gone = surface_gone,
     .surface_withdrawn = surface_withdrawn,
     .surface_changed = surface_changed,
+    .request_frame_extents = request_frame_extents,
     .request_states = request_states,
     .request_iconify = request_iconify,
     .request_activate = request_activate,
@@ -625,4 +739,16 @@ const ObBackendEvents ob_backend_events = {
     .focus_changed = focus_changed,
     .focus_left = focus_left,
     .focus_lost = focus_lost,
+    .pong = pong,
+    .request_desktop = request_desktop,
+    .request_desktop_count = request_desktop_count,
+    .request_show_desktop = request_show_desktop,
+    .desktop_names_changed = screen_update_desktop_names,
+    .desktop_layout_changed = screen_update_layout,
+    .running_requested = running_requested,
+    .replaced = replaced,
+    .keymap_changed = keymap_changed,
+    .outputs_changed = screen_resize,
+    .input = event_input,
+    .canvas_exposed = canvas_exposed,
 };
