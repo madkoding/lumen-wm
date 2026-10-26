@@ -27,9 +27,9 @@
 #include "grab.h"
 #include "openbox.h"
 #include "config.h"
-#include "obt/keyboard.h"
 #include "obrender/theme.h"
 #include "paint.h"
+#include "backend.h"
 
 #include <math.h>
 
@@ -1376,10 +1376,10 @@ void menu_entry_frame_execute(ObMenuEntryFrame *self, guint state)
         GSList *acts = self->entry->data.normal.actions;
         ObClient *client = self->frame->client;
         ObMenuFrame *frame = self->frame;
-        guint mods = obt_keyboard_only_modmasks(state);
+        guint mods = ob_backend->only_modmasks(state);
 
         /* release grabs before executing the shit */
-        if (!(mods & ControlMask)) {
+        if (!(mods & OB_MOD_CONTROL)) {
             event_cancel_all_key_grabs();
             frame = NULL;
         }

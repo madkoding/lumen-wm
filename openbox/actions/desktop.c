@@ -2,7 +2,6 @@
 #include "openbox/screen.h"
 #include "openbox/client.h"
 #include "openbox/openbox.h"
-#include "obt/keyboard.h"
 
 typedef enum {
     LAST,

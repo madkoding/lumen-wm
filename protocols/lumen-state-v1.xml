@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="lumen_state_v1">
+  <copyright>
+    Copyright © 2026 the Lumen authors
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+  </copyright>
+
+  <description summary="what Lumen did, for its contract tests">
+    The contract tests (tests/contract) read back what the window manager
+    did. On X11 that is what it publishes for pagers (EWMH); this protocol
+    publishes the same on Wayland, and takes the requests a pager sends.
+
+    Lumen offers it only when LUMEN_TEST_PROTOCOL is set in its
+    environment. It is not stable and not meant for anything else.
+  </description>
+
+  <interface name="lumen_state_v1" version="1">
+    <request name="destroy" type="destructor"/>
+
+    <request name="refresh">
+      <description summary="send the whole state">
+        Lumen answers with screen, workarea, desktops, focus and popups,
+        then each managed window of this client (window, frame, client),
+        bottom first, and done.
+      </description>
+    </request>
+
+    <event name="screen">
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </event>
+
+    <event name="workarea">
+      <description summary="the current desktop's work area"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </event>
+
+    <event name="desktops">
+      <arg name="count" type="uint"/>
+      <arg name="current" type="uint"/>
+    </event>
+
+    <event name="focus">
+      <description summary="whether a client has the focus">
+        nothing is 1 when no client has the focus and the keys go to the
+        window manager.
+      </description>
+      <arg name="nothing" type="uint"/>
+    </event>
+
+    <event name="popups">
+      <description summary="what the window manager shows by itself">
+        Its menus, popups, panels and such that are on screen.
+      </description>
+      <arg name="count" type="uint"/>
+    </event>
+
+    <enum name="state" bitfield="true">
+      <entry name="maximized" value="1"/>
+      <entry name="fullscreen" value="2"/>
+      <entry name="iconic" value="4"/>
+      <entry name="above" value="8"/>
+      <entry name="focused" value="16"/>
+      <entry name="viewable" value="32"/>
+    </enum>
+
+    <event name="window">
+      <description summary="a managed window of this client">
+        desktop is -1 for every desktop; stack is its place among the
+        managed windows, 0 at the bottom. frame and client follow.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="states" type="uint" enum="state"/>
+      <arg name="desktop" type="int"/>
+      <arg name="stack" type="int"/>
+      <arg name="title" type="string" allow-null="true"/>
+    </event>
+
+    <event name="frame">
+      <description summary="the last window's frame, decorations and all"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </event>
+
+    <event name="client">
+      <description summary="the last window's own area"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </event>
+
+    <event name="done"/>
+
+    <enum name="action">
+      <entry name="remove" value="0"/>
+      <entry name="add" value="1"/>
+      <entry name="toggle" value="2"/>
+    </enum>
+
+    <request name="activate">
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
+    <request name="close">
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
+    <request name="set_state">
+      <description summary="change one state, as a pager">
+        state is one of maximized, fullscreen, iconic and above.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="state" type="uint" enum="state"/>
+      <arg name="action" type="uint" enum="action"/>
+    </request>
+
+    <request name="raise">
+      <description summary="a pager raises it"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
+    <request name="lower">
+      <description summary="the window asks to go below the others"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
+    <request name="move_resize">
+      <description summary="a pager moves and resizes its frame"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </request>
+
+    <request name="keyboard_move">
+      <description summary="the window asks to be moved with the keys"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
+    <request name="desktop">
+      <arg name="desktop" type="uint"/>
+    </request>
+
+    <request name="window_desktop">
+      <description summary="send it to a desktop; -1 for all of them"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="desktop" type="int"/>
+    </request>
+  </interface>
+</protocol>

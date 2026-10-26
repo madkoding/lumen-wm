@@ -24,6 +24,8 @@
 #include "event.h"
 #include "paint.h"
 #include "gettext.h"
+#include "backend.h"
+#include <xkbcommon/xkbcommon-keysyms.h>
 
 static GList *prompt_list = NULL;
 
@@ -407,12 +409,12 @@ gboolean prompt_key_event(ObPrompt *self, const ObInputEvent *e)
 {
     gboolean shift;
     guint shift_mask, mods;
-    KeySym sym;
+    guint32 sym;
 
     if (e->type != OB_INPUT_KEY_PRESS) return FALSE;
 
-    shift_mask = obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_SHIFT);
-    mods = obt_keyboard_only_modmasks(e->mods);
+    shift_mask = ob_backend->modkey_mask(OB_MODKEY_SHIFT);
+    mods = ob_backend->only_modmasks(e->mods);
     shift = !!(mods & shift_mask);
 
     /* only accept shift */
@@ -421,16 +423,16 @@ gboolean prompt_key_event(ObPrompt *self, const ObInputEvent *e)
 
     sym = e->keysym;
 
-    if (sym == XK_Escape)
+    if (sym == XKB_KEY_Escape)
         prompt_cancel(self);
-    else if (sym == XK_Return || sym == XK_KP_Enter || sym == XK_space)
+    else if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter || sym == XKB_KEY_space)
         prompt_run_callback(self, self->focus->result);
-    else if (sym == XK_Tab || sym == XK_Left || sym == XK_Right) {
+    else if (sym == XKB_KEY_Tab || sym == XKB_KEY_Left || sym == XKB_KEY_Right) {
         gint i;
         gboolean left;
         ObPromptElement *oldfocus;
 
-        left = (sym == XK_Left) || ((sym == XK_Tab) && shift);
+        left = (sym == XKB_KEY_Left) || ((sym == XKB_KEY_Tab) && shift);
         oldfocus = self->focus;
 
         for (i = 0; i < self->n_buttons; ++i)

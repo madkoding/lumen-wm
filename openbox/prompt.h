@@ -23,7 +23,6 @@
 #include "window.h"
 #include "geom.h"
 #include "obrender/render.h"
-#include "obt/keyboard.h"
 #include <glib.h>
 
 typedef struct _ObPrompt       ObPrompt;

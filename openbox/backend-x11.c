@@ -219,6 +219,13 @@ static void x11_layout_size(gint *w, gint *h)
     *h = HeightOfScreen(ScreenOfDisplay(obt_display, ob_screen));
 }
 
+static guint x11_reserved_edges(const StrutPartial **edges)
+{
+    /* docks and panels are clients here, with struts of their own */
+    *edges = NULL;
+    return 0;
+}
+
 static void x11_publish_layout_size(gint w, gint h)
 {
     gulong geometry[2];
@@ -1557,6 +1564,19 @@ static void x11_canvas_set_opacity(ObCanvasId c, gboolean set,
         OBT_PROP_ERASE((Window)c, NET_WM_WINDOW_OPACITY);
 }
 
+static guint x11_modkey_mask(ObModkey key)
+{
+    static const ObtModkeysKey keys[] = {
+        [OB_MODKEY_SHIFT] = OBT_KEYBOARD_MODKEY_SHIFT,
+        [OB_MODKEY_CONTROL] = OBT_KEYBOARD_MODKEY_CONTROL,
+        [OB_MODKEY_ALT] = OBT_KEYBOARD_MODKEY_ALT,
+        [OB_MODKEY_META] = OBT_KEYBOARD_MODKEY_META,
+        [OB_MODKEY_SUPER] = OBT_KEYBOARD_MODKEY_SUPER,
+        [OB_MODKEY_HYPER] = OBT_KEYBOARD_MODKEY_HYPER
+    };
+    return obt_keyboard_modkey_to_modmask(keys[key]);
+}
+
 static gboolean x11_key_named(const gchar *name, guint *keycode)
 {
     KeySym sym = XStringToKeysym(name);
@@ -1950,7 +1970,9 @@ const ObBackend ob_backend_x11 = {
             OB_BACKEND_CAP_DECOR_HINTS |
             OB_BACKEND_CAP_ROOT_STATE |
             OB_BACKEND_CAP_DOCKAPPS |
-            OB_BACKEND_CAP_SYNC_RESIZE,
+            OB_BACKEND_CAP_SYNC_RESIZE |
+            OB_BACKEND_CAP_REAP_CHILDREN |
+            OB_BACKEND_CAP_RESTART,
 
     .startup = x11_startup,
     .shutdown = x11_shutdown,
@@ -1966,6 +1988,7 @@ const ObBackend ob_backend_x11 = {
     .output_count = x11_output_count,
     .output_area = x11_output_area,
     .layout_size = x11_layout_size,
+    .reserved_edges = x11_reserved_edges,
 
     .existing_surfaces = x11_existing_surfaces,
     .surface_kind = x11_surface_kind,
@@ -2024,6 +2047,9 @@ const ObBackend ob_backend_x11 = {
     .grab_pointer = x11_grab_pointer,
     .grab_keyboard = x11_grab_keyboard,
     .grab_server = x11_grab_server,
+    .modkey_mask = x11_modkey_mask,
+    .only_modmasks = obt_keyboard_only_modmasks,
+    .keymap_reload = obt_keyboard_reload,
     .key_named = x11_key_named,
     .bind_key = x11_bind_key,
     .unbind_all_keys = x11_unbind_all_keys,

@@ -47,10 +47,7 @@
 #include "gettext.h"
 #include "obrender/render.h"
 #include "obrender/theme.h"
-#include "obt/display.h"
 #include "obt/signal.h"
-#include "obt/prop.h"
-#include "obt/keyboard.h"
 #include "obt/xml.h"
 
 #ifdef HAVE_FCNTL_H
@@ -146,7 +143,8 @@ gint main(gint argc, gchar **argv)
         session_startup(argc, argv);
 
     if (!backend_startup(NULL, (ob_replace_wm ? OB_STARTUP_REPLACE : 0) |
-                               (xsync ? OB_STARTUP_SYNC : 0)))
+                               (xsync ? OB_STARTUP_SYNC : 0) |
+                               (remote_control ? OB_STARTUP_REMOTE : 0)))
         ob_exit_with_error(_("Failed to open the display from the DISPLAY environment variable."));
 
     if (remote_control) {
@@ -168,7 +166,8 @@ gint main(gint argc, gchar **argv)
     obt_signal_add_callback(SIGINT,  signal_handler, NULL);
     obt_signal_add_callback(SIGHUP,  signal_handler, NULL);
     obt_signal_add_callback(SIGPIPE, signal_handler, NULL);
-    obt_signal_add_callback(SIGCHLD, signal_handler, NULL);
+    if (ob_backend->caps & OB_BACKEND_CAP_REAP_CHILDREN)
+        obt_signal_add_callback(SIGCHLD, signal_handler, NULL);
     obt_signal_add_callback(SIGTTIN, signal_handler, NULL);
     obt_signal_add_callback(SIGTTOU, signal_handler, NULL);
 
@@ -196,7 +195,7 @@ gint main(gint argc, gchar **argv)
             gchar *xml_error_string = NULL;
             ObPrompt *xmlprompt = NULL;
 
-            if (reconfigure) obt_keyboard_reload();
+            if (reconfigure) ob_backend->keymap_reload();
 
             {
                 ObtXmlInst *i;
@@ -460,6 +459,18 @@ gint main(gint argc, gchar **argv)
     return exitcode;
 }
 
+static void child_exited(GPid pid, gint status, gpointer data)
+{
+    g_spawn_close_pid(pid);
+}
+
+void ob_watch_child(GPid pid)
+{
+    /* otherwise the SIGCHLD handler reaps every child */
+    if (!(ob_backend->caps & OB_BACKEND_CAP_REAP_CHILDREN))
+        g_child_watch_add(pid, child_exited, NULL);
+}
+
 static void signal_handler(gint signal, gpointer data)
 {
     switch (signal) {
@@ -539,6 +550,7 @@ static void run_startup_cmd(void)
 {
     gchar **argv = NULL;
     GError *e = NULL;
+    GPid pid;
     gboolean ok;
 
     if (!g_shell_parse_argv(startup_cmd, NULL, &argv, &e)) {
@@ -550,8 +562,10 @@ static void run_startup_cmd(void)
     ok = g_spawn_async(NULL, argv, NULL,
                        G_SPAWN_SEARCH_PATH |
                        G_SPAWN_DO_NOT_REAP_CHILD,
-                       NULL, NULL, NULL, &e);
-    if (!ok) {
+                       NULL, NULL, &pid, &e);
+    if (ok)
+        ob_watch_child(pid);
+    else {
         g_message("Error launching startup command: %s",
                   e->message);
         g_error_free(e);
@@ -702,6 +716,12 @@ void ob_restart_other(const gchar *path)
 
 void ob_restart(void)
 {
+    if (!(ob_backend->caps & OB_BACKEND_CAP_RESTART)) {
+        /* a new compositor would start without the windows */
+        g_message(_("Restarting reloads the configuration on Wayland"));
+        ob_reconfigure();
+        return;
+    }
     restart = TRUE;
     ob_exit(0);
 }

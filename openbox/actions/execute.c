@@ -4,6 +4,7 @@
 #include "openbox/client.h"
 #include "openbox/prompt.h"
 #include "openbox/screen.h"
+#include "openbox/openbox.h"
 #include "obt/paths.h"
 #include "gettext.h"
 
@@ -275,6 +276,7 @@ static gboolean run_func(ObActionsData *data, gpointer options)
     }
     else {
         gchar *program = NULL;
+        GPid pid;
         gboolean ok;
 
         if (o->sn) {
@@ -290,8 +292,10 @@ static gboolean run_func(ObActionsData *data, gpointer options)
         ok = g_spawn_async(NULL, argv, NULL,
                            G_SPAWN_SEARCH_PATH |
                            G_SPAWN_DO_NOT_REAP_CHILD,
-                           NULL, NULL, NULL, &e);
-        if (!ok) {
+                           NULL, NULL, &pid, &e);
+        if (ok)
+            ob_watch_child(pid);
+        else {
             g_message("%s", e->message);
             g_error_free(e);
         }

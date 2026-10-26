@@ -1488,8 +1488,9 @@ static gboolean tick(gpointer data)
     if (S.shown) {
         gint ow = S.ww, ox = S.wx;
         place();
-        if (ow != S.ww || ox != S.wx) {
-            /* the row changed width, so the picture behind it has to too */
+        if ((ow != S.ww || ox != S.wx) && !S.argb) {
+            /* the row changed width, so the picture behind it has to too;
+               with alpha there is no picture, only the new row to paint */
             resnap(80);
             return TRUE;
         }

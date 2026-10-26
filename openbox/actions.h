@@ -20,7 +20,6 @@
 #include "frame.h"
 #include "backend.h"
 #include "obt/xml.h"
-#include "obt/keyboard.h"
 
 #include <glib.h>
 

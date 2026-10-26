@@ -47,6 +47,29 @@ typedef guintptr ObWindowId;
 
 typedef struct _ObBackend       ObBackend;
 typedef struct _ObBackendEvents ObBackendEvents;
+struct _RrFontSettings;
+
+/*! Modifier masks whose meaning is fixed: X11's and xkb's default
+  modifiers agree on them. Which of Mod1 to Mod5 Alt or Super is depends on
+  the keymap; ask modkey_mask(). */
+#define OB_MOD_SHIFT   (1 << 0)
+#define OB_MOD_LOCK    (1 << 1)
+#define OB_MOD_CONTROL (1 << 2)
+#define OB_MOD_MOD1    (1 << 3)
+#define OB_MOD_MOD2    (1 << 4)
+#define OB_MOD_MOD3    (1 << 5)
+#define OB_MOD_MOD4    (1 << 6)
+#define OB_MOD_MOD5    (1 << 7)
+
+/*! Modifier keys that may sit on any of the modifier masks. */
+typedef enum {
+    OB_MODKEY_SHIFT,
+    OB_MODKEY_CONTROL,
+    OB_MODKEY_ALT,
+    OB_MODKEY_META,
+    OB_MODKEY_SUPER,
+    OB_MODKEY_HYPER
+} ObModkey;
 
 #define OB_SURFACE_NONE ((ObSurfaceId)0)
 #define OB_CANVAS_NONE ((ObCanvasId)0)
@@ -66,6 +89,13 @@ typedef enum {
     OB_BACKEND_CAP_DOCKAPPS        = 1 << 3,
     /*! XSync-style counters to pace interactive resizes */
     OB_BACKEND_CAP_SYNC_RESIZE     = 1 << 4,
+    /*! the core may reap any child that exits (waitpid(-1) on SIGCHLD);
+      not when the backend waits for children of its own, as wlroots does
+      for Xwayland */
+    OB_BACKEND_CAP_REAP_CHILDREN   = 1 << 5,
+    /*! a new instance can take the clients over (X11); on Wayland the
+      compositor holds them, so restarting there reconfigures instead */
+    OB_BACKEND_CAP_RESTART         = 1 << 6,
 } ObBackendCaps;
 
 typedef enum {
@@ -105,7 +135,9 @@ typedef enum {
     OB_STARTUP_REPLACE = 1 << 0,
     /*! for debugging: report errors where they happen (X11 synchronous
       requests) */
-    OB_STARTUP_SYNC    = 1 << 1
+    OB_STARTUP_SYNC    = 1 << 1,
+    /*! only to talk to the instance already running (request_running) */
+    OB_STARTUP_REMOTE  = 1 << 2
 } ObStartupFlags;
 
 /*! What the window manager before this one left, to carry on from it
@@ -481,6 +513,11 @@ struct _ObBackend {
     void (*output_area)(guint output, Rect *area);
     /*! The size of the whole layout, every output included. */
     void (*layout_size)(gint *width, gint *height);
+    /*! Edges of the layout that things the core doesn't manage keep for
+      themselves (Wayland: layer-shell exclusive zones), as struts; the
+      backend owns the array until it says reserved_changed. X11 has
+      none: docks and panels there are clients with struts. */
+    guint (*reserved_edges)(const StrutPartial **edges);
 
     /* --- managed surfaces --- */
 
@@ -662,6 +699,13 @@ struct _ObBackend {
       that must look like one (X11 XGrabServer; nothing on Wayland). The
       core counts nested grabs. */
     void (*grab_server)(gboolean grab);
+    /*! The modifier mask(s) a modifier key sets, left and right. */
+    guint (*modkey_mask)(ObModkey key);
+    /*! Only the modifiers in state that bindings look at: no lock keys
+      (Caps, Num and Scroll Lock) and no buttons. */
+    guint (*only_modmasks)(guint state);
+    /*! Read the keyboard map again (when the configuration is reloaded). */
+    void (*keymap_reload)(void);
     /*! The key that types the keysym called name (as in rc.xml). FALSE
       when no keysym has that name; keycode 0 when no key types it. */
     gboolean (*key_named)(const gchar *name, guint *keycode);
@@ -836,6 +880,8 @@ struct _ObBackendEvents {
     /*! Monitors came, went or changed; ask output_count() and
       output_area() again. */
     void (*outputs_changed)(void);
+    /*! What reserved_edges() says changed. */
+    void (*reserved_changed)(void);
 };
 
 /*! The backend in use, set by backend_startup(). */
@@ -844,6 +890,9 @@ extern const ObBackend *ob_backend;
 extern const ObBackendEvents ob_backend_events;
 
 extern const ObBackend ob_backend_x11;
+#ifdef USE_WLROOTS
+extern const ObBackend ob_backend_wlr;
+#endif
 
 /*! Pick the backend and start it. */
 gboolean backend_startup(const gchar *display, ObStartupFlags flags);

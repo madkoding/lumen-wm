@@ -7,7 +7,7 @@
 
 # Lumen Window Manager
 
-**Lumen is a light and fast X11 window manager with colour themes and a modern floating shelf at the bottom of the
+**Lumen is a light and fast window manager for X11 and Wayland, with colour themes and a modern floating shelf at the bottom of the
 screen.** It gives you a dock with your favourite apps, a music player, the weather, and a clock with wifi,
 volume and power controls. It looks like a modern desktop and keeps the speed of Openbox, which it is based on.
 
@@ -23,7 +23,7 @@ The shelf is **off by default**. Until you turn it on, Lumen behaves like plain 
 
 Lumen's look is based on [LumaUI](https://hub.simplyluma.com/developer/agents/design-with-lumaui.md), the design system of Luma: content sits in rounded **islands**,
 colours come from a small set of tokens with one accent per view, and text keeps at least 4.5:1 contrast. Lumen
-applies that language to an X11 window manager: the shelf's dock and status islands, the rounded menus, and
+applies that language to a window manager: the shelf's dock and status islands, the rounded menus, and
 the colours it takes from your window theme.
 
 ## What you get
@@ -44,16 +44,19 @@ The player and the weather are optional. Each one only shows up while it has som
 On Debian or Ubuntu:
 
 ```sh
-sudo apt-get install build-essential autoconf automake libtool pkg-config gettext autopoint \
+sudo apt-get install build-essential meson ninja-build pkg-config gettext \
   libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev libx11-dev libxft-dev \
   libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev libimlib2-dev
 
+# for Wayland too (optional): wlroots 0.17
+sudo apt-get install libwlroots-dev libwayland-dev wayland-protocols libxkbcommon-dev \
+  libxcb-icccm4-dev libxcb-ewmh-dev
+
 git clone https://github.com/madkoding/lumen-wm
 cd lumen-wm
-./bootstrap
-./configure --prefix=/usr --sysconfdir=/etc
-make
-sudo make install
+meson setup build --prefix=/usr --sysconfdir=/etc
+meson compile -C build
+sudo meson install -C build
 ```
 
 ### 2. Turn the shelf on
@@ -74,6 +77,14 @@ lumen-wm --reconfigure
 ```
 
 The shelf appears at the bottom of the screen. Every time you change `rc.xml`, run this command again.
+
+### On Wayland
+
+When Lumen is built with wlroots, the same `lumen-wm` also runs as a Wayland compositor, with the same `rc.xml`,
+themes, shelf and menus. Pick **Lumen (Wayland)** in your display manager, or run `lumen-wm` from a console. It
+runs on X11 when `DISPLAY` is set, and on Wayland otherwise; `LUMEN_BACKEND=x11` or `wayland` picks one. Bars,
+backgrounds and launchers that use layer-shell work (swaybg, gtk-layer-shell apps), taskbars see the windows
+through foreign-toplevel, and X11 applications run through XWayland.
 
 ## Make it yours
 
@@ -328,6 +339,9 @@ the shelf already set up: the Sansation font, Lucide icons, pinned apps, and mus
   readable in every theme. Add `COMPOSITOR=1` to try the cairo menus. CI runs it on every pull request.
 - Sharing screenshots (README, r/unixporn): see [`doc/screenshots.md`](doc/screenshots.md).
 - Building from git: see [`README.GIT`](README.GIT).
+- X11 and Wayland: the backends are in [`docs/design/backends.md`](docs/design/backends.md), and the contract
+  tests in [`tests/contract`](tests/contract) check the same behaviour on both (`run.sh` on Xvfb,
+  `run-wayland.sh` on a headless wlroots output).
 
 ## License and credits
 

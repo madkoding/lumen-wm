@@ -744,5 +744,6 @@ const ObBackendEvents ob_backend_events = {
     .replaced = replaced,
     .keymap_changed = keymap_changed,
     .outputs_changed = screen_resize,
+    .reserved_changed = screen_update_areas,
     .input = event_input,
 };

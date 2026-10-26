@@ -175,7 +175,8 @@ const char *ct_driver_name(void)
 ct_caps ct_driver_caps(void)
 {
     return CT_CAP_CLIENT_POSITION | CT_CAP_DESKTOPS | CT_CAP_STRUTS |
-        CT_CAP_STACKING | CT_CAP_CLIENT_FOCUS | CT_CAP_OPACITY
+        CT_CAP_STACKING | CT_CAP_CLIENT_FOCUS | CT_CAP_OPACITY |
+        CT_CAP_CLIENT_DESKTOP
 #ifdef CT_HAVE_XTEST
         | CT_CAP_INPUT
 #endif

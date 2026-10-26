@@ -13,7 +13,7 @@ static gboolean run_func(ObActionsData *data, gpointer options)
 {
     if (data->client) {
         actions_client_move(data, TRUE);
-        stacking_restack_request(data->client, NULL, Opposite);
+        stacking_restack_request(data->client, NULL, OB_STACK_OPPOSITE);
         actions_client_move(data, FALSE);
     }
 

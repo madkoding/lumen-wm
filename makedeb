@@ -11,8 +11,8 @@ else
     fi
 fi
 
-# get the version from configure.ac
-VERSION=$(grep AC_INIT\(\\\[lumen-wm\\] configure.ac|cut -d [ -f 3-|cut -d ] -f 1)
+# get the version from meson.build
+VERSION=$(sed -n "s/^  version: '\(.*\)',$/\1/p" meson.build)
 
 echo
 echo "Building deb for lumen-wm-$VERSION-0$APPEND"
@@ -23,11 +23,8 @@ TIME="$(date '+%a, %d %B %Y %T %z')"
 IN=debian/changelog.in
 OUT=debian/changelog
 
-# make sure configure gets run with the right parameters
-make distclean > /dev/null || rm -f config.status
-
 rm -f $OUT
 
 sed -e "s!@time@!$TIME!" -e "s!@version@!$VERSION-0$APPEND!" $IN >$OUT && \
 fakeroot debian/rules binary && \
-make distclean > /dev/null
+fakeroot debian/rules clean

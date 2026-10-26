@@ -33,9 +33,9 @@
 #include "debug.h"
 #include "obrender/render.h"
 #include "obrender/theme.h"
-#include "obt/keyboard.h"
 
 #include <glib.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
 
 /* how far windows move and resize with the keyboard arrows */
 #define KEY_DIST 8
@@ -610,25 +610,25 @@ static void cancel_edge_warp(void)
     edge_warp_timer = 0;
 }
 
-static void move_with_keys(KeySym sym, guint state)
+static void move_with_keys(guint32 sym, guint state)
 {
     gint dx = 0, dy = 0, ox = cur_x, oy = cur_y;
     gint opx, px, opy, py;
     gint dist = 0;
 
     /* shift means jump to edge */
-    if (state & obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_SHIFT))
+    if (state & ob_backend->modkey_mask(OB_MODKEY_SHIFT))
     {
         gint x, y;
         ObDirection dir;
 
-        if (sym == XK_Right)
+        if (sym == XKB_KEY_Right)
             dir = OB_DIRECTION_EAST;
-        else if (sym == XK_Left)
+        else if (sym == XKB_KEY_Left)
             dir = OB_DIRECTION_WEST;
-        else if (sym == XK_Down)
+        else if (sym == XKB_KEY_Down)
             dir = OB_DIRECTION_SOUTH;
-        else /* sym == XK_Up */
+        else /* sym == XKB_KEY_Up */
             dir = OB_DIRECTION_NORTH;
 
         client_find_move_directional(moveresize_client, dir, &x, &y);
@@ -637,20 +637,20 @@ static void move_with_keys(KeySym sym, guint state)
     } else {
         /* control means fine grained */
         if (state &
-            obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_CONTROL))
+            ob_backend->modkey_mask(OB_MODKEY_CONTROL))
         {
             dist = 1;
         }
         else
             dist = KEY_DIST;
 
-        if (sym == XK_Right)
+        if (sym == XKB_KEY_Right)
             dx = dist;
-        else if (sym == XK_Left)
+        else if (sym == XKB_KEY_Left)
             dx = -dist;
-        else if (sym == XK_Down)
+        else if (sym == XKB_KEY_Down)
             dy = dist;
-        else /* if (sym == XK_Up) */
+        else /* if (sym == XKB_KEY_Up) */
             dy = -dist;
     }
 
@@ -671,14 +671,14 @@ static void move_with_keys(KeySym sym, guint state)
     start_y += (py - opy) - (cur_y - oy);
 }
 
-static void resize_with_keys(KeySym sym, guint state)
+static void resize_with_keys(guint32 sym, guint state)
 {
     gint dw = 0, dh = 0, pdx = 0, pdy = 0, opx, opy, px, py;
     gint resist = 0;
     ObDirection dir;
 
     /* pick the edge if it needs to move */
-    if (sym == XK_Right) {
+    if (sym == XKB_KEY_Right) {
         dir = OB_DIRECTION_EAST;
         if (key_resize_edge != OB_DIRECTION_WEST &&
             key_resize_edge != OB_DIRECTION_EAST)
@@ -686,7 +686,7 @@ static void resize_with_keys(KeySym sym, guint state)
             key_resize_edge = OB_DIRECTION_EAST;
             return;
         }
-    } else if (sym == XK_Left) {
+    } else if (sym == XKB_KEY_Left) {
         dir = OB_DIRECTION_WEST;
         if (key_resize_edge != OB_DIRECTION_WEST &&
             key_resize_edge != OB_DIRECTION_EAST)
@@ -694,7 +694,7 @@ static void resize_with_keys(KeySym sym, guint state)
             key_resize_edge = OB_DIRECTION_WEST;
             return;
         }
-    } else if (sym == XK_Up) {
+    } else if (sym == XKB_KEY_Up) {
         dir = OB_DIRECTION_NORTH;
         if (key_resize_edge != OB_DIRECTION_NORTH &&
             key_resize_edge != OB_DIRECTION_SOUTH)
@@ -702,7 +702,7 @@ static void resize_with_keys(KeySym sym, guint state)
             key_resize_edge = OB_DIRECTION_NORTH;
             return;
         }
-    } else /* if (sym == XK_Down) */ {
+    } else /* if (sym == XKB_KEY_Down) */ {
         dir = OB_DIRECTION_SOUTH;
         if (key_resize_edge != OB_DIRECTION_NORTH &&
             key_resize_edge != OB_DIRECTION_SOUTH)
@@ -713,17 +713,17 @@ static void resize_with_keys(KeySym sym, guint state)
     }
 
     /* shift means jump to edge */
-    if (state & obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_SHIFT))
+    if (state & ob_backend->modkey_mask(OB_MODKEY_SHIFT))
     {
         gint x, y, w, h;
 
-        if (sym == XK_Right)
+        if (sym == XKB_KEY_Right)
             dir = OB_DIRECTION_EAST;
-        else if (sym == XK_Left)
+        else if (sym == XKB_KEY_Left)
             dir = OB_DIRECTION_WEST;
-        else if (sym == XK_Down)
+        else if (sym == XKB_KEY_Down)
             dir = OB_DIRECTION_SOUTH;
-        else /* if (sym == XK_Up)) */
+        else /* if (sym == XKB_KEY_Up)) */
             dir = OB_DIRECTION_NORTH;
 
         ObClientDirectionalResizeType resize_type =
@@ -745,7 +745,7 @@ static void resize_with_keys(KeySym sym, guint state)
             resist = 1;
         }
         else if (state &
-                 obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_CONTROL))
+                 ob_backend->modkey_mask(OB_MODKEY_CONTROL))
         {
             distw = 1;
             resist = 1;
@@ -759,7 +759,7 @@ static void resize_with_keys(KeySym sym, guint state)
             resist = 1;
         }
         else if (state &
-                 obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_CONTROL))
+                 ob_backend->modkey_mask(OB_MODKEY_CONTROL))
         {
             disth = 1;
             resist = 1;
@@ -989,16 +989,16 @@ gboolean moveresize_event(const ObInputEvent *e)
         }
         used = TRUE;
     } else if (e->type == OB_INPUT_KEY_PRESS) {
-        KeySym sym = e->keysym;
+        guint32 sym = e->keysym;
 
-        if (sym == XK_Escape) {
+        if (sym == XKB_KEY_Escape) {
             moveresize_end(TRUE);
             used = TRUE;
-        } else if (sym == XK_Return || sym == XK_KP_Enter) {
+        } else if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
             moveresize_end(FALSE);
             used = TRUE;
-        } else if (sym == XK_Right || sym == XK_Left ||
-                   sym == XK_Up || sym == XK_Down)
+        } else if (sym == XKB_KEY_Right || sym == XKB_KEY_Left ||
+                   sym == XKB_KEY_Up || sym == XKB_KEY_Down)
         {
             if (corner == OB_MOVERESIZE_SIZE_KEYBOARD) {
                 resize_with_keys(sym, e->mods);

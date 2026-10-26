@@ -6,14 +6,14 @@
 #   tests/contract/run.sh [PREFIX [CASE...]]
 #
 # PREFIX is where Lumen is installed (default /usr/local). CONTRACT is the
-# contract-x11 binary (default: built next to this script by
-# `make tests/contract/contract-x11`). Needs Xvfb.
+# contract-x11 binary (default: build/contract-x11, from `meson setup build`).
+# Needs Xvfb.
 set -u
 PREFIX=${1:-/usr/local}
 [ $# -gt 0 ] && shift
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
-CONTRACT=${CONTRACT:-$HERE/contract-x11}
+CONTRACT=${CONTRACT:-$ROOT/build/contract-x11}
 DISP=${DISP:-:96}
 WORK=$(mktemp -d)
 xvfb=
