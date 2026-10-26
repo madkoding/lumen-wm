@@ -21,6 +21,7 @@
 #define __backend_x11_int_h
 
 #include "backend.h"
+#include "obrender/render.h"
 
 #include <X11/Xlib.h>
 
@@ -55,6 +56,12 @@ struct _ObtIC *x11_grab_input_context(void);
 void x11_sync_alarm(const XEvent *e);
 
 /* backend-x11-canvas.c: what the core draws */
+Visual *x11_visual(void);
+gint x11_depth(void);
+Colormap x11_colormap(void);
+/*! A pixmap (and its mask) as ARGB pixels, for icons in WM_HINTS. */
+gboolean x11_pixmap_argb(Pixmap pmap, Pixmap mask, gint *w, gint *h,
+                         guint32 **data);
 ObCanvasId x11_canvas_new(ObCanvasLayer layer, ObSurfaceId owner,
                           ObCanvasFlags flags);
 ObCanvasId x11_canvas_new_child(ObCanvasId parent, ObCanvasFlags flags);
@@ -64,6 +71,7 @@ void x11_canvas_present(ObCanvasId c, const ObImage *img, const Rect *damage);
 void x11_canvas_move(ObCanvasId c, gint x, gint y);
 void x11_canvas_resize(ObCanvasId c, gint width, gint height);
 void x11_canvas_set_input(ObCanvasId c, const Rect *rects, guint n);
+void x11_font_settings(RrFontSettings *fs);
 gboolean x11_screen_read(const Rect *area, ObImage *img);
 void x11_dialog_set_title(ObCanvasId c, const gchar *title);
 void x11_dialog_set_size(ObCanvasId c, gint width, gint height,

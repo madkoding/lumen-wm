@@ -42,6 +42,23 @@ typedef struct {
     Pixmap background;
 } Canvas;
 
+/* what the core's pictures are drawn in: the screen's default visual */
+
+Visual *x11_visual(void)
+{
+    return DefaultVisual(obt_display, ob_screen);
+}
+
+gint x11_depth(void)
+{
+    return DefaultDepth(obt_display, ob_screen);
+}
+
+Colormap x11_colormap(void)
+{
+    return DefaultColormap(obt_display, ob_screen);
+}
+
 /* every canvas, by window */
 static GHashTable *canvases;
 
@@ -119,9 +136,9 @@ ObCanvasId x11_canvas_new(ObCanvasLayer layer, ObSurfaceId owner,
     XSetWindowAttributes attrib;
     XWindowAttributes wattrib;
     gulong mask;
-    Visual *visual = RrVisual(ob_rr_inst);
-    Colormap cmap = RrColormap(ob_rr_inst);
-    gint depth = RrDepth(ob_rr_inst);
+    Visual *visual = x11_visual();
+    Colormap cmap = x11_colormap();
+    gint depth = x11_depth();
     Window w;
 
     if (layer == OB_CANVAS_DECOR) {
@@ -194,16 +211,16 @@ ObCanvasId x11_canvas_new_child(ObCanvasId parent, ObCanvasFlags flags)
     /* the parts draw in the default visual; inside a 32-bit parent they
        need their own colormap and border */
     mask |= CWColormap | CWBorderPixel;
-    attrib.colormap = RrColormap(ob_rr_inst);
+    attrib.colormap = x11_colormap();
     attrib.border_pixel = BlackPixel(obt_display, ob_screen);
-    if (p->depth == 32 && RrDepth(ob_rr_inst) != 32) {
+    if (p->depth == 32 && x11_depth() != 32) {
         mask |= CWBackPixel;
         attrib.background_pixel = BlackPixel(obt_display, ob_screen);
     }
     w = XCreateWindow(obt_display, p->window, 0, 0, 1, 1, 0,
-                      RrDepth(ob_rr_inst), InputOutput, RrVisual(ob_rr_inst),
+                      x11_depth(), InputOutput, x11_visual(),
                       mask, &attrib);
-    add(w, p->window, RrVisual(ob_rr_inst), RrDepth(ob_rr_inst), FALSE);
+    add(w, p->window, x11_visual(), x11_depth(), FALSE);
     return (ObCanvasId)w;
 }
 
@@ -241,7 +258,7 @@ void x11_canvas_free(ObCanvasId c)
 gboolean x11_canvas_has_alpha(ObCanvasId c)
 {
     Canvas *cv = find(c);
-    return cv && cv->depth == 32 && RrDepth(ob_rr_inst) != 32;
+    return cv && cv->depth == 32 && x11_depth() != 32;
 }
 
 void x11_canvas_present(ObCanvasId c, const ObImage *img, const Rect *damage)
@@ -282,7 +299,7 @@ void x11_canvas_present(ObCanvasId c, const ObImage *img, const Rect *damage)
 
 gulong x11_pixel(guint32 argb)
 {
-    Visual *v = RrVisual(ob_rr_inst);
+    Visual *v = x11_visual();
     XColor xc;
 
     if (v->class == TrueColor) {
@@ -309,7 +326,7 @@ gulong x11_pixel(guint32 argb)
     xc.green = ((argb >> 8) & 0xff) * 0x101;
     xc.blue = (argb & 0xff) * 0x101;
     xc.flags = DoRed | DoGreen | DoBlue;
-    if (!XAllocColor(obt_display, RrColormap(ob_rr_inst), &xc))
+    if (!XAllocColor(obt_display, x11_colormap(), &xc))
         xc.pixel = 0;
     return xc.pixel;
 }
@@ -480,4 +497,121 @@ gboolean x11_screen_read(const Rect *area, ObImage *img)
     img->height = area->height;
     img->stride = area->width * 4;
     return TRUE;
+}
+
+/* the pixel's value in a visual's channel, scaled to 8 bits */
+static guint32 channel(gulong pixel, gulong mask)
+{
+    gint shift = 0, bits = 0;
+
+    if (!mask) return 0;
+    while (!(mask & 1)) { mask >>= 1; ++shift; }
+    while (mask & 1) { mask >>= 1; ++bits; }
+    pixel = (pixel >> shift) & ((1ul << bits) - 1);
+    return bits >= 8 ? pixel >> (bits - 8) : pixel * 255 / ((1u << bits) - 1);
+}
+
+gboolean x11_pixmap_argb(Pixmap pmap, Pixmap mask, gint *w, gint *h,
+                         guint32 **data)
+{
+    Window xr;
+    gint xx, xy, x, y;
+    guint pw, ph, mw, mh, xb, xd, md;
+    XImage *xi, *xm = NULL;
+    Visual *v = x11_visual();
+
+    if (!XGetGeometry(obt_display, pmap, &xr, &xx, &xy, &pw, &ph, &xb, &xd))
+        return FALSE;
+    if (mask) {
+        if (!XGetGeometry(obt_display, mask, &xr, &xx, &xy, &mw, &mh, &xb,
+                          &md))
+            return FALSE;
+        if (pw != mw || ph != mh || md != 1)
+            return FALSE;
+    }
+    if (xd != 1 && v->class != TrueColor)
+        return FALSE;
+
+    xi = XGetImage(obt_display, pmap, 0, 0, pw, ph, AllPlanes, ZPixmap);
+    if (!xi)
+        return FALSE;
+    if (mask &&
+        !(xm = XGetImage(obt_display, mask, 0, 0, mw, mh, AllPlanes, ZPixmap)))
+    {
+        XDestroyImage(xi);
+        return FALSE;
+    }
+
+    *data = g_new(guint32, pw * ph);
+    for (y = 0; y < (gint)ph; ++y)
+        for (x = 0; x < (gint)pw; ++x) {
+            gulong p = XGetPixel(xi, x, y);
+            guint32 argb;
+
+            if (xd == 1)
+                argb = p ? 0xffffffffu : 0xff000000u; /* white or black */
+            else
+                argb = 0xff000000u | (channel(p, v->red_mask) << 16) |
+                    (channel(p, v->green_mask) << 8) |
+                    channel(p, v->blue_mask);
+            /* transparent where the mask is not set */
+            if (xm && !XGetPixel(xm, x, y))
+                argb &= 0x00ffffffu;
+            (*data)[y * pw + x] = argb;
+        }
+    *w = pw;
+    *h = ph;
+
+    XDestroyImage(xi);
+    if (xm) XDestroyImage(xm);
+    return TRUE;
+}
+
+/* the Xft resources, which X clients share */
+static gboolean is_false(const gchar *v)
+{
+    return !g_ascii_strcasecmp(v, "false") || !strcmp(v, "0") ||
+        !g_ascii_strcasecmp(v, "off");
+}
+
+void x11_font_settings(RrFontSettings *fs)
+{
+    const gchar *v;
+
+    fs->dpi = 0;
+    fs->antialias = CAIRO_ANTIALIAS_DEFAULT;
+    fs->hint_style = CAIRO_HINT_STYLE_DEFAULT;
+    fs->subpixel_order = CAIRO_SUBPIXEL_ORDER_DEFAULT;
+
+    if ((v = XGetDefault(obt_display, "Xft", "dpi")))
+        fs->dpi = g_ascii_strtod(v, NULL);
+    if (fs->dpi <= 0 && DisplayHeightMM(obt_display, ob_screen) > 0)
+        fs->dpi = DisplayHeight(obt_display, ob_screen) * 25.4 /
+            DisplayHeightMM(obt_display, ob_screen);
+
+    if ((v = XGetDefault(obt_display, "Xft", "antialias")))
+        fs->antialias = is_false(v) ? CAIRO_ANTIALIAS_NONE :
+            CAIRO_ANTIALIAS_GRAY;
+    if ((v = XGetDefault(obt_display, "Xft", "hinting")) && is_false(v))
+        fs->hint_style = CAIRO_HINT_STYLE_NONE;
+    else if ((v = XGetDefault(obt_display, "Xft", "hintstyle"))) {
+        if (!strcmp(v, "hintnone"))
+            fs->hint_style = CAIRO_HINT_STYLE_NONE;
+        else if (!strcmp(v, "hintslight"))
+            fs->hint_style = CAIRO_HINT_STYLE_SLIGHT;
+        else if (!strcmp(v, "hintmedium"))
+            fs->hint_style = CAIRO_HINT_STYLE_MEDIUM;
+        else if (!strcmp(v, "hintfull"))
+            fs->hint_style = CAIRO_HINT_STYLE_FULL;
+    }
+    if ((v = XGetDefault(obt_display, "Xft", "rgba"))) {
+        if (!strcmp(v, "rgb"))
+            fs->subpixel_order = CAIRO_SUBPIXEL_ORDER_RGB;
+        else if (!strcmp(v, "bgr"))
+            fs->subpixel_order = CAIRO_SUBPIXEL_ORDER_BGR;
+        else if (!strcmp(v, "vrgb"))
+            fs->subpixel_order = CAIRO_SUBPIXEL_ORDER_VRGB;
+        else if (!strcmp(v, "vbgr"))
+            fs->subpixel_order = CAIRO_SUBPIXEL_ORDER_VBGR;
+    }
 }

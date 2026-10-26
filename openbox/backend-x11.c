@@ -1147,7 +1147,7 @@ static void get_icons(Window win, ObSurfaceInfo *info)
 {
     guint num;
     guint32 *data, *argb;
-    guint w, h, i, j;
+    guint w, h, i;
     XWMHints *hints;
 
     for (i = 0; i < info->n_icons; ++i)
@@ -1182,22 +1182,14 @@ static void get_icons(Window win, ObSurfaceInfo *info)
         if (hints->flags & IconPixmapHint) {
             gboolean xicon;
             obt_display_ignore_errors(TRUE);
-            xicon = RrPixmapToRGBA(ob_rr_inst,
-                                   hints->icon_pixmap,
-                                   (hints->flags & IconMaskHint ?
-                                    hints->icon_mask : None),
-                                   (gint*)&w, (gint*)&h, &data);
+            xicon = x11_pixmap_argb(hints->icon_pixmap,
+                                    (hints->flags & IconMaskHint ?
+                                     hints->icon_mask : None),
+                                    (gint*)&w, (gint*)&h, &data);
             obt_display_ignore_errors(FALSE);
 
             if (xicon) {
                 if (w > 0 && h > 0) {
-                    /* from ObRender's bit order */
-                    for (j = 0; j < w*h; ++j)
-                        data[j] =
-                            (((data[j] >> RrDefaultAlphaOffset) & 0xff) << 24) +
-                            (((data[j] >> RrDefaultRedOffset) & 0xff) << 16) +
-                            (((data[j] >> RrDefaultGreenOffset) & 0xff) << 8) +
-                            (((data[j] >> RrDefaultBlueOffset) & 0xff) << 0);
                     add_icon(info, w, h, data);
                 } else
                     g_free(data);
@@ -2017,6 +2009,7 @@ const ObBackend ob_backend_x11 = {
     .canvas_set_shape = x11_canvas_set_shape,
     .canvas_set_opacity = x11_canvas_set_opacity,
 
+    .font_settings = x11_font_settings,
     .screen_read = x11_screen_read,
 
     .dialog_set_title = x11_dialog_set_title,

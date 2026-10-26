@@ -627,6 +627,8 @@ struct _ObBackend {
       A decoration's id is the one restack takes for the frame. */
     void (*canvas_set_opacity)(ObCanvasId c, gboolean set, guint32 opacity);
 
+    /*! How text should look on this screen (X11: the Xft resources). */
+    void (*font_settings)(struct _RrFontSettings *fs);
     /*! What the screen shows in area (the wallpaper under a canvas that
       draws it in when nothing composites), in ObImage's layout with opaque
       pixels, or FALSE. Free img->data with g_free(). */

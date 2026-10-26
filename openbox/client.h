@@ -41,6 +41,15 @@ struct _ObPrompt;
 
 typedef struct _ObClient      ObClient;
 
+/*! Who asked for a client's position and size (ICCCM WM_SIZE_HINTS' flags,
+  with their values). */
+typedef enum {
+    OB_CLIENT_USER_POSITION    = 1 << 0,
+    OB_CLIENT_USER_SIZE        = 1 << 1,
+    OB_CLIENT_PROGRAM_POSITION = 1 << 2,
+    OB_CLIENT_PROGRAM_SIZE     = 1 << 3
+} ObClientRequested;
+
 /*! Possible window types */
 typedef enum
 {

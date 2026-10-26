@@ -21,8 +21,6 @@
 #include "instance.h"
 #include "mask.h"
 
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 #include <string.h>
 
 RrButton *RrButtonNew (const RrInstance *inst)

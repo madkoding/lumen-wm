@@ -28,15 +28,11 @@
 #include "theme.h"
 
 #include <glib.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 
 #ifdef HAVE_STDLIB_H
 #  include <stdlib.h>
 #endif
 
-static void pixel_data_to_pixmap(RrAppearance *l,
-                                 gint x, gint y, gint w, gint h);
 
 gboolean RrPaintImage(RrAppearance *a, gint w, gint h)
 {
@@ -174,32 +170,6 @@ gboolean RrPaintImage(RrAppearance *a, gint w, gint h)
     return TRUE;
 }
 
-Pixmap RrPaintPixmap(RrAppearance *a, gint w, gint h)
-{
-    Pixmap oldp;
-
-    if (!RrPaintImage(a, w, h)) return None;
-
-    oldp = a->pixmap; /* save to free after changing the visible pixmap */
-    a->pixmap = XCreatePixmap(RrDisplay(a->inst),
-                              RrRootWindow(a->inst),
-                              w, h, RrDepth(a->inst));
-    g_assert(a->pixmap != None);
-    pixel_data_to_pixmap(a, 0, 0, w, h);
-    return oldp;
-}
-
-void RrPaint(RrAppearance *a, Window win, gint w, gint h)
-{
-    Pixmap oldp;
-
-    oldp = RrPaintPixmap(a, w, h);
-    XSetWindowBackgroundPixmap(RrDisplay(a->inst), win, a->pixmap);
-    XClearWindow(RrDisplay(a->inst), win);
-    /* free this after changing the visible pixmap */
-    if (oldp) XFreePixmap(RrDisplay(a->inst), oldp);
-}
-
 RrAppearance *RrAppearanceNew(const RrInstance *inst, gint numtex)
 {
   RrAppearance *out;
@@ -314,7 +284,6 @@ RrAppearance *RrAppearanceCopy(RrAppearance *orig)
     copy->textures = orig->textures;
     copy->texture = g_memdup(orig->texture,
                              orig->textures * sizeof(RrTexture));
-    copy->pixmap = None;
     copy->image = NULL;
     copy->w = copy->h = 0;
     return copy;
@@ -325,7 +294,6 @@ void RrAppearanceFree(RrAppearance *a)
 {
     if (a) {
         RrSurface *p;
-        if (a->pixmap != None) XFreePixmap(RrDisplay(a->inst), a->pixmap);
         if (a->image) cairo_surface_destroy(a->image);
         if (a->textures)
             g_free(a->texture);
@@ -342,33 +310,6 @@ void RrAppearanceFree(RrAppearance *a)
         p->pixel_data = NULL;
         g_slice_free(RrAppearance, a);
     }
-}
-
-static void pixel_data_to_pixmap(RrAppearance *l,
-                                 gint x, gint y, gint w, gint h)
-{
-    RrPixel32 *in, *scratch;
-    Pixmap out;
-    XImage *im = NULL;
-    im = XCreateImage(RrDisplay(l->inst), RrVisual(l->inst), RrDepth(l->inst),
-                      ZPixmap, 0, NULL, w, h, 32, 0);
-    g_assert(im != NULL);
-
-    in = (RrPixel32*)cairo_image_surface_get_data(l->image);
-    out = l->pixmap;
-
-/* this malloc is a complete waste of time on normal 32bpp
-   as reduce_depth just sets im->data = data and returns
-*/
-    scratch = g_new(RrPixel32, im->width * im->height);
-    im->data = (gchar*) scratch;
-    RrReduceDepth(l->inst, in, im);
-    XPutImage(RrDisplay(l->inst), out,
-              DefaultGC(RrDisplay(l->inst), RrScreen(l->inst)),
-              im, 0, 0, x, y, w, h);
-    im->data = NULL;
-    XDestroyImage(im);
-    g_free(scratch);
 }
 
 void RrMargins (RrAppearance *a, gint *l, gint *t, gint *r, gint *b)
@@ -501,77 +442,4 @@ gint RrMinHeight(RrAppearance *a)
 
     if (h < 1) h = 1;
     return h;
-}
-
-static void reverse_bits(gchar *c, gint n)
-{
-    gint i;
-    for (i = 0; i < n; i++, c++)
-        *c = (((*c * 0x0802UL & 0x22110UL) |
-               (*c * 0x8020UL & 0x88440UL)) * 0x10101UL) >> 16;
-}
-
-gboolean RrPixmapToRGBA(const RrInstance *inst,
-                        Pixmap pmap, Pixmap mask,
-                        gint *w, gint *h, RrPixel32 **data)
-{
-    Window xr;
-    gint xx, xy;
-    guint pw, ph, mw, mh, xb, xd, i, x, y, di;
-    XImage *xi, *xm = NULL;
-
-    if (!XGetGeometry(RrDisplay(inst), pmap,
-                      &xr, &xx, &xy, &pw, &ph, &xb, &xd))
-        return FALSE;
-
-    if (mask) {
-        if (!XGetGeometry(RrDisplay(inst), mask,
-                          &xr, &xx, &xy, &mw, &mh, &xb, &xd))
-            return FALSE;
-        if (pw != mw || ph != mh || xd != 1)
-            return FALSE;
-    }
-
-    xi = XGetImage(RrDisplay(inst), pmap,
-                   0, 0, pw, ph, 0xffffffff, ZPixmap);
-    if (!xi)
-        return FALSE;
-
-    if (mask) {
-        xm = XGetImage(RrDisplay(inst), mask,
-                       0, 0, mw, mh, 0xffffffff, ZPixmap);
-        if (!xm) {
-            XDestroyImage(xi);
-            return FALSE;
-        }
-        if ((xm->bits_per_pixel == 1) && (xm->bitmap_bit_order != LSBFirst))
-            reverse_bits(xm->data, xm->bytes_per_line * xm->height);
-    }
-
-    if ((xi->bits_per_pixel == 1) && (xi->bitmap_bit_order != LSBFirst))
-        reverse_bits(xi->data, xi->bytes_per_line * xi->height);
-
-    *data = g_new(RrPixel32, pw * ph);
-    RrIncreaseDepth(inst, *data, xi);
-
-    if (mask) {
-        /* apply transparency from the mask */
-        di = 0;
-        for (i = 0, y = 0; y < ph; ++y) {
-            for (x = 0; x < pw; ++x, ++i) {
-                if (!((((unsigned)xm->data[di + x / 8]) >> (x % 8)) & 0x1))
-                    (*data)[i] &= ~(0xff << RrDefaultAlphaOffset);
-            }
-            di += xm->bytes_per_line;
-        }
-    }
-
-    *w = pw;
-    *h = ph;
-
-    XDestroyImage(xi);
-    if (mask)
-        XDestroyImage(xm);
-
-    return TRUE;
 }

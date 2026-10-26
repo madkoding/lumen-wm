@@ -19,51 +19,19 @@
 */
 
 #include <stdio.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/extensions/shape.h>
-#include <string.h>
-#include <stdlib.h>
 #include "render.h"
 #include <glib.h>
 
-static gint x_error_handler(Display * disp, XErrorEvent * error)
+/* Draws a gradient into an image, without a display, and writes it to
+   rendertest.png (or the file named on the command line). */
+gint main(gint argc, gchar **argv)
 {
-    gchar buf[1024];
-    XGetErrorText(disp, error->error_code, buf, 1024);
-    printf("%s\n", buf);
-    return 0;
-}
-
-Display *ob_display;
-gint ob_screen;
-Window ob_root;
-
-gint main()
-{
-    Window win;
     RrInstance *inst;
     RrAppearance *look;
-    int done;
-
-    XEvent report;
+    const gchar *out = argc > 1 ? argv[1] : "rendertest.png";
     gint h = 500, w = 500;
 
-    ob_display = XOpenDisplay(NULL);
-    XSetErrorHandler(x_error_handler);
-    ob_screen = DefaultScreen(ob_display);
-    ob_root = RootWindow(ob_display, ob_screen);
-    win =
-        XCreateWindow(ob_display, RootWindow(ob_display, 0),
-                      10, 10, w, h, 10,
-                      CopyFromParent,    /* depth */
-                      CopyFromParent,    /* class */
-                      CopyFromParent,    /* visual */
-                      0,                    /* valuemask */
-                      0);                    /* attributes */
-    XMapWindow(ob_display, win);
-    XSelectInput(ob_display, win, ExposureMask | StructureNotifyMask);
-    inst = RrInstanceNew(ob_display, ob_screen);
+    inst = RrInstanceNew(NULL);
 
     look = RrAppearanceNew(inst, 0);
     look->surface.grad = RR_SURFACE_MIRROR_HORIZONTAL;
@@ -72,42 +40,15 @@ gint main()
     look->surface.split_primary = RrColorParse(inst, "Green");
     look->surface.primary = RrColorParse(inst, "Blue");
     look->surface.interlaced = FALSE;
-    if (ob_display == NULL) {
-        fprintf(stderr, "couldn't connect to X server :0\n");
-        return 0;
+
+    if (!RrPaintImage(look, w, h) ||
+        cairo_surface_write_to_png(look->image, out) != CAIRO_STATUS_SUCCESS)
+    {
+        fprintf(stderr, "couldn't draw into %s\n", out);
+        return 1;
     }
 
-#if BIGTEST
-    int i;
-    look->surface.pixel_data = g_new(RrPixel32, w*h);
-    for (i = 0; i < 10000; ++i) {
-        printf("\r%d", i);
-        fflush(stdout);
-        RrRender(look, w, h);
-    }
-    exit (0);
-#endif
-
-    RrPaint(look, win, w, h);
-    done = 0;
-    while (!done) {
-        XNextEvent(ob_display, &report);
-        switch (report.type) {
-        case Expose:
-            break;
-        case ConfigureNotify:
-            RrPaint(look, win,
-                    report.xconfigure.width,
-                    report.xconfigure.height);
-            break;
-        case UnmapNotify:
-            done = 1;
-            break;
-        }
-    }
-
-    RrAppearanceFree (look);
-    RrInstanceFree (inst);
-
-    return 1;
+    RrAppearanceFree(look);
+    RrInstanceFree(inst);
+    return 0;
 }

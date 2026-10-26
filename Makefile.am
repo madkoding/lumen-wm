@@ -69,8 +69,7 @@ obrender_rendertest_LDADD = \
 	obrender/libobrender.la \
 	$(GLIB_LIBS) \
 	$(PANGO_LIBS) \
-	$(XML_LIBS) \
-	$(X_LIBS)
+	$(XML_LIBS)
 obrender_rendertest_SOURCES = obrender/test.c
 
 obrender_libobrender_la_CPPFLAGS = \

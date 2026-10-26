@@ -195,6 +195,14 @@ void client_set_list(void)
     stacking_set_list();
 }
 
+static const gchar *requested_by(guint got, guint program, guint user)
+{
+    return !got ? "no" :
+        got == program ? "program specified" :
+        got == user ? "user specified" :
+        got == (program | user) ? "program + user specified" : "BADNESS !?";
+}
+
 void client_manage(ObWindowId window, ObPrompt *prompt)
 {
     ObClient *self;
@@ -339,20 +347,11 @@ void client_manage(ObWindowId window, ObPrompt *prompt)
     /* figure out placement for the window if the window is new */
     if (ob_state() == OB_STATE_RUNNING) {
         ob_debug("Positioned: %s @ %d %d",
-                 (!self->positioned ? "no" :
-                  (self->positioned == PPosition ? "program specified" :
-                   (self->positioned == USPosition ? "user specified" :
-                    (self->positioned == (PPosition | USPosition) ?
-                     "program + user specified" :
-                     "BADNESS !?")))), place.x, place.y);
-
+                 requested_by(self->positioned, OB_CLIENT_PROGRAM_POSITION,
+                              OB_CLIENT_USER_POSITION), place.x, place.y);
         ob_debug("Sized: %s @ %d %d",
-                 (!self->sized ? "no" :
-                  (self->sized == PSize ? "program specified" :
-                   (self->sized == USSize ? "user specified" :
-                    (self->sized == (PSize | USSize) ?
-                     "program + user specified" :
-                     "BADNESS !?")))), place.width, place.height);
+                 requested_by(self->sized, OB_CLIENT_PROGRAM_SIZE,
+                              OB_CLIENT_USER_SIZE), place.width, place.height);
 
         obplaced = place_client(self, do_activate, &place, settings);
 
@@ -396,7 +395,7 @@ void client_manage(ObWindowId window, ObPrompt *prompt)
                              ob_state() == OB_STATE_RUNNING &&
                              (self->type == OB_CLIENT_TYPE_DIALOG ||
                               self->type == OB_CLIENT_TYPE_SPLASH ||
-                              (!((self->positioned & USPosition) ||
+                              (!((self->positioned & OB_CLIENT_USER_POSITION) ||
                                  settings->pos_given) &&
                                client_normal(self) &&
                                !self->session &&
@@ -418,7 +417,8 @@ void client_manage(ObWindowId window, ObPrompt *prompt)
     */
     if (ob_state() == OB_STATE_RUNNING &&
         (transient ||
-         (!(self->sized & USSize || self->positioned & USPosition) &&
+         (!(self->sized & OB_CLIENT_USER_SIZE ||
+            self->positioned & OB_CLIENT_USER_POSITION) &&
           client_normal(self) &&
           !self->session &&
           /* don't shrink oldschool fullscreen windows to fit inside the
@@ -988,8 +988,8 @@ static void client_restore_session_state(ObClient *self)
                   self->title);
 
     RECT_SET_POINT(self->area, self->session->x, self->session->y);
-    self->positioned = USPosition;
-    self->sized = USSize;
+    self->positioned = OB_CLIENT_USER_POSITION;
+    self->sized = OB_CLIENT_USER_SIZE;
     if (self->session->w > 0)
         self->area.width = self->session->w;
     if (self->session->h > 0)
