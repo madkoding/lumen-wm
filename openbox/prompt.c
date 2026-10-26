@@ -22,9 +22,7 @@
 #include "client.h"
 #include "group.h"
 #include "event.h"
-#include "obt/display.h"
-#include "obt/keyboard.h"
-#include "obt/prop.h"
+#include "paint.h"
 #include "gettext.h"
 
 static GList *prompt_list = NULL;
@@ -100,10 +98,7 @@ ObPrompt* prompt_new(const gchar *msg, const gchar *title,
                      gpointer data)
 {
     ObPrompt *self;
-    XSetWindowAttributes attrib;
     gint i;
-
-    attrib.override_redirect = FALSE;
 
     self = g_slice_new0(ObPrompt);
     self->ref = 1;
@@ -113,30 +108,18 @@ ObPrompt* prompt_new(const gchar *msg, const gchar *title,
     self->default_result = default_result;
     self->cancel_result = cancel_result;
     self->super.type = OB_WINDOW_CLASS_PROMPT;
-    self->super.window = XCreateWindow(obt_display, obt_root(ob_screen),
-                                       0, 0, 1, 1, 0,
-                                       CopyFromParent, InputOutput,
-                                       CopyFromParent,
-                                       CWOverrideRedirect,
-                                       &attrib);
-    self->ic = obt_keyboard_context_new(self->super.window,
-                                        self->super.window);
-
-    /* make it a dialog type window */
-    OBT_PROP_SET32(self->super.window, NET_WM_WINDOW_TYPE, ATOM,
-                   OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_DIALOG));
+    self->super.window = (Window)ob_backend->canvas_new(OB_CANVAS_DIALOG,
+                                                       OB_SURFACE_NONE, 0);
 
     /* set the window's title */
     if (title)
-        OBT_PROP_SETS(self->super.window, NET_WM_NAME, title);
+        ob_backend->dialog_set_title(self->super.window, title);
 
     /* set up the text message widow */
     self->msg.text = g_strdup(msg);
-    self->msg.window = XCreateWindow(obt_display, self->super.window,
-                                     0, 0, 1, 1, 0,
-                                     CopyFromParent, InputOutput,
-                                     CopyFromParent, 0, NULL);
-    XMapWindow(obt_display, self->msg.window);
+    self->msg.window = (Window)ob_backend->canvas_new_child(
+        self->super.window, 0);
+    ob_backend->canvas_show(self->msg.window, TRUE);
 
     /* set up the buttons from the answers */
 
@@ -159,16 +142,12 @@ ObPrompt* prompt_new(const gchar *msg, const gchar *title,
     }
 
     for (i = 0; i < self->n_buttons; ++i) {
-        self->button[i].window = XCreateWindow(obt_display, self->super.window,
-                                               0, 0, 1, 1, 0,
-                                               CopyFromParent, InputOutput,
-                                               CopyFromParent, 0, NULL);
-        XMapWindow(obt_display, self->button[i].window);
-        window_add(&self->button[i].window, PROMPT_AS_WINDOW(self));
-
         /* listen for button presses on the buttons */
-        XSelectInput(obt_display, self->button[i].window,
-                     ButtonPressMask | ButtonReleaseMask | ButtonMotionMask);
+        self->button[i].window = (Window)ob_backend->canvas_new_child(
+            self->super.window,
+            OB_CANVAS_INPUT_BUTTONS | OB_CANVAS_INPUT_DRAG);
+        ob_backend->canvas_show(self->button[i].window, TRUE);
+        window_add(&self->button[i].window, PROMPT_AS_WINDOW(self));
     }
 
     prompt_list = g_list_prepend(prompt_list, self);
@@ -191,15 +170,13 @@ void prompt_unref(ObPrompt *self)
 
         prompt_list = g_list_remove(prompt_list, self);
 
-        obt_keyboard_context_unref(self->ic);
-
         for (i = 0; i < self->n_buttons; ++i) {
             window_remove(self->button[i].window);
-            XDestroyWindow(obt_display, self->button[i].window);
+            ob_backend->canvas_free(self->button[i].window);
         }
 
-        XDestroyWindow(obt_display, self->msg.window);
-        XDestroyWindow(obt_display, self->super.window);
+        ob_backend->canvas_free(self->msg.window);
+        ob_backend->canvas_free(self->super.window);
         g_slice_free(ObPrompt, self);
     }
 }
@@ -276,43 +253,22 @@ static void prompt_layout(ObPrompt *self)
     prompt_resize(self, w + l + r, h + t + b);
 
     /* move and resize the internal windows */
-    XMoveResizeWindow(obt_display, self->msg.window,
-                      self->msg.x, self->msg.y,
-                      self->msg.width, self->msg.height);
+    paint_place(self->msg.window,
+                self->msg.x, self->msg.y,
+                self->msg.width, self->msg.height);
     for (i = 0; i < self->n_buttons; ++i)
-        XMoveResizeWindow(obt_display, self->button[i].window,
-                          self->button[i].x, self->button[i].y,
-                          self->button[i].width, self->button[i].height);
+        paint_place(self->button[i].window,
+                    self->button[i].x, self->button[i].y,
+                    self->button[i].width, self->button[i].height);
 }
 
 static void prompt_resize(ObPrompt *self, gint w, gint h)
 {
-    XConfigureRequestEvent req;
-    XSizeHints hints;
-
     self->width = w;
     self->height = h;
 
     /* the user can't resize the prompt */
-    hints.flags = PMinSize | PMaxSize;
-    hints.min_width = hints.max_width = w;
-    hints.min_height = hints.max_height = h;
-    XSetWMNormalHints(obt_display, self->super.window, &hints);
-
-    if (self->mapped) {
-        /* send a configure request like a normal client would */
-        req.type = ConfigureRequest;
-        req.display = obt_display;
-        req.parent = obt_root(ob_screen);
-        req.window = self->super.window;
-        req.width = w;
-        req.height = h;
-        req.value_mask = CWWidth | CWHeight;
-        XSendEvent(req.display, req.window, FALSE, StructureNotifyMask,
-                   (XEvent*)&req);
-    }
-    else
-        XResizeWindow(obt_display, self->super.window, w, h);
+    ob_backend->dialog_set_size(self->super.window, w, h, self->mapped);
 }
 
 static void setup_button_focus_tex(ObPromptElement *e, RrAppearance *a,
@@ -373,7 +329,7 @@ static void render_button(ObPrompt *self, ObPromptElement *e)
         setup_button_focus_tex(e, a, TRUE);
 
     a->texture[0].data.text.string = e->text;
-    RrPaint(a, e->window, e->width, e->height);
+    paint_canvas(e->window, a, e->width, e->height);
 
     /* turn off the keyfocus line so that it doesn't affect size calculations
      */
@@ -385,7 +341,7 @@ static void render_all(ObPrompt *self)
 {
     gint i;
 
-    RrPaint(prompt_a_bg, self->super.window, self->width, self->height);
+    paint_canvas(self->super.window, prompt_a_bg, self->width, self->height);
 
     prompt_a_msg->surface.parent = prompt_a_bg;
     prompt_a_msg->surface.parentx = self->msg.x;
@@ -393,7 +349,7 @@ static void render_all(ObPrompt *self)
 
     prompt_a_msg->texture[0].data.text.string = self->msg.text;
     prompt_a_msg->texture[0].data.text.maxwidth = self->msg_wbound;
-    RrPaint(prompt_a_msg, self->msg.window, self->msg.width, self->msg.height);
+    paint_canvas(self->msg.window, prompt_a_msg, self->msg.width, self->msg.height);
 
     for (i = 0; i < self->n_buttons; ++i)
         render_button(self, &self->button[i]);
@@ -404,12 +360,10 @@ void prompt_show(ObPrompt *self, ObClient *parent, gboolean modal)
     gint i;
 
     if (self->mapped) {
-        /* activate the prompt */
-        OBT_PROP_MSG(ob_screen, self->super.window, NET_ACTIVE_WINDOW,
-                     1, /* from an application.. */
-                     event_time(),
-                     0,
-                     0, 0);
+        /* activate the prompt, as its application would */
+        ob_backend_events.request_activate(self->super.window,
+                                           OB_REQUEST_FROM_APPLICATION,
+                                           event_time());
         return;
     }
 
@@ -422,33 +376,17 @@ void prompt_show(ObPrompt *self, ObClient *parent, gboolean modal)
         }
 
     if (parent) {
-        Atom states[1];
-        gint nstates;
-        Window p;
-        XWMHints h;
-
-        if (parent->group) {
-            /* make it transient for the window's group */
-            h.flags = WindowGroupHint;
-            h.window_group = parent->group->leader;
-            p = obt_root(ob_screen);
-        }
-        else {
-            /* make it transient for the window directly */
-            h.flags = 0;
-            p = parent->window;
-        }
-
-        XSetWMHints(obt_display, self->super.window, &h);
-        OBT_PROP_SET32(self->super.window, WM_TRANSIENT_FOR, WINDOW, p);
-
-        states[0] = OBT_PROP_ATOM(NET_WM_STATE_MODAL);
-        nstates = (modal ? 1 : 0);
-        OBT_PROP_SETA32(self->super.window, NET_WM_STATE, ATOM,
-                        states, nstates);
+        /* transient for the window's group, or the window directly */
+        if (parent->group)
+            ob_backend->dialog_set_parent(self->super.window, OB_SURFACE_NONE,
+                                          parent->group->leader, modal);
+        else
+            ob_backend->dialog_set_parent(self->super.window, parent->window,
+                                          OB_SURFACE_NONE, modal);
     }
     else
-        OBT_PROP_ERASE(self->super.window, WM_TRANSIENT_FOR);
+        ob_backend->dialog_set_parent(self->super.window, OB_SURFACE_NONE,
+                                      OB_SURFACE_NONE, FALSE);
 
     /* set up the dialog and render it */
     prompt_layout(self);
@@ -461,7 +399,7 @@ void prompt_show(ObPrompt *self, ObClient *parent, gboolean modal)
 
 void prompt_hide(ObPrompt *self)
 {
-    XUnmapWindow(obt_display, self->super.window);
+    ob_backend->canvas_show(self->super.window, FALSE);
     self->mapped = FALSE;
 }
 

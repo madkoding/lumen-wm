@@ -27,10 +27,10 @@
 #include "screen.h"
 #include "obrender/render.h"
 #include "obrender/theme.h"
+#include "paint.h"
 
 ObPopup *popup_new(void)
 {
-    XSetWindowAttributes attrib;
     ObPopup *self = g_slice_new0(ObPopup);
 
     self->obwin.type = OB_WINDOW_CLASS_INTERNAL;
@@ -40,21 +40,14 @@ ObPopup *popup_new(void)
     self->a_text = RrAppearanceCopy(ob_rr_theme->osd_hilite_label);
     self->iconwm = self->iconhm = 1;
 
-    attrib.override_redirect = True;
-    self->bg = XCreateWindow(obt_display, obt_root(ob_screen),
-                             0, 0, 1, 1, 0, RrDepth(ob_rr_inst),
-                             InputOutput, RrVisual(ob_rr_inst),
-                             CWOverrideRedirect, &attrib);
+    self->bg = (Window)ob_backend->canvas_new(OB_CANVAS_POPUP,
+                                              OB_SURFACE_NONE, 0);
+    self->text = (Window)ob_backend->canvas_new_child(self->bg, 0);
 
-    self->text = XCreateWindow(obt_display, self->bg,
-                               0, 0, 1, 1, 0, RrDepth(ob_rr_inst),
-                               InputOutput, RrVisual(ob_rr_inst), 0, NULL);
+    ob_backend->canvas_set_border(self->bg, ob_rr_theme->obwidth,
+        paint_argb(ob_rr_theme->osd_border_color));
 
-    XSetWindowBorderWidth(obt_display, self->bg, ob_rr_theme->obwidth);
-    XSetWindowBorder(obt_display, self->bg,
-                     RrColorPixel(ob_rr_theme->osd_border_color));
-
-    XMapWindow(obt_display, self->text);
+    ob_backend->canvas_show(self->text, TRUE);
 
     stacking_add(INTERNAL_AS_WINDOW(self));
     window_add(&self->bg, INTERNAL_AS_WINDOW(self));
@@ -66,8 +59,7 @@ void popup_free(ObPopup *self)
     if (self) {
         popup_hide(self); /* make sure it's not showing or is being delayed and
                              will be shown */
-        XDestroyWindow(obt_display, self->bg);
-        XDestroyWindow(obt_display, self->text);
+        ob_backend->canvas_free(self->bg);
         RrAppearanceFree(self->a_bg);
         RrAppearanceFree(self->a_text);
         window_remove(self->bg);
@@ -142,7 +134,7 @@ static gboolean popup_show_timeout(gpointer data)
 {
     ObPopup *self = data;
 
-    XMapWindow(obt_display, self->bg);
+    ob_backend->canvas_show(self->bg, TRUE);
     stacking_raise(INTERNAL_AS_WINDOW(self));
     self->mapped = TRUE;
     self->delay_mapped = FALSE;
@@ -282,19 +274,19 @@ void popup_delay_show(ObPopup *self, gulong msec, gchar *text)
     }
 
     /* set the windows/appearances up */
-    XMoveResizeWindow(obt_display, self->bg, x, y, w, h);
+    paint_place(self->bg, x, y, w, h);
     /* when there is no icon and the text is not parent relative, then
        fill the whole dialog with the text appearance, don't use the bg at all
     */
     if (hasicon || self->a_text->surface.grad == RR_SURFACE_PARENTREL)
-        RrPaint(self->a_bg, self->bg, w, h);
+        paint_canvas(self->bg, self->a_bg, w, h);
 
     if (textw) {
         self->a_text->surface.parent = self->a_bg;
         self->a_text->surface.parentx = textx;
         self->a_text->surface.parenty = texty;
-        XMoveResizeWindow(obt_display, self->text, textx, texty, textw, texth);
-        RrPaint(self->a_text, self->text, textw, texth);
+        paint_place(self->text, textx, texty, textw, texth);
+        paint_canvas(self->text, self->a_text, textw, texth);
     }
 
     if (hasicon)
@@ -323,7 +315,7 @@ void popup_hide(ObPopup *self)
         /* kill enter events cause by this unmapping */
         ignore_start = event_start_ignore_all_enters();
 
-        XUnmapWindow(obt_display, self->bg);
+        ob_backend->canvas_show(self->bg, FALSE);
         self->mapped = FALSE;
 
         event_end_ignore_all_enters(ignore_start);
@@ -341,8 +333,8 @@ static void icon_popup_draw_icon(gint x, gint y, gint w, gint h, gpointer data)
     self->a_icon->surface.parent = self->popup->a_bg;
     self->a_icon->surface.parentx = x;
     self->a_icon->surface.parenty = y;
-    XMoveResizeWindow(obt_display, self->icon, x, y, w, h);
-    RrPaint(self->a_icon, self->icon, w, h);
+    paint_place(self->icon, x, y, w, h);
+    paint_canvas(self->icon, self->a_icon, w, h);
 }
 
 ObIconPopup *icon_popup_new(void)
@@ -352,11 +344,8 @@ ObIconPopup *icon_popup_new(void)
     self = g_slice_new0(ObIconPopup);
     self->popup = popup_new();
     self->a_icon = RrAppearanceCopy(ob_rr_theme->a_clear_tex);
-    self->icon = XCreateWindow(obt_display, self->popup->bg,
-                               0, 0, 1, 1, 0,
-                               RrDepth(ob_rr_inst), InputOutput,
-                               RrVisual(ob_rr_inst), 0, NULL);
-    XMapWindow(obt_display, self->icon);
+    self->icon = (Window)ob_backend->canvas_new_child(self->popup->bg, 0);
+    ob_backend->canvas_show(self->icon, TRUE);
 
     self->popup->hasicon = TRUE;
     self->popup->draw_icon = icon_popup_draw_icon;
@@ -368,7 +357,7 @@ ObIconPopup *icon_popup_new(void)
 void icon_popup_free(ObIconPopup *self)
 {
     if (self) {
-        XDestroyWindow(obt_display, self->icon);
+        ob_backend->canvas_free(self->icon);
         RrAppearanceFree(self->a_icon);
         popup_free(self->popup);
         g_slice_free(ObIconPopup, self);
@@ -494,9 +483,9 @@ static void pager_popup_draw_icon(gint px, gint py, gint w, gint h,
                 a->surface.parent = self->popup->a_bg;
                 a->surface.parentx = x + px;
                 a->surface.parenty = y + py;
-                XMoveResizeWindow(obt_display, self->wins[n],
-                                  x + px, y + py, eachw, eachh);
-                RrPaint(a, self->wins[n], eachw, eachh);
+                paint_place(self->wins[n],
+                            x + px, y + py, eachw, eachh);
+                paint_canvas(self->wins[n], a, eachw, eachh);
             }
             n += horz_inc;
         }
@@ -529,7 +518,7 @@ void pager_popup_free(ObPagerPopup *self)
         guint i;
 
         for (i = 0; i < self->desks; ++i)
-            XDestroyWindow(obt_display, self->wins[i]);
+            ob_backend->canvas_free(self->wins[i]);
         g_free(self->wins);
         RrAppearanceFree(self->hilight);
         RrAppearanceFree(self->unhilight);
@@ -545,23 +534,19 @@ void pager_popup_delay_show(ObPagerPopup *self, gulong msec,
 
     if (screen_num_desktops < self->desks)
         for (i = screen_num_desktops; i < self->desks; ++i)
-            XDestroyWindow(obt_display, self->wins[i]);
+            ob_backend->canvas_free(self->wins[i]);
 
     if (screen_num_desktops != self->desks)
         self->wins = g_renew(Window, self->wins, screen_num_desktops);
 
     if (screen_num_desktops > self->desks)
         for (i = self->desks; i < screen_num_desktops; ++i) {
-            XSetWindowAttributes attr;
-
-            attr.border_pixel =
-                RrColorPixel(ob_rr_theme->osd_border_color);
-            self->wins[i] = XCreateWindow(obt_display, self->popup->bg,
-                                          0, 0, 1, 1, ob_rr_theme->obwidth,
-                                          RrDepth(ob_rr_inst), InputOutput,
-                                          RrVisual(ob_rr_inst), CWBorderPixel,
-                                          &attr);
-            XMapWindow(obt_display, self->wins[i]);
+            self->wins[i] = (Window)ob_backend->canvas_new_child(
+                self->popup->bg, 0);
+            ob_backend->canvas_set_border(self->wins[i],
+                ob_rr_theme->obwidth,
+                paint_argb(ob_rr_theme->osd_border_color));
+            ob_backend->canvas_show(self->wins[i], TRUE);
         }
 
     self->desks = screen_num_desktops;

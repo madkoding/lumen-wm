@@ -25,12 +25,9 @@
 #include "backend.h"
 #include "openbox.h"
 #include "obrender/theme.h"
-#include "obt/prop.h"
+#include "paint.h"
 
-#define DOCK_EVENT_MASK (ButtonPressMask | ButtonReleaseMask | \
-                         EnterWindowMask | LeaveWindowMask)
-#define DOCK_NOPROPAGATEMASK (ButtonPressMask | ButtonReleaseMask | \
-                              ButtonMotionMask)
+#define DOCK_INPUT (OB_CANVAS_INPUT_BUTTONS | OB_CANVAS_INPUT_CROSSING)
 
 static ObDock *dock;
 static guint show_timeout_id;
@@ -56,14 +53,11 @@ static gboolean window_comp(Window *w1, Window *w2) { return *w1 == *w2; }
 
 void dock_startup(gboolean reconfig)
 {
-    XSetWindowAttributes attrib;
-
     if (reconfig) {
         GList *it;
 
-        XSetWindowBorder(obt_display, dock->frame,
-                         RrColorPixel(ob_rr_theme->osd_border_color));
-        XSetWindowBorderWidth(obt_display, dock->frame, ob_rr_theme->obwidth);
+        ob_backend->canvas_set_border(dock->frame, ob_rr_theme->obwidth,
+            paint_argb(ob_rr_theme->osd_border_color));
 
         RrAppearanceFree(dock->a_frame);
         dock->a_frame = RrAppearanceCopy(ob_rr_theme->osd_bg);
@@ -89,24 +83,12 @@ void dock_startup(gboolean reconfig)
     dock->dock_map = g_hash_table_new((GHashFunc)window_hash,
                                       (GEqualFunc)window_comp);
 
-    attrib.event_mask = DOCK_EVENT_MASK;
-    attrib.override_redirect = True;
-    attrib.do_not_propagate_mask = DOCK_NOPROPAGATEMASK;
-    dock->frame = XCreateWindow(obt_display, obt_root(ob_screen),
-                                0, 0, 1, 1, 0,
-                                RrDepth(ob_rr_inst), InputOutput,
-                                RrVisual(ob_rr_inst),
-                                CWOverrideRedirect | CWEventMask |
-                                CWDontPropagate,
-                                &attrib);
+    /* clicks on the dock apps stay with them */
+    dock->frame = (Window)ob_backend->canvas_new(OB_CANVAS_PANEL,
+                                                 OB_SURFACE_NONE, DOCK_INPUT);
     dock->a_frame = RrAppearanceCopy(ob_rr_theme->osd_bg);
-    XSetWindowBorder(obt_display, dock->frame,
-                     RrColorPixel(ob_rr_theme->osd_border_color));
-    XSetWindowBorderWidth(obt_display, dock->frame, ob_rr_theme->obwidth);
-
-    /* Setting the window type so xcompmgr can tell what it is */
-    OBT_PROP_SET32(dock->frame, NET_WM_WINDOW_TYPE, ATOM,
-                   OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_DOCK));
+    ob_backend->canvas_set_border(dock->frame, ob_rr_theme->obwidth,
+        paint_argb(ob_rr_theme->osd_border_color));
 
     window_add(&dock->frame, DOCK_AS_WINDOW(dock));
     stacking_add(DOCK_AS_WINDOW(dock));
@@ -126,7 +108,7 @@ void dock_shutdown(gboolean reconfig)
 
     g_hash_table_destroy(dock->dock_map);
 
-    XDestroyWindow(obt_display, dock->frame);
+    ob_backend->canvas_free(dock->frame);
     RrAppearanceFree(dock->a_frame);
     window_remove(dock->frame);
     stacking_remove(dock);
@@ -511,14 +493,14 @@ void dock_configure(void)
         g_assert(dock->area.width > 0);
         g_assert(dock->area.height > 0);
 
-        XMoveResizeWindow(obt_display, dock->frame, dock->area.x, dock->area.y,
-                          dock->area.width, dock->area.height);
+        paint_place(dock->frame, dock->area.x, dock->area.y,
+                    dock->area.width, dock->area.height);
 
-        RrPaint(dock->a_frame, dock->frame, dock->area.width,
-                dock->area.height);
-        XMapWindow(obt_display, dock->frame);
+        paint_canvas(dock->frame, dock->a_frame, dock->area.width,
+                     dock->area.height);
+        ob_backend->canvas_show(dock->frame, TRUE);
     } else
-        XUnmapWindow(obt_display, dock->frame);
+        ob_backend->canvas_show(dock->frame, FALSE);
 
     /* but they are useful outside of this function! but don't add it if the
        dock is actually not visible */

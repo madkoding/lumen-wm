@@ -24,8 +24,8 @@
 #include "frame.h"
 #include "event.h"
 #include "obrender/render.h"
+#include "paint.h"
 
-#include <X11/Xlib.h>
 #include <glib.h>
 
 #define FOCUS_INDICATOR_WIDTH 6
@@ -42,19 +42,16 @@ static RrAppearance *a_focus_indicator;
 static RrColor      *color_white;
 static gboolean      visible;
 
-static Window create_window(Window parent, gulong mask,
-                            XSetWindowAttributes *attrib)
+static Window create_window(void)
 {
-    return XCreateWindow(obt_display, parent, 0, 0, 1, 1, 0,
-                         RrDepth(ob_rr_inst), InputOutput,
-                         RrVisual(ob_rr_inst), mask, attrib);
-
+    ObCanvasId c = ob_backend->canvas_new(OB_CANVAS_OVERLAY,
+                                          OB_SURFACE_NONE, 0);
+    ob_backend->canvas_fill(c, 0xff000000u);
+    return (Window)c;
 }
 
 void focus_cycle_indicator_startup(gboolean reconfig)
 {
-    XSetWindowAttributes attr;
-
     visible = FALSE;
 
     if (reconfig) return;
@@ -64,20 +61,10 @@ void focus_cycle_indicator_startup(gboolean reconfig)
     focus_indicator.right.type = OB_WINDOW_CLASS_INTERNAL;
     focus_indicator.bottom.type = OB_WINDOW_CLASS_INTERNAL;
 
-    attr.override_redirect = True;
-    attr.background_pixel = BlackPixel(obt_display, ob_screen);
-    focus_indicator.top.window =
-        create_window(obt_root(ob_screen),
-                      CWOverrideRedirect | CWBackPixel, &attr);
-    focus_indicator.left.window =
-        create_window(obt_root(ob_screen),
-                      CWOverrideRedirect | CWBackPixel, &attr);
-    focus_indicator.right.window =
-        create_window(obt_root(ob_screen),
-                      CWOverrideRedirect | CWBackPixel, &attr);
-    focus_indicator.bottom.window =
-        create_window(obt_root(ob_screen),
-                      CWOverrideRedirect | CWBackPixel, &attr);
+    focus_indicator.top.window = create_window();
+    focus_indicator.left.window = create_window();
+    focus_indicator.right.window = create_window();
+    focus_indicator.bottom.window = create_window();
 
     stacking_add(INTERNAL_AS_WINDOW(&focus_indicator.top));
     stacking_add(INTERNAL_AS_WINDOW(&focus_indicator.left));
@@ -127,10 +114,10 @@ void focus_cycle_indicator_shutdown(gboolean reconfig)
     stacking_remove(INTERNAL_AS_WINDOW(&focus_indicator.right));
     stacking_remove(INTERNAL_AS_WINDOW(&focus_indicator.bottom));
 
-    XDestroyWindow(obt_display, focus_indicator.top.window);
-    XDestroyWindow(obt_display, focus_indicator.left.window);
-    XDestroyWindow(obt_display, focus_indicator.right.window);
-    XDestroyWindow(obt_display, focus_indicator.bottom.window);
+    ob_backend->canvas_free(focus_indicator.top.window);
+    ob_backend->canvas_free(focus_indicator.left.window);
+    ob_backend->canvas_free(focus_indicator.right.window);
+    ob_backend->canvas_free(focus_indicator.bottom.window);
 }
 
 void focus_cycle_update_indicator(ObClient *c)
@@ -147,10 +134,10 @@ void focus_cycle_draw_indicator(ObClient *c)
         /* kill enter events cause by this unmapping */
         ignore_start = event_start_ignore_all_enters();
 
-        XUnmapWindow(obt_display, focus_indicator.top.window);
-        XUnmapWindow(obt_display, focus_indicator.left.window);
-        XUnmapWindow(obt_display, focus_indicator.right.window);
-        XUnmapWindow(obt_display, focus_indicator.bottom.window);
+        ob_backend->canvas_show(focus_indicator.top.window, FALSE);
+        ob_backend->canvas_show(focus_indicator.left.window, FALSE);
+        ob_backend->canvas_show(focus_indicator.right.window, FALSE);
+        ob_backend->canvas_show(focus_indicator.bottom.window, FALSE);
 
         event_end_ignore_all_enters(ignore_start);
 
@@ -176,8 +163,8 @@ void focus_cycle_draw_indicator(ObClient *c)
         /* kill enter events cause by this moving */
         ignore_start = event_start_ignore_all_enters();
 
-        XMoveResizeWindow(obt_display, focus_indicator.top.window,
-                          x, y, w, h);
+        paint_place(focus_indicator.top.window,
+                    x, y, w, h);
         a_focus_indicator->texture[0].data.lineart.x1 = 0;
         a_focus_indicator->texture[0].data.lineart.y1 = h-1;
         a_focus_indicator->texture[0].data.lineart.x2 = 0;
@@ -194,16 +181,16 @@ void focus_cycle_draw_indicator(ObClient *c)
         a_focus_indicator->texture[3].data.lineart.y1 = h-1;
         a_focus_indicator->texture[3].data.lineart.x2 = w - wr;
         a_focus_indicator->texture[3].data.lineart.y2 = h-1;
-        RrPaint(a_focus_indicator, focus_indicator.top.window,
-                w, h);
+        paint_canvas(focus_indicator.top.window, a_focus_indicator,
+                     w, h);
 
         x = c->frame->area.x;
         y = c->frame->area.y;
         w = wl;
         h = c->frame->area.height;
 
-        XMoveResizeWindow(obt_display, focus_indicator.left.window,
-                          x, y, w, h);
+        paint_place(focus_indicator.left.window,
+                    x, y, w, h);
         a_focus_indicator->texture[0].data.lineart.x1 = w-1;
         a_focus_indicator->texture[0].data.lineart.y1 = 0;
         a_focus_indicator->texture[0].data.lineart.x2 = 0;
@@ -220,16 +207,16 @@ void focus_cycle_draw_indicator(ObClient *c)
         a_focus_indicator->texture[3].data.lineart.y1 = wt-1;
         a_focus_indicator->texture[3].data.lineart.x2 = w-1;
         a_focus_indicator->texture[3].data.lineart.y2 = h - wb;
-        RrPaint(a_focus_indicator, focus_indicator.left.window,
-                w, h);
+        paint_canvas(focus_indicator.left.window, a_focus_indicator,
+                     w, h);
 
         x = c->frame->area.x + c->frame->area.width - wr;
         y = c->frame->area.y;
         w = wr;
         h = c->frame->area.height ;
 
-        XMoveResizeWindow(obt_display, focus_indicator.right.window,
-                          x, y, w, h);
+        paint_place(focus_indicator.right.window,
+                    x, y, w, h);
         a_focus_indicator->texture[0].data.lineart.x1 = 0;
         a_focus_indicator->texture[0].data.lineart.y1 = 0;
         a_focus_indicator->texture[0].data.lineart.x2 = w-1;
@@ -246,16 +233,16 @@ void focus_cycle_draw_indicator(ObClient *c)
         a_focus_indicator->texture[3].data.lineart.y1 = wt-1;
         a_focus_indicator->texture[3].data.lineart.x2 = 0;
         a_focus_indicator->texture[3].data.lineart.y2 = h - wb;
-        RrPaint(a_focus_indicator, focus_indicator.right.window,
-                w, h);
+        paint_canvas(focus_indicator.right.window, a_focus_indicator,
+                     w, h);
 
         x = c->frame->area.x;
         y = c->frame->area.y + c->frame->area.height - wb;
         w = c->frame->area.width;
         h = wb;
 
-        XMoveResizeWindow(obt_display, focus_indicator.bottom.window,
-                          x, y, w, h);
+        paint_place(focus_indicator.bottom.window,
+                    x, y, w, h);
         a_focus_indicator->texture[0].data.lineart.x1 = 0;
         a_focus_indicator->texture[0].data.lineart.y1 = 0;
         a_focus_indicator->texture[0].data.lineart.x2 = 0;
@@ -272,13 +259,13 @@ void focus_cycle_draw_indicator(ObClient *c)
         a_focus_indicator->texture[3].data.lineart.y1 = 0;
         a_focus_indicator->texture[3].data.lineart.x2 = w - wr;
         a_focus_indicator->texture[3].data.lineart.y2 = 0;
-        RrPaint(a_focus_indicator, focus_indicator.bottom.window,
-                w, h);
+        paint_canvas(focus_indicator.bottom.window, a_focus_indicator,
+                     w, h);
 
-        XMapWindow(obt_display, focus_indicator.top.window);
-        XMapWindow(obt_display, focus_indicator.left.window);
-        XMapWindow(obt_display, focus_indicator.right.window);
-        XMapWindow(obt_display, focus_indicator.bottom.window);
+        ob_backend->canvas_show(focus_indicator.top.window, TRUE);
+        ob_backend->canvas_show(focus_indicator.left.window, TRUE);
+        ob_backend->canvas_show(focus_indicator.right.window, TRUE);
+        ob_backend->canvas_show(focus_indicator.bottom.window, TRUE);
 
         event_end_ignore_all_enters(ignore_start);
 

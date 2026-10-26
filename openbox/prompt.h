@@ -49,7 +49,6 @@ struct _ObPrompt
     ObInternalWindow super;
     gint ref;
 
-    ObtIC *ic;
 
     /* keep a copy of this because we re-render things that may need it
        (i.e. the buttons) */
