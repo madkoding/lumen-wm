@@ -44,16 +44,15 @@ The player and the weather are optional. Each one only shows up while it has som
 On Debian or Ubuntu:
 
 ```sh
-sudo apt-get install build-essential autoconf automake libtool pkg-config gettext autopoint \
+sudo apt-get install build-essential meson ninja-build pkg-config gettext \
   libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev libx11-dev libxft-dev \
   libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev libimlib2-dev
 
 git clone https://github.com/madkoding/lumen-wm
 cd lumen-wm
-./bootstrap
-./configure --prefix=/usr --sysconfdir=/etc
-make
-sudo make install
+meson setup build --prefix=/usr --sysconfdir=/etc
+meson compile -C build
+sudo meson install -C build
 ```
 
 ### 2. Turn the shelf on

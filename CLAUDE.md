@@ -15,8 +15,9 @@
 
 ## Checks
 
-- Build: `./bootstrap && ./configure --prefix=$PREFIX && make && make install`.
-- Window manager behaviour: `make tests/contract/contract-x11 && tests/contract/run.sh $PREFIX`
+- Build: `meson setup build --prefix=$PREFIX && meson install -C build` (`meson test -C build` runs the unit
+  tests).
+- Window manager behaviour: `tests/contract/run.sh $PREFIX` (after the build above)
   runs the contract cases (`tests/contract/`) on Xvfb. Every refactor towards the Wayland backend keeps
   them green; a new behaviour gets a case first.
 - Shelf and menus: `tools/shelf-themes.sh $PREFIX` shoots every bundled theme and checks contrast;

@@ -1,62 +1,55 @@
-To build Openbox from git you need:
+To build Lumen from git you need:
 
-A C Compiler (GNU GCC 3.2+ suggested)
--GNU Gettext 0.14.4
--GNU Autoconf 2.50+
--GNU Automake 1.11+
--GNU Libtool
--Xlib library/headers (devel package)
+-A C compiler (GCC or Clang)
+-Meson 0.62+ and Ninja
 -Pkg-Config
--Glib 2.0+ library/headers (devel package) (http://www.gtk.org)
--libxml2 2.0+ library/headers (devel package)
--Pango 1.10+ library/headers (devel package)
--cvs or git or neither, depending on how gettext was installed*
+-GNU Gettext
+-Xlib, Xext, Xrandr, Xinerama, Xau library/headers (devel packages)
+-Glib 2.28+, libxml2 2.6+, Pango 1.18+ and cairo library/headers (devel packages)
 
 Also you will probably want:
--Imlib2 library/headers (devel package)
+-Imlib2 and librsvg library/headers (devel packages), for icons
 -X Cursor library/headers (devel package)
+-SM and ICE library/headers (devel packages), for session management
 -Startup Notification library/headers 0.8+ (devel package)
 
-We recommend the latest versions of all these packages.
+Meson enables each of these when it finds it; `meson configure build` lists
+the options to turn them off.
 
-*) for versions below 0.18.1 cvs is needed, above that, see autopoint --version
+Do the following to build and install Lumen from git:
 
-Do the following to build and install Openbox in git:
+% meson setup build --prefix=/usr --sysconfdir=/etc
+% meson compile -C build
+% sudo meson install -C build
 
-% ./bootstrap
-% ./configure
-% make
-su to root and
-% make install
-or
-% sudo make install
-
-Don't try running it from the openbox/ directory without installing, it won't
+Don't try running it from the build directory without installing, it won't
 work. It needs to be installed before it is run.
 
-The following commands will be available: openbox-session,
-  openbox-gnome-session, openbox-kde-session, and openbox.
+The following commands will be available: lumen-wm (and openbox, a link to
+  it), openbox-session, openbox-gnome-session and openbox-kde-session.
 
-See the man pages for details about them.  If you want to run Openbox on its
+See the man pages for details about them.  If you want to run Lumen on its
   own, you probably want to run "openbox-session".
-
-
 
 ----
 In Ubuntu, you want these packages:
 
 gcc
 gettext
-automake
-autoconf
-autopoint
-libtool
-libpango1.0-dev
+meson
+ninja-build
 pkg-config
 libglib2.0-dev
 libxml2-dev
-libstartup-notification0-dev
-xorg-dev
+libpango1.0-dev
+libcairo2-dev
+libx11-dev
+libxext-dev
+libxrandr-dev
+libxinerama-dev
+libxau-dev
+libxcursor-dev
+libsm-dev
 libimlib2-dev
-
-----
+librsvg2-dev
+libstartup-notification0-dev

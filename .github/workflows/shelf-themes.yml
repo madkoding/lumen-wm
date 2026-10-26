@@ -21,27 +21,20 @@ jobs:
         timeout-minutes: 10
         run: |
           sudo -E apt-get -o Acquire::Retries=3 update
-          sudo -E apt-get -o Acquire::Retries=3 install -y --no-install-recommends build-essential autoconf automake libtool \
-            autopoint gettext pkg-config libglib2.0-dev libxml2-dev \
+          sudo -E apt-get -o Acquire::Retries=3 install -y --no-install-recommends build-essential meson ninja-build \
+            gettext pkg-config libglib2.0-dev libxml2-dev \
             libpango1.0-dev libcairo2-dev libx11-dev libxext-dev \
             libxcursor-dev libxrandr-dev libxinerama-dev libxkbcommon-dev \
             libimlib2-dev libsm-dev libice-dev libxtst-dev \
             xvfb xdotool xterm imagemagick fonts-dejavu-core picom hsetroot
       - name: Build and install
         run: |
-          ./bootstrap
-          # the checkout can leave a man page source newer than the page
-          # built from it, and docbook-to-man isn't installed
-          touch doc/*.1.in
-          mkdir ../build && cd ../build
-          "$GITHUB_WORKSPACE/configure" --prefix="$HOME/ob"
-          make -j"$(nproc)"
-          make install
-          make tests/contract/contract-x11
+          meson setup build --prefix="$HOME/ob"
+          meson compile -C build
+          meson test -C build --print-errorlogs
+          meson install -C build
       - name: Contract tests
         timeout-minutes: 5
-        env:
-          CONTRACT: ${{ github.workspace }}/../build/tests/contract/contract-x11
         run: tests/contract/run.sh "$HOME/ob"
       - name: Shoot the themes
         timeout-minutes: 10

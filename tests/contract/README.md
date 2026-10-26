@@ -13,12 +13,13 @@ on every backend: X11 today, Wayland later.
 
 ## Run
 
-    make tests/contract/contract-x11
+    meson compile -C build contract-x11
     tests/contract/run.sh $PREFIX            # every case
     tests/contract/run.sh $PREFIX iconify_hides
 
 `run.sh` starts Xvfb and the installed `lumen-wm` with `data/rc.xml`, then the
-cases. Set `CONTRACT` when the binary was built out of tree. The cases that type
+cases. Set `CONTRACT` when the build directory isn't `build`; `ninja -C build contract` runs
+them against the build's prefix. The cases that type
 and click need XTest (`libxtst-dev`) at build time, and skip without it. CI runs it in
 `.github/workflows/shelf-themes.yml`.
 
