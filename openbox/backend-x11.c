@@ -134,9 +134,14 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         out->keycode = e->xkey.keycode;
         out->keysym = e->type == KeyPress ?
             obt_keyboard_keypress_to_keysym(e) : NoSymbol;
+        out->key_mod = obt_keyboard_keyevent_to_modmask(e);
         out->button = 0;
         out->root_x = e->xkey.x_root;
         out->root_y = e->xkey.y_root;
+        out->over = e->xkey.window;
+        out->x = e->xkey.x;
+        out->y = e->xkey.y;
+        out->inside = FALSE;
         return TRUE;
     case ButtonPress:
     case ButtonRelease:
@@ -146,9 +151,26 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         out->mods = e->xbutton.state;
         out->keycode = 0;
         out->keysym = NoSymbol;
+        out->key_mod = 0;
         out->button = e->xbutton.button;
         out->root_x = e->xbutton.x_root;
         out->root_y = e->xbutton.y_root;
+        out->over = e->xbutton.window;
+        out->x = e->xbutton.x;
+        out->y = e->xbutton.y;
+        {
+            gint junk1, junk2;
+            Window wjunk;
+            guint ujunk, b, w, h;
+            /* this can cause errors to occur when the window closes */
+            obt_display_ignore_errors(TRUE);
+            junk1 = XGetGeometry(obt_display, e->xbutton.window,
+                                 &wjunk, &junk1, &junk2, &w, &h, &b, &ujunk);
+            obt_display_ignore_errors(FALSE);
+            out->inside = junk1 &&
+                e->xbutton.x >= (signed)-b && e->xbutton.y >= (signed)-b &&
+                e->xbutton.x < (signed)(w+b) && e->xbutton.y < (signed)(h+b);
+        }
         return TRUE;
     case MotionNotify:
         if (latest_motion) {
@@ -169,9 +191,14 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         out->mods = e->xmotion.state;
         out->keycode = 0;
         out->keysym = NoSymbol;
+        out->key_mod = 0;
         out->button = 0;
         out->root_x = e->xmotion.x_root;
         out->root_y = e->xmotion.y_root;
+        out->over = e->xmotion.window;
+        out->x = e->xmotion.x;
+        out->y = e->xmotion.y;
+        out->inside = FALSE;
         return TRUE;
     default:
         return FALSE;

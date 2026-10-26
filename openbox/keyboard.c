@@ -214,32 +214,32 @@ gboolean keyboard_process_interactive_grab(const XEvent *e, ObClient **client)
 }
 #endif
 
-gboolean keyboard_event(ObClient *client, const XEvent *e)
+gboolean keyboard_event(ObClient *client, const ObInputEvent *e)
 {
     KeyBindingTree *p;
     gboolean used;
     guint mods;
     gboolean repeating = FALSE;
 
-    ob_debug("Saved key: %d, %sed key: %d", repeat_key, e->type == KeyPress ? "press" : "releas", e->xkey.keycode);
+    ob_debug("Saved key: %d, %sed key: %d", repeat_key, e->type == OB_INPUT_KEY_PRESS ? "press" : "releas", e->keycode);
 
-    if (e->type == KeyRelease) {
+    if (e->type == OB_INPUT_KEY_RELEASE) {
         grab_key_passive_count(-1);
         repeat_key = 0;
         return FALSE;
     }
 
-    g_assert(e->type == KeyPress);
+    g_assert(e->type == OB_INPUT_KEY_PRESS);
     grab_key_passive_count(1);
 
-    if (repeat_key == e->xkey.keycode)
+    if (repeat_key == e->keycode)
         repeating = TRUE;
     else
-        repeat_key = e->xkey.keycode;
+        repeat_key = e->keycode;
 
-    mods = obt_keyboard_only_modmasks(e->xkey.state);
+    mods = obt_keyboard_only_modmasks(e->mods);
 
-    if (e->xkey.keycode == config_keyboard_reset_keycode &&
+    if (e->keycode == config_keyboard_reset_keycode &&
         mods == config_keyboard_reset_state)
     {
         if (chain_timer) g_source_remove(chain_timer);
@@ -253,7 +253,7 @@ gboolean keyboard_event(ObClient *client, const XEvent *e)
     else
         p = curpos->first_child;
     while (p) {
-        if (p->key == e->xkey.keycode && p->state == mods && !(p->no_repeat && repeating)) {
+        if (p->key == e->keycode && p->state == mods && !(p->no_repeat && repeating)) {
             /* if we hit a key binding, then close any open menus and run it */
             if (menu_frame_visible)
                 menu_frame_hide_all();
@@ -279,7 +279,7 @@ gboolean keyboard_event(ObClient *client, const XEvent *e)
                 actions_run_acts(p->actions,
                                  p->no_repeat ? OB_USER_ACTION_KEYBOARD_KEY_NO_REPEAT
                                               : OB_USER_ACTION_KEYBOARD_KEY,
-                                 e->xkey.state, e->xkey.x_root, e->xkey.y_root,
+                                 e->mods, e->root_x, e->root_y,
                                  0, OB_FRAME_CONTEXT_NONE, client);
             }
             used = TRUE;

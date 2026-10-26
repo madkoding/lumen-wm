@@ -18,6 +18,7 @@
 
 #include "misc.h"
 #include "frame.h"
+#include "backend.h"
 #include "obt/xml.h"
 #include "obt/keyboard.h"
 
@@ -44,7 +45,7 @@ typedef void     (*ObActionsShutdownFunc)(void);
 typedef gboolean (*ObActionsIPreFunc)(guint initial_state, gpointer options);
 typedef void     (*ObActionsIPostFunc)(gpointer options);
 typedef gboolean (*ObActionsIInputFunc)(guint initial_state,
-                                        XEvent *e,
+                                        const ObInputEvent *e,
                                         ObtIC *ic,
                                         gpointer options,
                                         gboolean *used);
@@ -117,7 +118,7 @@ void actions_run_acts(GSList *acts,
 gboolean actions_interactive_act_running(void);
 void actions_interactive_cancel_act(void);
 
-gboolean actions_interactive_input_event(XEvent *e);
+gboolean actions_interactive_input_event(const ObInputEvent *e);
 
 /*! Function for actions to call when they are moving a client around */
 void actions_client_move(ObActionsData *data, gboolean start);

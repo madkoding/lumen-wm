@@ -19,6 +19,7 @@
 #ifndef ob__mouse_h
 #define ob__mouse_h
 
+#include "backend.h"
 #include "frame.h"
 #include "misc.h"
 
@@ -33,7 +34,7 @@ gboolean mouse_bind(const gchar *buttonstr, ObFrameContext context,
                     ObMouseAction mact, struct _ObActionsAct *action);
 void mouse_unbind_all(void);
 
-gboolean mouse_event(struct _ObClient *client, XEvent *e);
+gboolean mouse_event(struct _ObClient *client, const ObInputEvent *e);
 
 void mouse_grab_for_client(struct _ObClient *client, gboolean grab);
 

@@ -20,6 +20,7 @@
 #ifndef ob__keybaord_h
 #define ob__keybaord_h
 
+#include "backend.h"
 #include "keytree.h"
 #include "frame.h"
 
@@ -40,7 +41,7 @@ void keyboard_chroot(GList *keylist);
 gboolean keyboard_bind(GList *keylist, struct _ObActionsAct *action, gboolean grab, gboolean no_repeat);
 void keyboard_unbind_all(void);
 
-gboolean keyboard_event(struct _ObClient *client, const XEvent *e);
+gboolean keyboard_event(struct _ObClient *client, const ObInputEvent *e);
 /*! @param break_chroots how many chroots to break. -1 means to break them ALL!
  */
 void keyboard_reset_chains(gint break_chroots);
