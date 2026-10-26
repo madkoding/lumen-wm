@@ -42,12 +42,12 @@ static RrAppearance *a_focus_indicator;
 static RrColor      *color_white;
 static gboolean      visible;
 
-static Window create_window(void)
+static ObWindowId create_window(void)
 {
     ObCanvasId c = ob_backend->canvas_new(OB_CANVAS_OVERLAY,
                                           OB_SURFACE_NONE, 0);
     ob_backend->canvas_fill(c, 0xff000000u);
-    return (Window)c;
+    return (ObWindowId)c;
 }
 
 void focus_cycle_indicator_startup(gboolean reconfig)

@@ -22,7 +22,6 @@
 
 #include "misc.h"
 
-#include <X11/Xlib.h>
 #include <glib.h>
 
 struct _ObClient;

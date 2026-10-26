@@ -22,7 +22,6 @@
 #include "backend.h"
 
 #include <glib.h>
-#include <X11/Xlib.h>
 
 /*! The space the shelf takes from the work area (bottom edge only) */
 extern StrutPartial shelf_strut;

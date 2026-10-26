@@ -34,15 +34,15 @@ ObPopup *popup_new(void)
     ObPopup *self = g_slice_new0(ObPopup);
 
     self->obwin.type = OB_WINDOW_CLASS_INTERNAL;
-    self->gravity = NorthWestGravity;
+    self->gravity = OB_GRAVITY_NORTHWEST;
     self->x = self->y = self->textw = self->h = 0;
     self->a_bg = RrAppearanceCopy(ob_rr_theme->osd_bg);
     self->a_text = RrAppearanceCopy(ob_rr_theme->osd_hilite_label);
     self->iconwm = self->iconhm = 1;
 
-    self->bg = (Window)ob_backend->canvas_new(OB_CANVAS_POPUP,
+    self->bg = (ObWindowId)ob_backend->canvas_new(OB_CANVAS_POPUP,
                                               OB_SURFACE_NONE, 0);
-    self->text = (Window)ob_backend->canvas_new_child(self->bg, 0);
+    self->text = (ObWindowId)ob_backend->canvas_new_child(self->bg, 0);
 
     ob_backend->canvas_set_border(self->bg, ob_rr_theme->obwidth,
         paint_argb(ob_rr_theme->osd_border_color));
@@ -226,10 +226,10 @@ void popup_delay_show(ObPopup *self, gulong msec, gchar *text)
     /* set up the x coord */
     x = self->x;
     switch (self->gravity) {
-    case NorthGravity: case CenterGravity: case SouthGravity:
+    case OB_GRAVITY_NORTH: case OB_GRAVITY_CENTER: case OB_GRAVITY_SOUTH:
         x -= w / 2;
         break;
-    case NorthEastGravity: case EastGravity: case SouthEastGravity:
+    case OB_GRAVITY_NORTHEAST: case OB_GRAVITY_EAST: case OB_GRAVITY_SOUTHEAST:
         x -= w;
         break;
     }
@@ -237,10 +237,10 @@ void popup_delay_show(ObPopup *self, gulong msec, gchar *text)
     /* set up the y coord */
     y = self->y;
     switch (self->gravity) {
-    case WestGravity: case CenterGravity: case EastGravity:
+    case OB_GRAVITY_WEST: case OB_GRAVITY_CENTER: case OB_GRAVITY_EAST:
         y -= h / 2;
         break;
-    case SouthWestGravity: case SouthGravity: case SouthEastGravity:
+    case OB_GRAVITY_SOUTHWEST: case OB_GRAVITY_SOUTH: case OB_GRAVITY_SOUTHEAST:
         y -= h;
         break;
     }
@@ -344,7 +344,7 @@ ObIconPopup *icon_popup_new(void)
     self = g_slice_new0(ObIconPopup);
     self->popup = popup_new();
     self->a_icon = RrAppearanceCopy(ob_rr_theme->a_clear_tex);
-    self->icon = (Window)ob_backend->canvas_new_child(self->popup->bg, 0);
+    self->icon = (ObWindowId)ob_backend->canvas_new_child(self->popup->bg, 0);
     ob_backend->canvas_show(self->icon, TRUE);
 
     self->popup->hasicon = TRUE;
@@ -501,7 +501,7 @@ ObPagerPopup *pager_popup_new(void)
     self->popup = popup_new();
 
     self->desks = 0;
-    self->wins = g_new(Window, self->desks);
+    self->wins = g_new(ObWindowId, self->desks);
     self->hilight = RrAppearanceCopy(ob_rr_theme->osd_hilite_bg);
     self->unhilight = RrAppearanceCopy(ob_rr_theme->osd_unhilite_bg);
 
@@ -537,11 +537,11 @@ void pager_popup_delay_show(ObPagerPopup *self, gulong msec,
             ob_backend->canvas_free(self->wins[i]);
 
     if (screen_num_desktops != self->desks)
-        self->wins = g_renew(Window, self->wins, screen_num_desktops);
+        self->wins = g_renew(ObWindowId, self->wins, screen_num_desktops);
 
     if (screen_num_desktops > self->desks)
         for (i = self->desks; i < screen_num_desktops; ++i) {
-            self->wins[i] = (Window)ob_backend->canvas_new_child(
+            self->wins[i] = (ObWindowId)ob_backend->canvas_new_child(
                 self->popup->bg, 0);
             ob_backend->canvas_set_border(self->wins[i],
                 ob_rr_theme->obwidth,

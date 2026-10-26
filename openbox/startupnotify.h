@@ -19,8 +19,8 @@
 #ifndef ob__startupnotify_h
 #define ob__startupnotify_h
 
+#include "backend.h"
 #include <glib.h>
-#include <X11/Xlib.h>
 
 void sn_startup(gboolean reconfig);
 void sn_shutdown(gboolean reconfig);
@@ -31,7 +31,7 @@ gboolean sn_app_starting(void);
   @param wmclass the WM_CLASS[1] hint
   @param name the WM_CLASS[0] hint
  */
-Time sn_app_started(const gchar *id, const gchar *wmclass, const gchar *name);
+guint32 sn_app_started(const gchar *id, const gchar *wmclass, const gchar *name);
 
 /*! Get the desktop requested via the startup-notiication protocol if one
   was requested */

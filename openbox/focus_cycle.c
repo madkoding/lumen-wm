@@ -27,7 +27,6 @@
 #include "debug.h"
 #include "config.h"
 
-#include <X11/Xlib.h>
 #include <glib.h>
 
 typedef enum {

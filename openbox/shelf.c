@@ -354,7 +354,7 @@ typedef struct {
 } Day;
 
 static struct {
-    Window           win;
+    ObWindowId           win;
     Feed             media, weather, net, vol;
     gboolean         has_media, has_weather;
     gchar           *art_file;   /* the picture the media island shows */
@@ -1759,7 +1759,7 @@ void shelf_startup(gboolean reconfig)
 
     /* drawn with real alpha when a compositor runs, else over a copy of the
        wallpaper */
-    S.win = (Window)ob_backend->canvas_new(OB_CANVAS_PANEL, OB_SURFACE_NONE,
+    S.win = (ObWindowId)ob_backend->canvas_new(OB_CANVAS_PANEL, OB_SURFACE_NONE,
                                            OB_CANVAS_INPUT_BUTTONS |
                                            OB_CANVAS_INPUT_MOTION |
                                            OB_CANVAS_INPUT_CROSSING |

@@ -58,21 +58,21 @@ struct _ObFocusCyclePopupTarget
     ObClient *client;
     RrImage *icon;
     gchar *text;
-    Window iconwin;
+    ObWindowId iconwin;
     /* This is used when the popup is in list mode */
-    Window textwin;
+    ObWindowId textwin;
 };
 
 struct _ObFocusCyclePopup
 {
     ObWindow obwin;
-    Window bg;
+    ObWindowId bg;
 
     /* This is used when the popup is in icon mode */
-    Window icon_mode_text;
+    ObWindowId icon_mode_text;
 
-    Window list_mode_up;
-    Window list_mode_down;
+    ObWindowId list_mode_up;
+    ObWindowId list_mode_down;
 
     GList *targets;
     gint n_targets;
@@ -107,9 +107,9 @@ static gboolean popup_setup    (ObFocusCyclePopup *p,
 static void     popup_render   (ObFocusCyclePopup *p,
                                 const ObClient *c);
 
-static Window create_window(Window parent)
+static ObWindowId create_window(ObWindowId parent)
 {
-    return (Window)ob_backend->canvas_new_child(parent, 0);
+    return (ObWindowId)ob_backend->canvas_new_child(parent, 0);
 }
 
 void focus_cycle_popup_startup(gboolean reconfig)
@@ -144,7 +144,7 @@ void focus_cycle_popup_startup(gboolean reconfig)
     popup.a_arrow->texture[0].data.mask.color =
         ob_rr_theme->osd_text_active_color;
 
-    popup.bg = (Window)ob_backend->canvas_new(OB_CANVAS_POPUP,
+    popup.bg = (ObWindowId)ob_backend->canvas_new(OB_CANVAS_POPUP,
                                               OB_SURFACE_NONE, 0);
     ob_backend->canvas_set_border(popup.bg, ob_rr_theme->obwidth,
         paint_argb(ob_rr_theme->osd_border_color));
@@ -756,7 +756,7 @@ void focus_cycle_popup_single_show(struct _ObClient *c)
 
         /* position the popup */
         a = screen_physical_area_primary(FALSE);
-        icon_popup_position(single_popup, CenterGravity,
+        icon_popup_position(single_popup, OB_GRAVITY_CENTER,
                             a->x + a->width / 2, a->y + a->height / 2);
         icon_popup_height(single_popup, POPUP_HEIGHT);
         icon_popup_min_width(single_popup, POPUP_WIDTH);

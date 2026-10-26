@@ -3,7 +3,6 @@
 #include "openbox/client.h"
 #include "openbox/frame.h"
 #include "openbox/screen.h"
-#include "obt/prop.h"
 
 typedef struct {
     gboolean corner_specified;

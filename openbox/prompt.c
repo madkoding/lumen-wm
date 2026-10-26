@@ -108,7 +108,7 @@ ObPrompt* prompt_new(const gchar *msg, const gchar *title,
     self->default_result = default_result;
     self->cancel_result = cancel_result;
     self->super.type = OB_WINDOW_CLASS_PROMPT;
-    self->super.window = (Window)ob_backend->canvas_new(OB_CANVAS_DIALOG,
+    self->super.window = (ObWindowId)ob_backend->canvas_new(OB_CANVAS_DIALOG,
                                                        OB_SURFACE_NONE, 0);
 
     /* set the window's title */
@@ -117,7 +117,7 @@ ObPrompt* prompt_new(const gchar *msg, const gchar *title,
 
     /* set up the text message widow */
     self->msg.text = g_strdup(msg);
-    self->msg.window = (Window)ob_backend->canvas_new_child(
+    self->msg.window = (ObWindowId)ob_backend->canvas_new_child(
         self->super.window, 0);
     ob_backend->canvas_show(self->msg.window, TRUE);
 
@@ -143,7 +143,7 @@ ObPrompt* prompt_new(const gchar *msg, const gchar *title,
 
     for (i = 0; i < self->n_buttons; ++i) {
         /* listen for button presses on the buttons */
-        self->button[i].window = (Window)ob_backend->canvas_new_child(
+        self->button[i].window = (ObWindowId)ob_backend->canvas_new_child(
             self->super.window,
             OB_CANVAS_INPUT_BUTTONS | OB_CANVAS_INPUT_DRAG);
         ob_backend->canvas_show(self->button[i].window, TRUE);
@@ -458,7 +458,7 @@ gboolean prompt_mouse_event(ObPrompt *self, const ObInputEvent *e)
     /* find the button */
     but = NULL;
     for (i = 0; i < self->n_buttons; ++i)
-        if (self->button[i].window == (Window)e->over)
+        if (self->button[i].window == (ObWindowId)e->over)
         {
             but = &self->button[i];
             break;

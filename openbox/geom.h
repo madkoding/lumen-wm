@@ -22,6 +22,22 @@
 
 #include <glib.h>
 
+/*! Which point of a window stays put when its frame or size changes, as
+  ICCCM size hints say (the values are X's). */
+typedef enum {
+    OB_GRAVITY_FORGET,
+    OB_GRAVITY_NORTHWEST,
+    OB_GRAVITY_NORTH,
+    OB_GRAVITY_NORTHEAST,
+    OB_GRAVITY_WEST,
+    OB_GRAVITY_CENTER,
+    OB_GRAVITY_EAST,
+    OB_GRAVITY_SOUTHWEST,
+    OB_GRAVITY_SOUTH,
+    OB_GRAVITY_SOUTHEAST,
+    OB_GRAVITY_STATIC
+} ObGravity;
+
 typedef struct _GravityCoord {
     gint pos;
     gint denom;

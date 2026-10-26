@@ -320,7 +320,7 @@ static gboolean find_enter(XEvent *e, gpointer data)
     return TRUE;
 }
 
-gboolean x11_input_event(const XEvent *e, ObInputEvent *out)
+static gboolean translate_input(const XEvent *e, ObInputEvent *out)
 {
     out->crossing = OB_CROSSING_NORMAL;
     out->inferior = FALSE;
@@ -426,6 +426,13 @@ gboolean x11_input_event(const XEvent *e, ObInputEvent *out)
     default:
         return FALSE;
     }
+}
+
+gboolean x11_input_event(const XEvent *e, ObInputEvent *out)
+{
+    if (!translate_input(e, out)) return FALSE;
+    out->desktop = out->over == obt_root(ob_screen);
+    return TRUE;
 }
 
 static guint32 x11_time(void)

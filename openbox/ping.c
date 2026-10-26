@@ -23,7 +23,6 @@
 #include "event.h"
 #include "debug.h"
 #include "openbox.h"
-#include "obt/prop.h"
 
 typedef struct _ObPingTarget
 {

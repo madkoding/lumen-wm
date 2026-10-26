@@ -20,6 +20,7 @@
 #ifndef ob__menuframe_h
 #define ob__menuframe_h
 
+#include "backend.h"
 #include "geom.h"
 #include "window.h"
 #include "obrender/render.h"
@@ -43,7 +44,7 @@ struct _ObMenuFrame
 {
     /* stuff to be an ObWindow */
     ObWindow obwin;
-    Window window;
+    ObWindowId window;
 
     struct _ObMenu *menu;
 
@@ -108,10 +109,10 @@ struct _ObMenuEntryFrame
     Rect area;
     gint border;
 
-    Window window;
-    Window icon;
-    Window text;
-    Window bullet;
+    ObWindowId window;
+    ObWindowId icon;
+    ObWindowId text;
+    ObWindowId bullet;
 };
 
 extern GHashTable *menu_frame_map;

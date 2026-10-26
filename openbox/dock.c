@@ -48,8 +48,8 @@ static void dock_app_grab_button(ObDockApp *app, gboolean grab)
     }
 }
 
-static guint window_hash(Window *w) { return *w; }
-static gboolean window_comp(Window *w1, Window *w2) { return *w1 == *w2; }
+static guint window_hash(ObWindowId *w) { return *w; }
+static gboolean window_comp(ObWindowId *w1, ObWindowId *w2) { return *w1 == *w2; }
 
 void dock_startup(gboolean reconfig)
 {
@@ -84,7 +84,7 @@ void dock_startup(gboolean reconfig)
                                       (GEqualFunc)window_comp);
 
     /* clicks on the dock apps stay with them */
-    dock->frame = (Window)ob_backend->canvas_new(OB_CANVAS_PANEL,
+    dock->frame = (ObWindowId)ob_backend->canvas_new(OB_CANVAS_PANEL,
                                                  OB_SURFACE_NONE, DOCK_INPUT);
     dock->a_frame = RrAppearanceCopy(ob_rr_theme->osd_bg);
     ob_backend->canvas_set_border(dock->frame, ob_rr_theme->obwidth,
@@ -116,7 +116,7 @@ void dock_shutdown(gboolean reconfig)
     dock = NULL;
 }
 
-void dock_manage(Window icon_win, Window name_win)
+void dock_manage(ObWindowId icon_win, ObWindowId name_win)
 {
     ObDockApp *app;
     ObSurfaceInfo info = { 0 };
@@ -256,48 +256,48 @@ void dock_configure(void)
     if (config_dock_floating) {
         dock->area.x = config_dock_x;
         dock->area.y = config_dock_y;
-        gravity = NorthWestGravity;
+        gravity = OB_GRAVITY_NORTHWEST;
     } else {
         switch (config_dock_pos) {
         case OB_DIRECTION_NORTHWEST:
             dock->area.x = 0;
             dock->area.y = 0;
-            gravity = NorthWestGravity;
+            gravity = OB_GRAVITY_NORTHWEST;
             break;
         case OB_DIRECTION_NORTH:
             dock->area.x = a->width / 2;
             dock->area.y = 0;
-            gravity = NorthGravity;
+            gravity = OB_GRAVITY_NORTH;
             break;
         case OB_DIRECTION_NORTHEAST:
             dock->area.x = a->width;
             dock->area.y = 0;
-            gravity = NorthEastGravity;
+            gravity = OB_GRAVITY_NORTHEAST;
             break;
         case OB_DIRECTION_WEST:
             dock->area.x = 0;
             dock->area.y = a->height / 2;
-            gravity = WestGravity;
+            gravity = OB_GRAVITY_WEST;
             break;
         case OB_DIRECTION_EAST:
             dock->area.x = a->width;
             dock->area.y = a->height / 2;
-            gravity = EastGravity;
+            gravity = OB_GRAVITY_EAST;
             break;
         case OB_DIRECTION_SOUTHWEST:
             dock->area.x = 0;
             dock->area.y = a->height;
-            gravity = SouthWestGravity;
+            gravity = OB_GRAVITY_SOUTHWEST;
             break;
         case OB_DIRECTION_SOUTH:
             dock->area.x = a->width / 2;
             dock->area.y = a->height;
-            gravity = SouthGravity;
+            gravity = OB_GRAVITY_SOUTH;
             break;
         case OB_DIRECTION_SOUTHEAST:
             dock->area.x = a->width;
             dock->area.y = a->height;
-            gravity = SouthEastGravity;
+            gravity = OB_GRAVITY_SOUTHEAST;
             break;
         default:
             g_assert_not_reached();
@@ -305,26 +305,26 @@ void dock_configure(void)
     }
 
     switch(gravity) {
-    case NorthGravity:
-    case CenterGravity:
-    case SouthGravity:
+    case OB_GRAVITY_NORTH:
+    case OB_GRAVITY_CENTER:
+    case OB_GRAVITY_SOUTH:
         dock->area.x -= dock->area.width / 2;
         break;
-    case NorthEastGravity:
-    case EastGravity:
-    case SouthEastGravity:
+    case OB_GRAVITY_NORTHEAST:
+    case OB_GRAVITY_EAST:
+    case OB_GRAVITY_SOUTHEAST:
         dock->area.x -= dock->area.width;
         break;
     }
     switch(gravity) {
-    case WestGravity:
-    case CenterGravity:
-    case EastGravity:
+    case OB_GRAVITY_WEST:
+    case OB_GRAVITY_CENTER:
+    case OB_GRAVITY_EAST:
         dock->area.y -= dock->area.height / 2;
         break;
-    case SouthWestGravity:
-    case SouthGravity:
-    case SouthEastGravity:
+    case OB_GRAVITY_SOUTHWEST:
+    case OB_GRAVITY_SOUTH:
+    case OB_GRAVITY_SOUTHEAST:
         dock->area.y -= dock->area.height;
         break;
     }
@@ -641,7 +641,7 @@ void dock_lower_dock(void)
     stacking_lower(DOCK_AS_WINDOW(dock));
 }
 
-ObDockApp* dock_find_dockapp(Window xwin)
+ObDockApp* dock_find_dockapp(ObWindowId xwin)
 {
     return g_hash_table_lookup(dock->dock_map, &xwin);
 }

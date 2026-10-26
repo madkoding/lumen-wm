@@ -19,9 +19,9 @@
 #ifndef __window_h
 #define __window_h
 
+#include "backend.h"
 #include "stacking.h"
 
-#include <X11/Xlib.h>
 #include <glib.h>
 
 typedef struct _ObWindow         ObWindow;
@@ -73,21 +73,21 @@ struct _ObPrompt;
 void window_startup (gboolean reconfig);
 void window_shutdown(gboolean reconfig);
 
-Window          window_top  (ObWindow *self);
+ObWindowId          window_top  (ObWindow *self);
 ObStackingLayer window_layer(ObWindow *self);
 
-ObWindow* window_find  (Window xwin);
-void      window_add   (Window *xwin, ObWindow *win);
-void      window_remove(Window xwin);
+ObWindow* window_find  (ObWindowId xwin);
+void      window_add   (ObWindowId *xwin, ObWindow *win);
+void      window_remove(ObWindowId xwin);
 
 /* Internal openbox-owned windows like the alt-tab popup */
 struct _ObInternalWindow {
     ObWindowClass type;
-    Window window;
+    ObWindowId window;
 };
 
 void window_manage_all(void);
-void window_manage(Window win);
+void window_manage(ObWindowId win);
 void window_unmanage_all(void);
 
 #endif

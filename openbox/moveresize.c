@@ -33,11 +33,8 @@
 #include "debug.h"
 #include "obrender/render.h"
 #include "obrender/theme.h"
-#include "obt/display.h"
-#include "obt/prop.h"
 #include "obt/keyboard.h"
 
-#include <X11/Xlib.h>
 #include <glib.h>
 
 /* how far windows move and resize with the keyboard arrows */
@@ -108,12 +105,12 @@ static void popup_coords(ObClient *c, const gchar *format, gint a, gint b)
 
     text = g_strdup_printf(format, a, b);
     if (config_resize_popup_pos == OB_RESIZE_POS_TOP)
-        popup_position(popup, SouthGravity,
+        popup_position(popup, OB_GRAVITY_SOUTH,
                        c->frame->area.x
                      + c->frame->area.width/2,
                        c->frame->area.y - ob_rr_theme->fbwidth);
     else if (config_resize_popup_pos == OB_RESIZE_POS_CENTER)
-        popup_position(popup, CenterGravity,
+        popup_position(popup, OB_GRAVITY_CENTER,
                        c->frame->area.x + c->frame->area.width / 2,
                        c->frame->area.y + c->frame->area.height / 2);
     else /* Fixed */ {
@@ -138,27 +135,27 @@ static void popup_coords(ObClient *c, const gchar *format, gint a, gint b)
 
         if (config_resize_popup_fixed.x.center) {
             if (config_resize_popup_fixed.y.center)
-                gravity = CenterGravity;
+                gravity = OB_GRAVITY_CENTER;
             else if (config_resize_popup_fixed.y.opposite)
-                gravity = SouthGravity;
+                gravity = OB_GRAVITY_SOUTH;
             else
-                gravity = NorthGravity;
+                gravity = OB_GRAVITY_NORTH;
         }
         else if (config_resize_popup_fixed.x.opposite) {
             if (config_resize_popup_fixed.y.center)
-                gravity = EastGravity;
+                gravity = OB_GRAVITY_EAST;
             else if (config_resize_popup_fixed.y.opposite)
-                gravity = SouthEastGravity;
+                gravity = OB_GRAVITY_SOUTHEAST;
             else
-                gravity = NorthEastGravity;
+                gravity = OB_GRAVITY_NORTHEAST;
         }
         else {
             if (config_resize_popup_fixed.y.center)
-                gravity = WestGravity;
+                gravity = OB_GRAVITY_WEST;
             else if (config_resize_popup_fixed.y.opposite)
-                gravity = SouthWestGravity;
+                gravity = OB_GRAVITY_SOUTHWEST;
             else
-                gravity = NorthWestGravity;
+                gravity = OB_GRAVITY_NORTHWEST;
         }
 
         popup_position(popup, gravity, x, y);

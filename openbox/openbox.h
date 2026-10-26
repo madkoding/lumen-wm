@@ -23,7 +23,6 @@
 
 #include "obrender/render.h"
 #include "obrender/theme.h"
-#include "obt/display.h"
 
 #include <glib.h>
 

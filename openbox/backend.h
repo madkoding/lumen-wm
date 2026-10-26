@@ -41,6 +41,9 @@ typedef guintptr ObSurfaceId;
 /*! A surface the core draws itself: a frame's decorations, a menu, a popup,
   the shelf. */
 typedef guintptr ObCanvasId;
+/*! What the core's window map (window.c) knows a window by: a surface or
+  a canvas. */
+typedef guintptr ObWindowId;
 
 typedef struct _ObBackend       ObBackend;
 typedef struct _ObBackendEvents ObBackendEvents;
@@ -406,6 +409,8 @@ typedef struct _ObInputEvent {
     /*! buttons, motion and crossings: the canvas or surface it happened
       over (X11: the event's window), and where in it */
     guintptr over;
+    /*! over is the desktop (X11: the root window) */
+    gboolean desktop;
     gint x, y;
     /*! buttons: x, y lie inside over, borders included */
     gboolean inside;

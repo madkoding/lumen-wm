@@ -64,11 +64,11 @@ static gboolean submenu_hide_timeout(gpointer data);
 
 /* An entry's part; when its frame is drawn with cairo it only takes the
    pointer's events, the frame paints what it shows */
-static Window createWindow(Window parent, gboolean input_only,
+static ObWindowId createWindow(ObWindowId parent, gboolean input_only,
                            ObCanvasFlags flags)
 {
     if (input_only) flags |= OB_CANVAS_INVISIBLE;
-    return (Window)ob_backend->canvas_new_child((ObCanvasId)parent, flags);
+    return (ObWindowId)ob_backend->canvas_new_child((ObCanvasId)parent, flags);
 }
 
 static void client_dest(ObClient *client, gpointer data)
@@ -126,7 +126,7 @@ ObMenuFrame* menu_frame_new(ObMenu *menu, guint show_from, ObClient *client)
 
     /* round corners are drawn with cairo, anti-aliased and with a shadow,
        where a compositor shows them */
-    self->window = (Window)ob_backend->canvas_new(
+    self->window = (ObWindowId)ob_backend->canvas_new(
         OB_CANVAS_MENU, OB_SURFACE_NONE,
         FRAME_INPUT | (config_shelf_menu_radius > 0 ? OB_CANVAS_ALPHA : 0));
     self->argb = ob_backend->canvas_has_alpha(self->window);

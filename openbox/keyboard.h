@@ -25,7 +25,6 @@
 #include "frame.h"
 
 #include <glib.h>
-#include <X11/Xlib.h>
 
 struct _ObClient;
 struct _ObActionsAct;

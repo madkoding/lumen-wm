@@ -19,9 +19,9 @@
 #ifndef __screen_h
 #define __screen_h
 
+#include "backend.h"
 #include "misc.h"
 #include "geom.h"
-#include <X11/X.h>
 
 struct _ObClient;
 
@@ -44,9 +44,9 @@ extern guint screen_last_desktop;
 /*! Are we in showing-desktop mode? */
 extern ObScreenShowDestopMode screen_show_desktop_mode;
 /*! The support window also used for focus and stacking */
-extern Window screen_support_win;
+extern ObWindowId screen_support_win;
 /*! The last time at which the user changed desktops */
-extern Time screen_desktop_user_time;
+extern guint32 screen_desktop_user_time;
 
 extern ObDesktopLayout screen_desktop_layout;
 

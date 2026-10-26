@@ -23,7 +23,6 @@
 #include "frame.h"
 #include "misc.h"
 
-#include <X11/Xlib.h>
 
 struct _ObActionsAct;
 

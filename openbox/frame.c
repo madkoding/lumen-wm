@@ -30,9 +30,6 @@
 #include "screen.h"
 #include "obrender/theme.h"
 #include "paint.h"
-#include "obt/display.h"
-#include "obt/xqueue.h"
-#include "obt/prop.h"
 
 #define FRAME_ANIMATE_ICONIFY_TIME 150000 /* .15 seconds */
 #define FRAME_ANIMATE_ICONIFY_STEP_TIME (1000 / 60) /* 60 Hz */
@@ -49,9 +46,9 @@ static gboolean frame_animate_iconify(gpointer self);
 static void frame_adjust_cursors(ObFrame *self);
 
 /* a part of the decoration, drawn by the core and placed by the backend */
-static Window createWindow(Window parent, ObCanvasFlags flags)
+static ObWindowId createWindow(ObWindowId parent, ObCanvasFlags flags)
 {
-    return (Window)ob_backend->canvas_new_child((ObCanvasId)parent, flags);
+    return (ObWindowId)ob_backend->canvas_new_child((ObCanvasId)parent, flags);
 }
 
 ObFrame *frame_new(ObClient *client)
@@ -63,7 +60,7 @@ ObFrame *frame_new(ObClient *client)
     self->client = client;
 
     /* the frame itself, which takes the client's visual */
-    self->window = (Window)ob_backend->canvas_new(OB_CANVAS_DECOR,
+    self->window = (ObWindowId)ob_backend->canvas_new(OB_CANVAS_DECOR,
                                                   client->window, 0);
 
     /* create the visible decor windows */
@@ -733,7 +730,7 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
     if (!fake) {
         Rect inner;
 
-        /* when the client has StaticGravity, it likes to move around.
+        /* when the client has OB_GRAVITY_STATIC, it likes to move around.
            also this correctly positions the client when it maps.
            this also needs to be run when the frame's decorations sizes change!
         */
@@ -1259,7 +1256,8 @@ ObFrameContext frame_context_from_string(const gchar *name)
     return OB_FRAME_CONTEXT_NONE;
 }
 
-ObFrameContext frame_context(ObClient *client, Window win, gint x, gint y)
+ObFrameContext frame_context(ObClient *client, ObWindowId win,
+                             gboolean desktop, gint x, gint y)
 {
     ObFrame *self;
     ObWindow *obwin;
@@ -1267,7 +1265,7 @@ ObFrameContext frame_context(ObClient *client, Window win, gint x, gint y)
     if (moveresize_in_progress)
         return OB_FRAME_CONTEXT_MOVE_RESIZE;
 
-    if (win == obt_root(ob_screen))
+    if (desktop)
         return OB_FRAME_CONTEXT_ROOT;
     if ((obwin = window_find(win))) {
         if (WINDOW_IS_DOCK(obwin)) {
@@ -1400,28 +1398,28 @@ void frame_client_gravity(ObFrame *self, gint *x, gint *y)
     /* horizontal */
     switch (self->client->gravity) {
     default:
-    case NorthWestGravity:
-    case SouthWestGravity:
-    case WestGravity:
+    case OB_GRAVITY_NORTHWEST:
+    case OB_GRAVITY_SOUTHWEST:
+    case OB_GRAVITY_WEST:
         break;
 
-    case NorthGravity:
-    case SouthGravity:
-    case CenterGravity:
+    case OB_GRAVITY_NORTH:
+    case OB_GRAVITY_SOUTH:
+    case OB_GRAVITY_CENTER:
         /* the middle of the client will be the middle of the frame */
         *x -= (self->size.right - self->size.left) / 2;
         break;
 
-    case NorthEastGravity:
-    case SouthEastGravity:
-    case EastGravity:
+    case OB_GRAVITY_NORTHEAST:
+    case OB_GRAVITY_SOUTHEAST:
+    case OB_GRAVITY_EAST:
         /* the right side of the client will be the right side of the frame */
         *x -= self->size.right + self->size.left -
             self->client->border_width * 2;
         break;
 
-    case ForgetGravity:
-    case StaticGravity:
+    case OB_GRAVITY_FORGET:
+    case OB_GRAVITY_STATIC:
         /* the client's position won't move */
         *x -= self->size.left - self->client->border_width;
         break;
@@ -1430,28 +1428,28 @@ void frame_client_gravity(ObFrame *self, gint *x, gint *y)
     /* vertical */
     switch (self->client->gravity) {
     default:
-    case NorthWestGravity:
-    case NorthEastGravity:
-    case NorthGravity:
+    case OB_GRAVITY_NORTHWEST:
+    case OB_GRAVITY_NORTHEAST:
+    case OB_GRAVITY_NORTH:
         break;
 
-    case CenterGravity:
-    case EastGravity:
-    case WestGravity:
+    case OB_GRAVITY_CENTER:
+    case OB_GRAVITY_EAST:
+    case OB_GRAVITY_WEST:
         /* the middle of the client will be the middle of the frame */
         *y -= (self->size.bottom - self->size.top) / 2;
         break;
 
-    case SouthWestGravity:
-    case SouthEastGravity:
-    case SouthGravity:
+    case OB_GRAVITY_SOUTHWEST:
+    case OB_GRAVITY_SOUTHEAST:
+    case OB_GRAVITY_SOUTH:
         /* the bottom of the client will be the bottom of the frame */
         *y -= self->size.bottom + self->size.top -
             self->client->border_width * 2;
         break;
 
-    case ForgetGravity:
-    case StaticGravity:
+    case OB_GRAVITY_FORGET:
+    case OB_GRAVITY_STATIC:
         /* the client's position won't move */
         *y -= self->size.top - self->client->border_width;
         break;
@@ -1463,25 +1461,25 @@ void frame_frame_gravity(ObFrame *self, gint *x, gint *y)
     /* horizontal */
     switch (self->client->gravity) {
     default:
-    case NorthWestGravity:
-    case WestGravity:
-    case SouthWestGravity:
+    case OB_GRAVITY_NORTHWEST:
+    case OB_GRAVITY_WEST:
+    case OB_GRAVITY_SOUTHWEST:
         break;
-    case NorthGravity:
-    case CenterGravity:
-    case SouthGravity:
+    case OB_GRAVITY_NORTH:
+    case OB_GRAVITY_CENTER:
+    case OB_GRAVITY_SOUTH:
         /* the middle of the client will be the middle of the frame */
         *x += (self->size.right - self->size.left) / 2;
         break;
-    case NorthEastGravity:
-    case EastGravity:
-    case SouthEastGravity:
+    case OB_GRAVITY_NORTHEAST:
+    case OB_GRAVITY_EAST:
+    case OB_GRAVITY_SOUTHEAST:
         /* the right side of the client will be the right side of the frame */
         *x += self->size.right + self->size.left -
             self->client->border_width * 2;
         break;
-    case StaticGravity:
-    case ForgetGravity:
+    case OB_GRAVITY_STATIC:
+    case OB_GRAVITY_FORGET:
         /* the client's position won't move */
         *x += self->size.left - self->client->border_width;
         break;
@@ -1490,25 +1488,25 @@ void frame_frame_gravity(ObFrame *self, gint *x, gint *y)
     /* vertical */
     switch (self->client->gravity) {
     default:
-    case NorthWestGravity:
-    case NorthGravity:
-    case NorthEastGravity:
+    case OB_GRAVITY_NORTHWEST:
+    case OB_GRAVITY_NORTH:
+    case OB_GRAVITY_NORTHEAST:
         break;
-    case WestGravity:
-    case CenterGravity:
-    case EastGravity:
+    case OB_GRAVITY_WEST:
+    case OB_GRAVITY_CENTER:
+    case OB_GRAVITY_EAST:
         /* the middle of the client will be the middle of the frame */
         *y += (self->size.bottom - self->size.top) / 2;
         break;
-    case SouthWestGravity:
-    case SouthGravity:
-    case SouthEastGravity:
+    case OB_GRAVITY_SOUTHWEST:
+    case OB_GRAVITY_SOUTH:
+    case OB_GRAVITY_SOUTHEAST:
         /* the bottom of the client will be the bottom of the frame */
         *y += self->size.bottom + self->size.top -
             self->client->border_width * 2;
         break;
-    case StaticGravity:
-    case ForgetGravity:
+    case OB_GRAVITY_STATIC:
+    case OB_GRAVITY_FORGET:
         /* the client's position won't move */
         *y += self->size.top - self->client->border_width;
         break;

@@ -23,7 +23,6 @@
 #include "obt/keyboard.h"
 
 #include <glib.h>
-#include <X11/Xlib.h>
 
 typedef struct _ObActionsDefinition   ObActionsDefinition;
 typedef struct _ObActionsAct          ObActionsAct;

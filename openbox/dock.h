@@ -19,14 +19,13 @@
 #ifndef __dock_h
 #define __dock_h
 
+#include "backend.h"
 #include "window.h"
 #include "stacking.h"
 #include "geom.h"
 #include "obrender/render.h"
 
 #include <glib.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 
 typedef struct _ObDock    ObDock;
 typedef struct _ObDockApp ObDockApp;
@@ -35,7 +34,7 @@ struct _ObDock
 {
     ObWindow obwin;
 
-    Window frame;
+    ObWindowId frame;
     RrAppearance *a_frame;
 
     /* actual position (when not auto-hidden) */
@@ -50,8 +49,8 @@ struct _ObDock
 struct _ObDockApp {
     gint ignore_unmaps;
 
-    Window icon_win;
-    Window name_win;
+    ObWindowId icon_win;
+    ObWindowId name_win;
 
     gchar *name;
     gchar *class;
@@ -70,7 +69,7 @@ void dock_shutdown(gboolean reconfig);
 void dock_configure(void);
 void dock_hide(gboolean hide);
 
-void dock_manage(Window icon_win, Window name_win);
+void dock_manage(ObWindowId icon_win, ObWindowId name_win);
 
 void dock_unmanage_all(void);
 void dock_unmanage(ObDockApp *app, gboolean reparent);
@@ -84,6 +83,6 @@ void dock_get_area(Rect *a);
 void dock_raise_dock(void);
 void dock_lower_dock(void);
 
-ObDockApp* dock_find_dockapp(Window xwin);
+ObDockApp* dock_find_dockapp(ObWindowId xwin);
 
 #endif

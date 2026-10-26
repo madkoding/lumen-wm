@@ -101,7 +101,7 @@ static void client_prompt_kill(ObClient *self);
 static gboolean client_can_steal_focus(ObClient *self,
                                        gboolean allow_other_desktop,
                                        gboolean request_from_user,
-                                       Time steal_time, Time launch_time);
+                                       guint32 steal_time, guint32 launch_time);
 static void client_setup_default_decor_and_functions(ObClient *self);
 static void client_setup_decor_undecorated(ObClient *self);
 
@@ -195,7 +195,7 @@ void client_set_list(void)
     stacking_set_list();
 }
 
-void client_manage(Window window, ObPrompt *prompt)
+void client_manage(ObWindowId window, ObPrompt *prompt)
 {
     ObClient *self;
     gboolean try_activate = FALSE;
@@ -203,7 +203,7 @@ void client_manage(Window window, ObPrompt *prompt)
     ObAppSettings *settings;
     gboolean transient = FALSE;
     Rect place;
-    Time launch_time;
+    guint32 launch_time;
     guint32 user_time;
     gboolean obplaced;
     gulong ignore_start = FALSE;
@@ -225,7 +225,7 @@ void client_manage(Window window, ObPrompt *prompt)
     /* non-zero defaults */
     /* make sure it gets updated first time */
     self->wmstate = OB_CLIENT_WM_STATE_NONE;
-    self->gravity = NorthWestGravity;
+    self->gravity = OB_GRAVITY_NORTHWEST;
     self->desktop = screen_num_desktops; /* always an invalid value */
 
     /* get all the stuff off the window */
@@ -524,7 +524,7 @@ void client_manage(Window window, ObPrompt *prompt)
              window, self->frame->window, self->class);
 }
 
-ObClient *client_fake_manage(Window window)
+ObClient *client_fake_manage(ObWindowId window)
 {
     ObClient *self;
     ObAppSettings *settings;
@@ -711,8 +711,8 @@ void client_fake_unmanage(ObClient *self)
 static gboolean client_can_steal_focus(ObClient *self,
                                        gboolean allow_other_desktop,
                                        gboolean request_from_user,
-                                       Time steal_time,
-                                       Time launch_time)
+                                       guint32 steal_time,
+                                       guint32 launch_time)
 {
     gboolean steal;
     gboolean relative_focused;
@@ -1357,7 +1357,7 @@ void client_update_transient_for(ObClient *self)
 
     if (info.has_parent) {
         if (info.parent) {
-            ObWindow *tw = window_find((Window)info.parent);
+            ObWindow *tw = window_find((ObWindowId)info.parent);
             /* if this happens then we need to check for it */
             g_assert(tw != CLIENT_AS_WINDOW(self));
             if (tw && WINDOW_IS_CLIENT(tw)) {
@@ -1892,7 +1892,7 @@ void client_update_wmhints(ObClient *self)
             client_hilite(self, FALSE);
 
         /* did the group state change? */
-        if ((Window)info.group !=
+        if ((ObWindowId)info.group !=
             (self->group ? self->group->leader : None))
         {
             ObGroup *oldgroup = self->group;
@@ -1905,7 +1905,7 @@ void client_update_wmhints(ObClient *self)
 
             /* add ourself to the group if we have one */
             if (info.group != OB_SURFACE_NONE) {
-                self->group = group_add((Window)info.group, self);
+                self->group = group_add((ObWindowId)info.group, self);
             }
 
             /* Put ourselves into the new group's transient tree, and remove
@@ -2631,20 +2631,20 @@ void client_gravity_resize_w(ObClient *self, gint *x, gint oldw, gint neww)
     /* horizontal */
     switch (self->gravity) {
     default:
-    case NorthWestGravity:
-    case WestGravity:
-    case SouthWestGravity:
-    case StaticGravity:
-    case ForgetGravity:
+    case OB_GRAVITY_NORTHWEST:
+    case OB_GRAVITY_WEST:
+    case OB_GRAVITY_SOUTHWEST:
+    case OB_GRAVITY_STATIC:
+    case OB_GRAVITY_FORGET:
         break;
-    case NorthGravity:
-    case CenterGravity:
-    case SouthGravity:
+    case OB_GRAVITY_NORTH:
+    case OB_GRAVITY_CENTER:
+    case OB_GRAVITY_SOUTH:
         *x -= (neww - oldw) / 2;
         break;
-    case NorthEastGravity:
-    case EastGravity:
-    case SouthEastGravity:
+    case OB_GRAVITY_NORTHEAST:
+    case OB_GRAVITY_EAST:
+    case OB_GRAVITY_SOUTHEAST:
         *x -= neww - oldw;
         break;
     }
@@ -2660,20 +2660,20 @@ void client_gravity_resize_h(ObClient *self, gint *y, gint oldh, gint newh)
     /* vertical */
     switch (self->gravity) {
     default:
-    case NorthWestGravity:
-    case NorthGravity:
-    case NorthEastGravity:
-    case StaticGravity:
-    case ForgetGravity:
+    case OB_GRAVITY_NORTHWEST:
+    case OB_GRAVITY_NORTH:
+    case OB_GRAVITY_NORTHEAST:
+    case OB_GRAVITY_STATIC:
+    case OB_GRAVITY_FORGET:
         break;
-    case WestGravity:
-    case CenterGravity:
-    case EastGravity:
+    case OB_GRAVITY_WEST:
+    case OB_GRAVITY_CENTER:
+    case OB_GRAVITY_EAST:
         *y -= (newh - oldh) / 2;
         break;
-    case SouthWestGravity:
-    case SouthGravity:
-    case SouthEastGravity:
+    case OB_GRAVITY_SOUTHWEST:
+    case OB_GRAVITY_SOUTH:
+    case OB_GRAVITY_SOUTHEAST:
         *y -= newh - oldh;
         break;
     }
@@ -3744,7 +3744,7 @@ void client_activate(ObClient *self, gboolean desktop,
 {
     self = client_focus_target(self);
 
-    if (client_can_steal_focus(self, desktop, user, event_time(), CurrentTime))
+    if (client_can_steal_focus(self, desktop, user, event_time(), 0))
         client_present(self, here, raise, unshade);
     else
         client_hilite(self, TRUE);

@@ -307,7 +307,7 @@ gint main(gint argc, gchar **argv)
                 /* focus what was focused if a wm was already running */
                 ob_backend->previous_state(&prev);
                 if (prev.active &&
-                    (w = window_find((Window)prev.active)) &&
+                    (w = window_find((ObWindowId)prev.active)) &&
                     WINDOW_IS_CLIENT(w))
                 {
                     client_focus(WINDOW_AS_CLIENT(w));
