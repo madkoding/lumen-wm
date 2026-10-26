@@ -207,6 +207,9 @@
     </pin>
     -->
   </pins>
+  <!-- wifi, volume and battery show their levels by default (nmcli, wpctl,
+       /sys/class/power_supply); <network>, <volume> and <battery>no</battery>
+       replace them, see docs/configuration.md -->
   <!-- optional islands between the dock and the clock. A command prints what
        they show (see doc/shelf.md); no output hides the island. -->
   <!--

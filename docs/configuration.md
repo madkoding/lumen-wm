@@ -82,12 +82,17 @@ smoothly.
 
 ## Optional extras
 
-Each extra is a small section inside `<shelf>`. Copy the ones you want. They use common tools (`nmcli`,
-`wpctl`, `playerctl`), so install those first.
+Each extra is a small section inside `<shelf>`. They use common tools (`nmcli`, `wpctl`, `playerctl`), so
+install those first.
+
+**Wifi, volume and battery work out of the box.** With the shelf on, Lumen shows the wifi signal (`nmcli`), the
+volume (`wpctl`, PipeWire) and the battery charge as percentages under their icons, without any of the sections
+below. Add a section only to use other commands; `<battery>no</battery>` hides the battery.
 
 ### Wifi
 
-Click the wifi icon to see nearby networks and connect to one.
+Click the wifi icon to see nearby networks and connect to one. The default is the `<list>` and `<connect>`
+below; add `<secured>` and `<password>` to join networks with a password.
 
 ```xml
 <network>
@@ -103,7 +108,8 @@ command line, so other users of the machine could see it while it connects.
 
 ### Volume
 
-Click for a menu, scroll to change the volume, middle click to mute.
+Click for a menu, scroll to change the volume, middle click to mute. The default reads the level with
+`wpctl get-volume`; this example uses `pamixer` instead.
 
 ```xml
 <volume>
@@ -122,7 +128,7 @@ Click for a menu, scroll to change the volume, middle click to mute.
   <item><name>Restart</name><command>systemctl reboot</command></item>
   <item><name>Shut down</name><command>systemctl poweroff</command></item>
 </power>
-<battery>yes</battery>   <!-- only appears on machines with a battery -->
+<battery>yes</battery>   <!-- the default; only appears on machines with a battery -->
 ```
 
 ### Music player
@@ -222,7 +228,7 @@ Sun|67°|cloud
   <power>
     <item><name>Log out</name><command>lumen-wm --exit</command></item>
   </power>
-  <battery>yes</battery>
+  <battery>yes</battery>              <!-- default yes with the shelf on -->
   <batteryDir></batteryDir>           <!-- default: found in /sys/class/power_supply -->
 
   <menuRadius>12</menuRadius>         <!-- 12 with the shelf on, 0 with it off -->
