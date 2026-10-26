@@ -22,6 +22,7 @@
 #include "screen.h"
 #include "client.h"
 #include "framerender.h"
+#include "paint.h"
 #include "obrender/theme.h"
 
 static void framerender_label(ObFrame *self, RrAppearance *a);
@@ -43,32 +44,23 @@ void framerender_frame(ObFrame *self)
     self->need_render = FALSE;
 
     {
-        gulong px;
+        const RrColor *px;
 
         px = (self->focused ?
-              RrColorPixel(ob_rr_theme->cb_focused_color) :
-              RrColorPixel(ob_rr_theme->cb_unfocused_color));
+              ob_rr_theme->cb_focused_color :
+              ob_rr_theme->cb_unfocused_color);
 
-        XSetWindowBackground(obt_display, self->backback, px);
-        XClearWindow(obt_display, self->backback);
-        XSetWindowBackground(obt_display, self->innerleft, px);
-        XClearWindow(obt_display, self->innerleft);
-        XSetWindowBackground(obt_display, self->innertop, px);
-        XClearWindow(obt_display, self->innertop);
-        XSetWindowBackground(obt_display, self->innerright, px);
-        XClearWindow(obt_display, self->innerright);
-        XSetWindowBackground(obt_display, self->innerbottom, px);
-        XClearWindow(obt_display, self->innerbottom);
-        XSetWindowBackground(obt_display, self->innerbll, px);
-        XClearWindow(obt_display, self->innerbll);
-        XSetWindowBackground(obt_display, self->innerbrr, px);
-        XClearWindow(obt_display, self->innerbrr);
-        XSetWindowBackground(obt_display, self->innerblb, px);
-        XClearWindow(obt_display, self->innerblb);
-        XSetWindowBackground(obt_display, self->innerbrb, px);
-        XClearWindow(obt_display, self->innerbrb);
+        paint_fill(self->backback, px);
+        paint_fill(self->innerleft, px);
+        paint_fill(self->innertop, px);
+        paint_fill(self->innerright, px);
+        paint_fill(self->innerbottom, px);
+        paint_fill(self->innerbll, px);
+        paint_fill(self->innerbrr, px);
+        paint_fill(self->innerblb, px);
+        paint_fill(self->innerbrb, px);
 
-        px = RrColorPixel(self->focused ?
+        px = (self->focused ?
             (self->client->undecorated ?
              ob_rr_theme->frame_undecorated_focused_border_color :
              ob_rr_theme->frame_focused_border_color) :
@@ -76,53 +68,35 @@ void framerender_frame(ObFrame *self)
              ob_rr_theme->frame_undecorated_unfocused_border_color :
              ob_rr_theme->frame_unfocused_border_color));
 
-        XSetWindowBackground(obt_display, self->left, px);
-        XClearWindow(obt_display, self->left);
-        XSetWindowBackground(obt_display, self->right, px);
-        XClearWindow(obt_display, self->right);
+        paint_fill(self->left, px);
+        paint_fill(self->right, px);
 
-        XSetWindowBackground(obt_display, self->titleleft, px);
-        XClearWindow(obt_display, self->titleleft);
-        XSetWindowBackground(obt_display, self->titletop, px);
-        XClearWindow(obt_display, self->titletop);
-        XSetWindowBackground(obt_display, self->titletopleft, px);
-        XClearWindow(obt_display, self->titletopleft);
-        XSetWindowBackground(obt_display, self->titletopright, px);
-        XClearWindow(obt_display, self->titletopright);
-        XSetWindowBackground(obt_display, self->titleright, px);
-        XClearWindow(obt_display, self->titleright);
+        paint_fill(self->titleleft, px);
+        paint_fill(self->titletop, px);
+        paint_fill(self->titletopleft, px);
+        paint_fill(self->titletopright, px);
+        paint_fill(self->titleright, px);
 
-        XSetWindowBackground(obt_display, self->handleleft, px);
-        XClearWindow(obt_display, self->handleleft);
-        XSetWindowBackground(obt_display, self->handletop, px);
-        XClearWindow(obt_display, self->handletop);
-        XSetWindowBackground(obt_display, self->handleright, px);
-        XClearWindow(obt_display, self->handleright);
-        XSetWindowBackground(obt_display, self->handlebottom, px);
-        XClearWindow(obt_display, self->handlebottom);
+        paint_fill(self->handleleft, px);
+        paint_fill(self->handletop, px);
+        paint_fill(self->handleright, px);
+        paint_fill(self->handlebottom, px);
 
-        XSetWindowBackground(obt_display, self->lgripleft, px);
-        XClearWindow(obt_display, self->lgripleft);
-        XSetWindowBackground(obt_display, self->lgriptop, px);
-        XClearWindow(obt_display, self->lgriptop);
-        XSetWindowBackground(obt_display, self->lgripbottom, px);
-        XClearWindow(obt_display, self->lgripbottom);
+        paint_fill(self->lgripleft, px);
+        paint_fill(self->lgriptop, px);
+        paint_fill(self->lgripbottom, px);
 
-        XSetWindowBackground(obt_display, self->rgripright, px);
-        XClearWindow(obt_display, self->rgripright);
-        XSetWindowBackground(obt_display, self->rgriptop, px);
-        XClearWindow(obt_display, self->rgriptop);
-        XSetWindowBackground(obt_display, self->rgripbottom, px);
-        XClearWindow(obt_display, self->rgripbottom);
+        paint_fill(self->rgripright, px);
+        paint_fill(self->rgriptop, px);
+        paint_fill(self->rgripbottom, px);
 
         /* don't use the separator color for shaded windows */
         if (!self->client->shaded)
             px = (self->focused ?
-                  RrColorPixel(ob_rr_theme->title_separator_focused_color) :
-                  RrColorPixel(ob_rr_theme->title_separator_unfocused_color));
+                  ob_rr_theme->title_separator_focused_color :
+                  ob_rr_theme->title_separator_unfocused_color);
 
-        XSetWindowBackground(obt_display, self->titlebottom, px);
-        XClearWindow(obt_display, self->titlebottom);
+        paint_fill(self->titlebottom, px);
     }
 
     if (self->decorations & OB_FRAME_DECOR_TITLEBAR) {
@@ -244,37 +218,38 @@ void framerender_frame(ObFrame *self)
         }
         clear = ob_rr_theme->a_clear;
 
-        RrPaint(t, self->title, self->width, ob_rr_theme->title_height);
+        paint_canvas(self->title, t, self->width,
+                     ob_rr_theme->title_height);
 
         clear->surface.parent = t;
         clear->surface.parenty = 0;
 
         clear->surface.parentx = ob_rr_theme->grip_width;
 
-        RrPaint(clear, self->topresize,
-                self->width - ob_rr_theme->grip_width * 2,
-                ob_rr_theme->paddingy + 1);
+        paint_canvas(self->topresize, clear,
+                     self->width - ob_rr_theme->grip_width * 2,
+                     ob_rr_theme->paddingy + 1);
 
         clear->surface.parentx = 0;
 
         if (ob_rr_theme->grip_width > 0)
-            RrPaint(clear, self->tltresize,
-                    ob_rr_theme->grip_width, ob_rr_theme->paddingy + 1);
+            paint_canvas(self->tltresize, clear,
+                         ob_rr_theme->grip_width, ob_rr_theme->paddingy + 1);
         if (ob_rr_theme->title_height > 0)
-            RrPaint(clear, self->tllresize,
-                    ob_rr_theme->paddingx + 1, ob_rr_theme->title_height);
+            paint_canvas(self->tllresize, clear,
+                         ob_rr_theme->paddingx + 1, ob_rr_theme->title_height);
 
         clear->surface.parentx = self->width - ob_rr_theme->grip_width;
 
         if (ob_rr_theme->grip_width > 0)
-            RrPaint(clear, self->trtresize,
-                    ob_rr_theme->grip_width, ob_rr_theme->paddingy + 1);
+            paint_canvas(self->trtresize, clear,
+                         ob_rr_theme->grip_width, ob_rr_theme->paddingy + 1);
 
         clear->surface.parentx = self->width - (ob_rr_theme->paddingx + 1);
 
         if (ob_rr_theme->title_height > 0)
-            RrPaint(clear, self->trrresize,
-                    ob_rr_theme->paddingx + 1, ob_rr_theme->title_height);
+            paint_canvas(self->trrresize, clear,
+                         ob_rr_theme->paddingx + 1, ob_rr_theme->title_height);
 
         /* set parents for any parent relative guys */
         l->surface.parent = t;
@@ -322,7 +297,8 @@ void framerender_frame(ObFrame *self)
         h = (self->focused ?
              ob_rr_theme->a_focused_handle : ob_rr_theme->a_unfocused_handle);
 
-        RrPaint(h, self->handle, self->width, ob_rr_theme->handle_height);
+        paint_canvas(self->handle, h, self->width,
+                     ob_rr_theme->handle_height);
 
         if (self->decorations & OB_FRAME_DECOR_GRIPS) {
             g = (self->focused ?
@@ -334,18 +310,18 @@ void framerender_frame(ObFrame *self)
             g->surface.parentx = 0;
             g->surface.parenty = 0;
 
-            RrPaint(g, self->lgrip,
-                    ob_rr_theme->grip_width, ob_rr_theme->handle_height);
+            paint_canvas(self->lgrip, g,
+                         ob_rr_theme->grip_width, ob_rr_theme->handle_height);
 
             g->surface.parentx = self->width - ob_rr_theme->grip_width;
             g->surface.parenty = 0;
 
-            RrPaint(g, self->rgrip,
-                    ob_rr_theme->grip_width, ob_rr_theme->handle_height);
+            paint_canvas(self->rgrip, g,
+                         ob_rr_theme->grip_width, ob_rr_theme->handle_height);
         }
     }
 
-    XFlush(obt_display);
+    ob_backend->flush(FALSE);
 }
 
 static void framerender_label(ObFrame *self, RrAppearance *a)
@@ -353,7 +329,8 @@ static void framerender_label(ObFrame *self, RrAppearance *a)
     if (!self->label_on) return;
     /* set the texture's text! */
     a->texture[0].data.text.string = self->client->title;
-    RrPaint(a, self->label, self->label_width, ob_rr_theme->label_height);
+    paint_canvas(self->label, a, self->label_width,
+                 ob_rr_theme->label_height);
 }
 
 static void framerender_icon(ObFrame *self, RrAppearance *a)
@@ -374,39 +351,41 @@ static void framerender_icon(ObFrame *self, RrAppearance *a)
         a->texture[0].type = RR_TEXTURE_NONE;
     }
 
-    RrPaint(a, self->icon,
-            ob_rr_theme->button_size + 2, ob_rr_theme->button_size + 2);
+    paint_canvas(self->icon, a,
+                 ob_rr_theme->button_size + 2, ob_rr_theme->button_size + 2);
 }
 
 static void framerender_max(ObFrame *self, RrAppearance *a)
 {
     if (!self->max_on) return;
-    RrPaint(a, self->max, ob_rr_theme->button_size, ob_rr_theme->button_size);
+    paint_canvas(self->max, a,
+                 ob_rr_theme->button_size, ob_rr_theme->button_size);
 }
 
 static void framerender_iconify(ObFrame *self, RrAppearance *a)
 {
     if (!self->iconify_on) return;
-    RrPaint(a, self->iconify,
-            ob_rr_theme->button_size, ob_rr_theme->button_size);
+    paint_canvas(self->iconify, a,
+                 ob_rr_theme->button_size, ob_rr_theme->button_size);
 }
 
 static void framerender_desk(ObFrame *self, RrAppearance *a)
 {
     if (!self->desk_on) return;
-    RrPaint(a, self->desk, ob_rr_theme->button_size, ob_rr_theme->button_size);
+    paint_canvas(self->desk, a,
+                 ob_rr_theme->button_size, ob_rr_theme->button_size);
 }
 
 static void framerender_shade(ObFrame *self, RrAppearance *a)
 {
     if (!self->shade_on) return;
-    RrPaint(a, self->shade,
-            ob_rr_theme->button_size, ob_rr_theme->button_size);
+    paint_canvas(self->shade, a,
+                 ob_rr_theme->button_size, ob_rr_theme->button_size);
 }
 
 static void framerender_close(ObFrame *self, RrAppearance *a)
 {
     if (!self->close_on) return;
-    RrPaint(a, self->close,
-            ob_rr_theme->button_size, ob_rr_theme->button_size);
+    paint_canvas(self->close, a,
+                 ob_rr_theme->button_size, ob_rr_theme->button_size);
 }

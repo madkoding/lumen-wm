@@ -302,6 +302,8 @@ openbox_lumen_wm_SOURCES = \
 	openbox/mwm.h \
 	openbox/openbox.c \
 	openbox/openbox.h \
+	openbox/paint.c \
+	openbox/paint.h \
 	openbox/ping.c \
 	openbox/ping.h \
 	openbox/place.c \
