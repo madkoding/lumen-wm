@@ -95,6 +95,16 @@ typedef enum {
     OB_SURFACE_STATE_UNDECORATED    = 1 << 13
 } ObSurfaceStates;
 
+/*! What a new surface is, to manage it as. */
+typedef enum {
+    OB_SURFACE_KIND_GONE,       /*!< it went away before it could be
+                                  managed */
+    OB_SURFACE_KIND_UNMANAGED,  /*!< it places itself (X11
+                                  override-redirect) */
+    OB_SURFACE_KIND_CLIENT,
+    OB_SURFACE_KIND_DOCKAPP     /*!< OB_BACKEND_CAP_DOCKAPPS */
+} ObSurfaceKind;
+
 /*! What the user may do to a surface, for taskbars and pagers to offer
   (_NET_WM_ALLOWED_ACTIONS on X11). */
 typedef enum {
@@ -401,6 +411,12 @@ struct _ObBackend {
 
     /* --- managed surfaces --- */
 
+    /*! The surfaces already on screen when the window manager starts, to
+      manage; g_free() the list. */
+    ObSurfaceId *(*existing_surfaces)(guint *n);
+    /*! What it is. For a dock app, icon is what it shows in the dock (its
+      own window or its icon window, on X11). */
+    ObSurfaceKind (*surface_kind)(ObSurfaceId s, ObSurfaceId *icon);
     /*! Start managing it: hear about what it changes, and keep it alive
       if the window manager goes away (X11: the save set). internal: one
       of the core's own windows (a prompt), which also takes its keys. */
@@ -519,6 +535,9 @@ struct _ObBackend {
       that must look like one (X11 XGrabServer; nothing on Wayland). The
       core counts nested grabs. */
     void (*grab_server)(gboolean grab);
+    /*! The key that types the keysym called name (as in rc.xml). FALSE
+      when no keysym has that name; keycode 0 when no key types it. */
+    gboolean (*key_named)(const gchar *name, guint *keycode);
     /*! Make sure a key binding reaches the core whichever surface has the
       focus, with any lock key on or off. keycode and mods are xkb's (on
       X11, the server's keycodes and modifier masks). */

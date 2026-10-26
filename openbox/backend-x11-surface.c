@@ -27,6 +27,9 @@
 #include "obt/prop.h"
 #include "obt/xqueue.h"
 
+#include <X11/Xutil.h>
+#include <string.h>
+
 #ifdef SHAPE
 #include <X11/extensions/shape.h>
 #endif
@@ -57,6 +60,109 @@ typedef struct {
    installed */
 static GHashTable *colormaps;
 static Window colors_owner = None;
+
+ObSurfaceId *x11_existing_surfaces(guint *n)
+{
+    guint i, j, nchild, count = 0;
+    Window w, *children;
+    XWMHints *wmhints;
+    XWindowAttributes attrib;
+    ObSurfaceId *list;
+
+    if (!XQueryTree(obt_display, RootWindow(obt_display, ob_screen),
+                    &w, &w, &children, &nchild)) {
+        ob_debug("XQueryTree failed in x11_existing_surfaces");
+        nchild = 0;
+    }
+
+    /* remove all icon windows from the list */
+    for (i = 0; i < nchild; i++) {
+        if (children[i] == None) continue;
+        wmhints = XGetWMHints(obt_display, children[i]);
+        if (wmhints) {
+            if ((wmhints->flags & IconWindowHint) &&
+                (wmhints->icon_window != children[i]))
+                for (j = 0; j < nchild; j++)
+                    if (children[j] == wmhints->icon_window) {
+                        /* XXX watch the window though */
+                        children[j] = None;
+                        break;
+                    }
+            XFree(wmhints);
+        }
+    }
+
+    list = g_new(ObSurfaceId, nchild + 1);
+    for (i = 0; i < nchild; ++i) {
+        if (children[i] == None) continue;
+        if (XGetWindowAttributes(obt_display, children[i], &attrib) &&
+            attrib.map_state != IsUnmapped)
+            list[count++] = (ObSurfaceId)children[i];
+    }
+
+    if (children) XFree(children);
+    *n = count;
+    return list;
+}
+
+static gboolean check_unmap(XEvent *e, gpointer data)
+{
+    const Window win = *(Window*)data;
+    return ((e->type == DestroyNotify && e->xdestroywindow.window == win) ||
+            (e->type == UnmapNotify && e->xunmap.window == win));
+}
+
+ObSurfaceKind x11_surface_kind(ObSurfaceId s, ObSurfaceId *icon)
+{
+    Window win = (Window)s;
+    XWindowAttributes attrib;
+    XWMHints *wmhints;
+    gboolean is_dockapp = FALSE;
+    Window icon_win = None;
+
+    /* check if it has already been unmapped by the time we started
+       mapping. the core grabs the server first, which syncs, so we don't
+       have to here */
+    if (xqueue_exists_local(check_unmap, &win)) {
+        ob_debug("Trying to manage unmapped window. Aborting that.");
+        return OB_SURFACE_KIND_GONE;
+    }
+    if (!XGetWindowAttributes(obt_display, win, &attrib))
+        return OB_SURFACE_KIND_GONE;
+    if (attrib.override_redirect)
+        return OB_SURFACE_KIND_UNMANAGED;
+
+    /* is the window a docking app */
+    if ((wmhints = XGetWMHints(obt_display, win))) {
+        if ((wmhints->flags & StateHint) &&
+            wmhints->initial_state == WithdrawnState)
+        {
+            if (wmhints->flags & IconWindowHint)
+                icon_win = wmhints->icon_window;
+            is_dockapp = TRUE;
+        }
+        XFree(wmhints);
+    }
+    /* This is a new method to declare that a window is a dockapp, being
+       implemented by Windowmaker, to alleviate pain in writing GTK+
+       dock apps.
+       http://thread.gmane.org/gmane.comp.window-managers.openbox/4881
+    */
+    if (!is_dockapp) {
+        gchar **ss;
+        if (OBT_PROP_GETSS_TYPE(win, WM_CLASS, STRING_NO_CC, &ss))
+        {
+            if (ss[0] && ss[1] && strcmp(ss[1], "DockApp") == 0)
+                is_dockapp = TRUE;
+            g_strfreev(ss);
+        }
+    }
+
+    if (!is_dockapp)
+        return OB_SURFACE_KIND_CLIENT;
+    *icon = (ObSurfaceId)(icon_win ? icon_win : win);
+    return OB_SURFACE_KIND_DOCKAPP;
+}
 
 void x11_surface_adopt(ObSurfaceId s, gboolean internal)
 {

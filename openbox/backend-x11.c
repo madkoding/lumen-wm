@@ -1377,6 +1377,15 @@ static void x11_canvas_set_opacity(ObCanvasId c, gboolean set,
         OBT_PROP_ERASE((Window)c, NET_WM_WINDOW_OPACITY);
 }
 
+static gboolean x11_key_named(const gchar *name, guint *keycode)
+{
+    KeySym sym = XStringToKeysym(name);
+
+    if (sym == NoSymbol) return FALSE;
+    *keycode = XKeysymToKeycode(obt_display, sym);
+    return TRUE;
+}
+
 static void x11_flush(gboolean wait)
 {
     if (wait)
@@ -1766,6 +1775,8 @@ const ObBackend ob_backend_x11 = {
     .output_count = x11_output_count,
     .output_area = x11_output_area,
 
+    .existing_surfaces = x11_existing_surfaces,
+    .surface_kind = x11_surface_kind,
     .surface_adopt = x11_surface_adopt,
     .surface_unwatch = x11_surface_unwatch,
     .surface_frame = x11_surface_frame,
@@ -1800,6 +1811,7 @@ const ObBackend ob_backend_x11 = {
     .grab_pointer = x11_grab_pointer,
     .grab_keyboard = x11_grab_keyboard,
     .grab_server = x11_grab_server,
+    .key_named = x11_key_named,
     .bind_key = x11_bind_key,
     .unbind_all_keys = x11_unbind_all_keys,
     .bind_button = x11_bind_button,

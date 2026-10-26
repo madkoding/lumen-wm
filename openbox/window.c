@@ -26,8 +26,7 @@
 #include "prompt.h"
 #include "debug.h"
 #include "grab.h"
-#include "obt/prop.h"
-#include "obt/xqueue.h"
+#include "backend.h"
 
 static GHashTable *window_map;
 
@@ -106,119 +105,36 @@ void window_remove(Window xwin)
 
 void window_manage_all(void)
 {
-    guint i, j, nchild;
-    Window w, *children;
-    XWMHints *wmhints;
-    XWindowAttributes attrib;
+    guint i, n;
+    ObSurfaceId *existing = ob_backend->existing_surfaces(&n);
 
-    if (!XQueryTree(obt_display, RootWindow(obt_display, ob_screen),
-                    &w, &w, &children, &nchild)) {
-        ob_debug("XQueryTree failed in window_manage_all");
-        nchild = 0;
-    }
-
-    /* remove all icon windows from the list */
-    for (i = 0; i < nchild; i++) {
-        if (children[i] == None) continue;
-        wmhints = XGetWMHints(obt_display, children[i]);
-        if (wmhints) {
-            if ((wmhints->flags & IconWindowHint) &&
-                (wmhints->icon_window != children[i]))
-                for (j = 0; j < nchild; j++)
-                    if (children[j] == wmhints->icon_window) {
-                        /* XXX watch the window though */
-                        children[j] = None;
-                        break;
-                    }
-            XFree(wmhints);
-        }
-    }
-
-    for (i = 0; i < nchild; ++i) {
-        if (children[i] == None) continue;
-        if (window_find(children[i])) continue; /* skip our own windows */
-        if (XGetWindowAttributes(obt_display, children[i], &attrib)) {
-            if (attrib.map_state == IsUnmapped)
-                ;
-            else
-                window_manage(children[i]);
-        }
-    }
-
-    if (children) XFree(children);
-}
-
-static gboolean check_unmap(XEvent *e, gpointer data)
-{
-    const Window win = *(Window*)data;
-    return ((e->type == DestroyNotify && e->xdestroywindow.window == win) ||
-            (e->type == UnmapNotify && e->xunmap.window == win));
+    for (i = 0; i < n; ++i)
+        if (!window_find((Window)existing[i])) /* skip our own windows */
+            window_manage((Window)existing[i]);
+    g_free(existing);
 }
 
 void window_manage(Window win)
 {
-    XWindowAttributes attrib;
-    gboolean no_manage = FALSE;
-    gboolean is_dockapp = FALSE;
-    Window icon_win = None;
+    ObSurfaceId icon = OB_SURFACE_NONE;
 
     grab_server(TRUE);
 
-    /* check if it has already been unmapped by the time we started
-       mapping. the grab does a sync so we don't have to here */
-    if (xqueue_exists_local(check_unmap, &win)) {
-        ob_debug("Trying to manage unmapped window. Aborting that.");
-        no_manage = TRUE;
-    }
-    else if (!XGetWindowAttributes(obt_display, win, &attrib))
-        no_manage = TRUE;
-    else {
-        XWMHints *wmhints;
-
-        /* is the window a docking app */
-        is_dockapp = FALSE;
-        if ((wmhints = XGetWMHints(obt_display, win))) {
-            if ((wmhints->flags & StateHint) &&
-                wmhints->initial_state == WithdrawnState)
-            {
-                if (wmhints->flags & IconWindowHint)
-                    icon_win = wmhints->icon_window;
-                is_dockapp = TRUE;
-            }
-            XFree(wmhints);
-        }
-        /* This is a new method to declare that a window is a dockapp, being
-           implemented by Windowmaker, to alleviate pain in writing GTK+
-           dock apps.
-           http://thread.gmane.org/gmane.comp.window-managers.openbox/4881
-        */
-        if (!is_dockapp) {
-            gchar **ss;
-            if (OBT_PROP_GETSS_TYPE(win, WM_CLASS, STRING_NO_CC, &ss))
-            {
-                if (ss[0] && ss[1] && strcmp(ss[1], "DockApp") == 0)
-                    is_dockapp = TRUE;
-                g_strfreev(ss);
-            }
-        }
-    }
-
-    if (!no_manage) {
-        if (attrib.override_redirect) {
-            ob_debug("not managing override redirect window 0x%x", win);
-            grab_server(FALSE);
-        }
-        else if (is_dockapp) {
-            if (!icon_win)
-                icon_win = win;
-            dock_manage(icon_win, win);
-        }
-        else
-            client_manage(win, NULL);
-    }
-    else {
+    switch (ob_backend->surface_kind(win, &icon)) {
+    case OB_SURFACE_KIND_GONE:
         grab_server(FALSE);
         ob_debug("FAILED to manage window 0x%x", win);
+        break;
+    case OB_SURFACE_KIND_UNMANAGED:
+        ob_debug("not managing override redirect window 0x%x", win);
+        grab_server(FALSE);
+        break;
+    case OB_SURFACE_KIND_DOCKAPP:
+        dock_manage((Window)icon, win);
+        break;
+    case OB_SURFACE_KIND_CLIENT:
+        client_manage(win, NULL);
+        break;
     }
 }
 

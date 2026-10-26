@@ -25,6 +25,8 @@
 #include <X11/Xlib.h>
 
 /* backend-x11-surface.c: managed windows and the frames around them */
+ObSurfaceId *x11_existing_surfaces(guint *n);
+ObSurfaceKind x11_surface_kind(ObSurfaceId s, ObSurfaceId *icon);
 void x11_surface_adopt(ObSurfaceId s, gboolean internal);
 void x11_surface_unwatch(ObSurfaceId s, gboolean internal);
 void x11_surface_frame(ObSurfaceId s, ObCanvasId frame);
