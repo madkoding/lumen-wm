@@ -25,6 +25,7 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_xdg_activation_v1.h>
 #include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/edges.h>
@@ -34,6 +35,8 @@ static struct wl_listener new_xdg_surface;
 static struct wlr_xdg_decoration_manager_v1 *decorations;
 static struct wl_listener new_decoration;
 static void decoration_new(struct wl_listener *l, void *data);
+static struct wlr_xdg_activation_v1 *activation;
+static struct wl_listener request_activate;
 /* the WlrSurfaces alive, to check the core's ids against */
 static GHashTable *alive;
 /* mapped toplevels, in the order they mapped */
@@ -503,6 +506,19 @@ static void xdg_new_surface(struct wl_listener *l, void *data)
         new_popup(x->popup);
 }
 
+/* xdg-activation: a client brings one of its windows forward, as an
+   application sends _NET_ACTIVE_WINDOW on X11 */
+static void activation_request(struct wl_listener *l, void *data)
+{
+    const struct wlr_xdg_activation_v1_request_activate_event *e = data;
+    WlrSurface *s = lw_surface_of(e->surface);
+
+    if (!s || !s->managed) return;
+    lw_begin(0);
+    lw_events->request_activate(id_of(s), OB_REQUEST_FROM_APPLICATION, 0);
+    lw_end();
+}
+
 void lw_surfaces_startup(void)
 {
     alive = g_hash_table_new(g_direct_hash, g_direct_equal);
@@ -513,12 +529,16 @@ void lw_surfaces_startup(void)
     new_decoration.notify = decoration_new;
     wl_signal_add(&decorations->events.new_toplevel_decoration,
                   &new_decoration);
+    activation = wlr_xdg_activation_v1_create(lw_display);
+    request_activate.notify = activation_request;
+    wl_signal_add(&activation->events.request_activate, &request_activate);
 }
 
 void lw_surfaces_shutdown(void)
 {
     wl_list_remove(&new_xdg_surface.link);
     wl_list_remove(&new_decoration.link);
+    wl_list_remove(&request_activate.link);
     if (focus_report) wl_event_source_remove(focus_report);
     focus_report = NULL;
     if (revert_report) wl_event_source_remove(revert_report);
