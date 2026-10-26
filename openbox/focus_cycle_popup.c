@@ -687,10 +687,9 @@ static void popup_render(ObFocusCyclePopup *p, const ObClient *c)
                 text->surface.parenty =
                     mode == OB_FOCUS_CYCLE_POPUP_MODE_ICONS ?
                     icon_mode_texty : list_mode_texty;
-                RrPaint(text,
-                        (mode == OB_FOCUS_CYCLE_POPUP_MODE_ICONS ?
-                         p->icon_mode_text : target->textwin),
-                        textw, texth);
+                paint_canvas(mode == OB_FOCUS_CYCLE_POPUP_MODE_ICONS ?
+                             p->icon_mode_text : target->textwin,
+                             text, textw, texth);
             }
         }
     }
