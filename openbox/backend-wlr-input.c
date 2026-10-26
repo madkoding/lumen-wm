@@ -43,6 +43,8 @@
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_virtual_keyboard_v1.h>
+#include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
 
@@ -52,12 +54,14 @@ static struct wlr_cursor *cursor;
 static struct wlr_xcursor_manager *xcursors;
 static struct wl_listener new_input, request_cursor, request_selection;
 static struct wl_listener motion, motion_absolute, button, axis, frame;
+static struct wl_listener new_vkeyboard, new_vpointer;
 static GList *keyboards;
 static struct xkb_keymap *keymap;
 
 typedef struct {
     struct wlr_keyboard *wlr;
     struct wl_listener key, modifiers, destroy;
+    gboolean virtual;           /* brings a keymap of its own */
 } Keyboard;
 
 typedef struct {
@@ -106,13 +110,9 @@ static void deliver(ObInputEvent *e)
 static guint mods_now(void)
 {
     struct wlr_keyboard *k = wlr_seat_get_keyboard(lw_seat);
-    guint m = k ? wlr_keyboard_get_modifiers(k) : 0;
-    guint i;
 
-    /* X's button masks too, for drags */
-    for (i = 1; i <= 5; ++i)
-        if (buttons_down & (1 << i)) m |= 1 << (7 + i);
-    return m;
+    /* without X's button masks, as the core gets them from X */
+    return k ? wlr_keyboard_get_modifiers(k) : 0;
 }
 
 /* keyboards */
@@ -172,8 +172,10 @@ void lw_keymap_reload(void)
     if (!map) return;
     if (keymap) xkb_keymap_unref(keymap);
     keymap = map;
-    for (it = keyboards; it; it = g_list_next(it))
-        wlr_keyboard_set_keymap(((Keyboard*)it->data)->wlr, keymap);
+    for (it = keyboards; it; it = g_list_next(it)) {
+        Keyboard *k = it->data;
+        if (!k->virtual) wlr_keyboard_set_keymap(k->wlr, keymap);
+    }
 }
 
 gboolean lw_key_named(const gchar *name, guint *keycode)
@@ -238,11 +240,33 @@ static gboolean core_key_take(guint keycode, gboolean remove)
     return FALSE;
 }
 
+/*! The keycode in the core's keymap for a key of a keyboard with a keymap
+  of its own, like a virtual one: the key with the same symbol. */
+static guint core_keycode(struct wlr_keyboard *kb, guint keycode)
+{
+    const xkb_keysym_t *syms;
+    xkb_keycode_t c;
+
+    if (!keymap || kb->keymap == keymap ||
+        xkb_keymap_key_get_syms_by_level(kb->keymap, keycode, 0, 0,
+                                         &syms) < 1)
+        return keycode;
+    for (c = xkb_keymap_min_keycode(keymap);
+         c <= xkb_keymap_max_keycode(keymap); ++c)
+    {
+        const xkb_keysym_t *s;
+        if (xkb_keymap_key_get_syms_by_level(keymap, c, 0, 0, &s) > 0 &&
+            s[0] == syms[0])
+            return c;
+    }
+    return keycode;
+}
+
 static void keyboard_key(struct wl_listener *l, void *data)
 {
     Keyboard *k = wl_container_of(l, k, key);
     const struct wlr_keyboard_key_event *ev = data;
-    guint keycode = ev->keycode + 8;
+    guint keycode = core_keycode(k->wlr, ev->keycode + 8);
     gboolean press = ev->state == WL_KEYBOARD_KEY_STATE_PRESSED;
     guint mods = wlr_keyboard_get_modifiers(k->wlr);
     WlrSurface *focus = lw_focused_surface();
@@ -261,7 +285,7 @@ static void keyboard_key(struct wl_listener *l, void *data)
 
         if (press && !core_key_take(keycode, FALSE))
             g_array_append_val(core_keys, keycode);
-        if (xkb_keymap_key_get_syms_by_level(k->wlr->keymap, keycode, 0, 0,
+        if (xkb_keymap_key_get_syms_by_level(keymap, keycode, 0, 0,
                                              &syms) > 0)
             sym = syms[0];
 
@@ -273,7 +297,8 @@ static void keyboard_key(struct wl_listener *l, void *data)
         e.keysym = sym;
         e.key_mod = key_mod(sym);
         if (press && kbd_grabbed)
-            e.text = xkb_state_key_get_utf32(k->wlr->xkb_state, keycode);
+            e.text = xkb_state_key_get_utf32(k->wlr->xkb_state,
+                                             ev->keycode + 8);
         lw_pointer_position(&e.root_x, &e.root_y);
         e.over = (guintptr)(focus ? focus : NULL);
         deliver(&e);
@@ -303,13 +328,16 @@ static void keyboard_destroy(struct wl_listener *l, void *data)
     g_free(k);
 }
 
-static void new_keyboard(struct wlr_input_device *dev)
+static void new_keyboard(struct wlr_input_device *dev, gboolean virtual)
 {
     Keyboard *k = g_new0(Keyboard, 1);
 
     k->wlr = wlr_keyboard_from_input_device(dev);
+    k->virtual = virtual;
     if (!keymap) keymap = make_keymap();
-    wlr_keyboard_set_keymap(k->wlr, keymap);
+    /* a virtual keyboard brings its own */
+    if (!virtual)
+        wlr_keyboard_set_keymap(k->wlr, keymap);
     wlr_keyboard_set_repeat_info(k->wlr, 25, 600);
     k->key.notify = keyboard_key;
     wl_signal_add(&k->wlr->events.key, &k->key);
@@ -935,14 +963,21 @@ static void seat_request_selection(struct wl_listener *l, void *data)
     wlr_seat_set_selection(lw_seat, e->source, e->serial);
 }
 
+static void update_caps(void)
+{
+    uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
+
+    if (keyboards) caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+    wlr_seat_set_capabilities(lw_seat, caps);
+}
+
 static void input_new(struct wl_listener *l, void *data)
 {
     struct wlr_input_device *dev = data;
-    uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
 
     switch (dev->type) {
     case WLR_INPUT_DEVICE_KEYBOARD:
-        new_keyboard(dev);
+        new_keyboard(dev, FALSE);
         break;
     case WLR_INPUT_DEVICE_POINTER:
         wlr_cursor_attach_input_device(cursor, dev);
@@ -950,12 +985,33 @@ static void input_new(struct wl_listener *l, void *data)
     default:
         break;
     }
-    if (keyboards) caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-    wlr_seat_set_capabilities(lw_seat, caps);
+    update_caps();
+}
+
+
+/* virtual input, from tools that type and click (wtype, wlrctl, the
+   contract tests) */
+
+static void vkeyboard_new(struct wl_listener *l, void *data)
+{
+    struct wlr_virtual_keyboard_v1 *vk = data;
+
+    new_keyboard(&vk->keyboard.base, TRUE);
+    update_caps();
+}
+
+static void vpointer_new(struct wl_listener *l, void *data)
+{
+    struct wlr_virtual_pointer_v1_new_pointer_event *e = data;
+
+    wlr_cursor_attach_input_device(cursor, &e->new_pointer->pointer.base);
 }
 
 void lw_input_startup(struct wlr_backend *backend)
 {
+    struct wlr_virtual_keyboard_manager_v1 *vkm;
+    struct wlr_virtual_pointer_manager_v1 *vpm;
+
     key_bindings = g_array_new(FALSE, FALSE, sizeof(KeyBinding));
     /* bindings are looked up before any keyboard shows up */
     keymap = make_keymap();
@@ -986,11 +1042,21 @@ void lw_input_startup(struct wlr_backend *backend)
 
     new_input.notify = input_new;
     wl_signal_add(&backend->events.new_input, &new_input);
+
+    vkm = wlr_virtual_keyboard_manager_v1_create(lw_display);
+    new_vkeyboard.notify = vkeyboard_new;
+    wl_signal_add(&vkm->events.new_virtual_keyboard, &new_vkeyboard);
+    vpm = wlr_virtual_pointer_manager_v1_create(lw_display);
+    new_vpointer.notify = vpointer_new;
+    wl_signal_add(&vpm->events.new_virtual_pointer, &new_vpointer);
+    update_caps();
 }
 
 void lw_input_shutdown(void)
 {
     wl_list_remove(&new_input.link);
+    wl_list_remove(&new_vkeyboard.link);
+    wl_list_remove(&new_vpointer.link);
     wl_list_remove(&request_cursor.link);
     wl_list_remove(&request_selection.link);
     wl_list_remove(&motion.link);
