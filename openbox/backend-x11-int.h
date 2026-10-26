@@ -30,6 +30,10 @@ Cursor x11_cursor(ObCursor cursor);
 /* backend-x11-surface.c: managed windows and the frames around them */
 ObSurfaceId *x11_existing_surfaces(guint *n);
 ObSurfaceKind x11_surface_kind(ObSurfaceId s, ObSurfaceId *icon);
+void x11_dockapp_adopt(ObSurfaceId icon, ObSurfaceId name, ObCanvasId dock,
+                       gint x, gint y);
+void x11_dockapp_release(ObSurfaceId icon, ObSurfaceId name,
+                         gboolean reparent);
 void x11_surface_adopt(ObSurfaceId s, gboolean internal);
 void x11_surface_unwatch(ObSurfaceId s, gboolean internal);
 void x11_surface_frame(ObSurfaceId s, ObCanvasId frame);

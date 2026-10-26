@@ -313,7 +313,8 @@ typedef struct _ObSurfaceInfo {
     gboolean has_opacity;   /*!< FALSE: it leaves that to the compositor */
     guint32 opacity;        /*!< 0 is clear, 0xffffffff opaque */
     /*! where it is, in layout coordinates, and its border (X11), before
-      the window manager touches it */
+      the window manager touches it; has_area is FALSE when it is gone */
+    gboolean has_area;
     Rect area;
     gint border;
     gboolean argb;          /*!< it draws with an alpha channel */
@@ -450,6 +451,15 @@ struct _ObBackend {
     /*! What it is. For a dock app, icon is what it shows in the dock (its
       own window or its icon window, on X11). */
     ObSurfaceKind (*surface_kind)(ObSurfaceId s, ObSurfaceId *icon);
+    /*! Dock apps (OB_BACKEND_CAP_DOCKAPPS): put icon, what the dock shows,
+      in the dock's canvas at x, y and keep it alive if the window manager
+      goes away; name is the window it came as, which may be icon. */
+    void (*dockapp_adopt)(ObSurfaceId icon, ObSurfaceId name,
+                          ObCanvasId dock, gint x, gint y);
+    /*! Stop managing a dock app; reparent: hand it back to the desktop
+      (FALSE when it is gone). */
+    void (*dockapp_release)(ObSurfaceId icon, ObSurfaceId name,
+                            gboolean reparent);
     /*! Start managing it: hear about what it changes, and keep it alive
       if the window manager goes away (X11: the save set). internal: one
       of the core's own windows (a prompt), which also takes its keys. */

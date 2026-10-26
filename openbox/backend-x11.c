@@ -1966,6 +1966,8 @@ const ObBackend ob_backend_x11 = {
 
     .existing_surfaces = x11_existing_surfaces,
     .surface_kind = x11_surface_kind,
+    .dockapp_adopt = x11_dockapp_adopt,
+    .dockapp_release = x11_dockapp_release,
     .surface_adopt = x11_surface_adopt,
     .surface_unwatch = x11_surface_unwatch,
     .surface_frame = x11_surface_frame,

@@ -38,6 +38,7 @@
                           ColormapChangeMask)
 #define CLIENT_NOPROPAGATEMASK (ButtonPressMask | ButtonReleaseMask | \
                                 ButtonMotionMask)
+#define DOCKAPP_EVENT_MASK (StructureNotifyMask)
 #define FRAME_EVENTMASK (EnterWindowMask | LeaveWindowMask | \
                          ButtonPressMask | ButtonReleaseMask | \
                          SubstructureRedirectMask | FocusChangeMask)
@@ -326,7 +327,8 @@ void x11_get_geometry(ObSurfaceId s, ObSurfaceInfo *info)
 {
     XWindowAttributes wattrib;
 
-    if (XGetWindowAttributes(obt_display, (Window)s, &wattrib)) {
+    info->has_area = XGetWindowAttributes(obt_display, (Window)s, &wattrib);
+    if (info->has_area) {
         RECT_SET(info->area, wattrib.x, wattrib.y,
                  wattrib.width, wattrib.height);
         info->border = wattrib.border_width;
@@ -632,4 +634,38 @@ void x11_publish_surface_hidden(ObSurfaceId s, gboolean hidden)
     state[0] = hidden ? IconicState : NormalState;
     state[1] = None;
     OBT_PROP_SETA32((Window)s, WM_STATE, WM_STATE, state, 2);
+}
+
+void x11_dockapp_adopt(ObSurfaceId icon, ObSurfaceId name, ObCanvasId dock,
+                       gint x, gint y)
+{
+    XReparentWindow(obt_display, (Window)icon, (Window)dock, x, y);
+    XChangeSaveSet(obt_display, (Window)icon, SetModeInsert);
+    XMapWindow(obt_display, (Window)icon);
+
+    if (name != icon) {
+        XReparentWindow(obt_display, (Window)name, (Window)dock, -1000, -1000);
+        XChangeSaveSet(obt_display, (Window)name, SetModeInsert);
+        XMapWindow(obt_display, (Window)name);
+    }
+
+    XSync(obt_display, False);
+
+    XSelectInput(obt_display, (Window)icon, DOCKAPP_EVENT_MASK);
+}
+
+void x11_dockapp_release(ObSurfaceId icon, ObSurfaceId name,
+                         gboolean reparent)
+{
+    XSelectInput(obt_display, (Window)icon, NoEventMask);
+    /* remove the window from our save set */
+    XChangeSaveSet(obt_display, (Window)icon, SetModeDelete);
+    XSync(obt_display, False);
+
+    if (reparent) {
+        XReparentWindow(obt_display, (Window)icon, obt_root(ob_screen), 0, 0);
+        if (name != icon)
+            XReparentWindow(obt_display, (Window)name,
+                            obt_root(ob_screen), 0, 0);
+    }
 }
