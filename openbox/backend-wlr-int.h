@@ -281,6 +281,21 @@ void lw_xw_info(WlrSurface *s, ObSurfaceInfoFields fields,
                 ObSurfaceInfo *info);
 void lw_xw_workareas(const Rect *areas, guint n);
 
+/* backend-wlr-state.c: lumen_state_v1, for the contract tests */
+void lw_state_startup(void);
+void lw_state_shutdown(void);
+void lw_state_stacking(const ObSurfaceId *ids, guint n);
+void lw_state_active(ObSurfaceId id);
+void lw_state_desktop_count(guint count);
+void lw_state_current_desktop(guint desktop);
+void lw_state_workareas(const Rect *areas, guint n);
+void lw_state_surface_desktop(ObSurfaceId id, guint desktop);
+void lw_state_surface_titles(ObSurfaceId id, const gchar *title,
+                             const gchar *icon);
+void lw_state_surface_extents(ObSurfaceId id, const Strut *e);
+/*! s is gone; its id may come back for another */
+void lw_state_forget(ObSurfaceId id);
+
 /* backend-wlr-toplevels.c: what taskbars see */
 void lw_toplevels_startup(void);
 void lw_toplevels_shutdown(void);

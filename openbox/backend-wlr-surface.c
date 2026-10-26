@@ -265,6 +265,7 @@ void lw_surface_free(WlrSurface *s)
         lw_events->surface_gone(id_of(s));
         lw_end();
     }
+    lw_state_forget(id_of(s));
     lw_input_forget((guintptr)s);
     focus_reverted(s);
     mapped = g_list_remove(mapped, s);
@@ -616,6 +617,7 @@ void lw_surface_free_dialog(WlrSurface *s)
         lw_events->surface_gone(id_of(s));
         lw_end();
     }
+    lw_state_forget(id_of(s));
     g_hash_table_remove(alive, s);
     s->node.kind = 0;
     g_free(s);

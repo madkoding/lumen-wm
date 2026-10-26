@@ -93,11 +93,19 @@ if use_wayland
       wl_protocol_dir / 'unstable/xdg-decoration/xdg-decoration-unstable-v1.xml',
       # not in wayland-protocols; vendored from wlr-protocols
       'protocols/wlr-layer-shell-unstable-v1.xml',
+      # Lumen's own, for the contract tests
+      'protocols/lumen-state-v1.xml',
     ]
     protocol_headers += custom_target(fs.stem(p) + '-protocol.h',
       input: p, output: '@BASENAME@-protocol.h',
       command: [wayland_scanner, 'server-header', '@INPUT@', '@OUTPUT@'])
   endforeach
+  # the code for the one no library carries
+  protocol_headers += custom_target('lumen-state-v1-protocol.c',
+    input: 'protocols/lumen-state-v1.xml',
+    output: '@BASENAME@-protocol.c',
+    command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
 endif
 # the contract tests type and click with XTest; without it they skip the
 # input cases
@@ -326,6 +334,7 @@ executable('lumen-wm',
     'openbox/backend-wlr-surface.c',
     'openbox/backend-wlr-toplevels.c',
     'openbox/backend-wlr-xwayland.c',
+    'openbox/backend-wlr-state.c',
     protocol_headers,
   ] : [],
   c_args: paths + ['-DG_LOG_DOMAIN="Openbox"'] +

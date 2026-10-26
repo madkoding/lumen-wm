@@ -272,6 +272,7 @@ static gboolean lw_startup(const gchar *display, ObStartupFlags flags,
     lw_layers_startup();
     lw_toplevels_startup();
     lw_xwayland_startup();
+    lw_state_startup();
     lw_input_startup(backend);
 
     socket = wl_display_add_socket_auto(lw_display);
@@ -308,6 +309,7 @@ static void lw_shutdown(void)
     }
     wl_display_destroy_clients(lw_display);
     lw_input_shutdown();
+    lw_state_shutdown();
     lw_xwayland_shutdown();
     lw_toplevels_shutdown();
     lw_layers_shutdown();
@@ -445,6 +447,33 @@ static void lw_grab_server(gboolean grab)
 {
 }
 
+/* what taskbars, Xwayland and the contract tests hear */
+
+static void publish_stacking(const ObSurfaceId *ids, guint n)
+{
+    lw_publish_stacking(ids, n);
+    lw_state_stacking(ids, n);
+}
+
+static void publish_active(ObSurfaceId id)
+{
+    lw_publish_active(id);
+    lw_state_active(id);
+}
+
+static void publish_surface_titles(ObSurfaceId id, const gchar *title,
+                                   const gchar *icon)
+{
+    lw_publish_surface_titles(id, title, icon);
+    lw_state_surface_titles(id, title, icon);
+}
+
+static void publish_workareas(const Rect *areas, guint n)
+{
+    lw_xw_workareas(areas, n);
+    lw_state_workareas(areas, n);
+}
+
 /* what Wayland has no use for, or that waits for its protocol */
 
 static void nothing_surface(ObSurfaceId s) {}
@@ -460,7 +489,6 @@ static void nothing_surface_geometry(ObSurfaceId s, const Rect *a, gint b) {}
 static void nothing_names(const gchar *const *names) {}
 static void nothing_icon(ObSurfaceId s, const ObIcon *icon) {}
 static void nothing_titles(ObSurfaceId s, const gchar *t, const gchar *i) {}
-static void nothing_extents(ObSurfaceId s, const Strut *e) {}
 static void nothing_actions(ObSurfaceId s, ObSurfaceActions a) {}
 static void nothing_app(ObSurfaceId s, const ObSurfaceApp *a) {}
 static void nothing_dockapp_adopt(ObSurfaceId i, ObSurfaceId n, ObCanvasId d,
@@ -562,21 +590,21 @@ const ObBackend ob_backend_wlr = {
 
     /* foreign-toplevel and ext-workspace carry these, later in phase 5 */
     .publish_clients = lw_publish_clients,
-    .publish_stacking = lw_publish_stacking,
-    .publish_active = lw_publish_active,
-    .publish_desktop_count = nothing_uint,
-    .publish_current_desktop = nothing_uint,
+    .publish_stacking = publish_stacking,
+    .publish_active = publish_active,
+    .publish_desktop_count = lw_state_desktop_count,
+    .publish_current_desktop = lw_state_current_desktop,
     .publish_desktop_names = nothing_names,
-    .publish_surface_desktop = nothing_surface_uint,
+    .publish_surface_desktop = lw_state_surface_desktop,
     .publish_surface_icon = nothing_icon,
-    .publish_surface_titles = lw_publish_surface_titles,
-    .publish_workareas = lw_xw_workareas,
+    .publish_surface_titles = publish_surface_titles,
+    .publish_workareas = publish_workareas,
     .publish_layout_size = nothing_size,
     .publish_last_desktop = nothing_uint,
     .publish_showing_desktop = nothing_bool,
     .publish_config_file = nothing_string,
     .publish_theme = nothing_string,
-    .publish_surface_extents = nothing_extents,
+    .publish_surface_extents = lw_state_surface_extents,
     .publish_surface_actions = nothing_actions,
     .publish_surface_app = nothing_app,
     .publish_surface_hidden = nothing_surface_bool,
