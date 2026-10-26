@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Lumen (Wayland)
+Comment=Log in to Lumen running as a Wayland compositor
+Exec=env LUMEN_BACKEND=wayland @bindir@/openbox-session
+TryExec=@bindir@/openbox-session
+Icon=openbox
+Type=Application
+DesktopNames=Lumen

@@ -485,6 +485,12 @@ foreach d : ['openbox.desktop', 'openbox-gnome.desktop', 'openbox-kde.desktop']
                  configuration: edit,
                  install_dir: get_option('datadir') / 'xsessions')
 endforeach
+if use_wayland
+  # the same binary, as a compositor, for display managers' Wayland list
+  configure_file(input: 'data/xsession/lumen-wayland.desktop.in',
+                 output: 'lumen-wayland.desktop', configuration: edit,
+                 install_dir: get_option('datadir') / 'wayland-sessions')
+endif
 configure_file(input: 'data/autostart/autostart.in', output: 'autostart',
                configuration: edit, install_dir: rcdir,
                install_mode: 'rwxr-xr-x')
