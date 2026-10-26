@@ -601,6 +601,7 @@ dist_noinst_DATA = \
 	tools/themeupdate/themeupdate.py \
 	tests/contract/README.md \
 	tests/contract/run.sh \
+	tests/contract/configs/follow-mouse.sed \
 	tests/hideshow.py \
 	tests/Makefile \
 	tests/aspect.c \

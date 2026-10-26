@@ -139,6 +139,9 @@ void ct_input_client_drag(ct_win *w, ct_edge edge, int dx, int dy);
 /* The client asks for a move with the keyboard (_NET_WM_MOVERESIZE
    MOVE_KEYBOARD); type with ct_input_keys() to move it. */
 void ct_request_keyboard_move(ct_win *w);
+/* Move the pointer to the middle of the window, or of the desktop away
+   from any window when w is NULL. */
+void ct_input_point(ct_win *w);
 /* Click the first button at x, y in the window. */
 void ct_input_click(ct_win *w, int x, int y);
 /* Click the first button on the window's title bar, count times in a

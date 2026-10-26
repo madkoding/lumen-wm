@@ -22,6 +22,10 @@ cases. Set `CONTRACT` when the binary was built out of tree. The cases that type
 and click need XTest (`libxtst-dev`) at build time, and skip without it. CI runs it in
 `.github/workflows/shelf-themes.yml`.
 
+Cases written for another configuration name it in `ct_cases` (the third
+field). `run.sh` then starts Lumen again with `data/rc.xml` changed by
+`configs/NAME.sed` and runs them with `contract-x11 --config NAME`.
+
 ## Adding a case
 
 Write it against `driver.h` only, wait with `CT_EVENTUALLY` (the window

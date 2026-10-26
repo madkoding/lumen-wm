@@ -10,6 +10,9 @@ typedef void (*ct_case_fn)(void);
 typedef struct {
     const char *name;
     ct_case_fn fn;
+    /* NULL for the default configuration (data/rc.xml), or the name of the
+       change run.sh makes to it (configs/NAME.sed) before the case runs */
+    const char *config;
 } ct_case;
 
 extern const ct_case ct_cases[];

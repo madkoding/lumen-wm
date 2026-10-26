@@ -1,7 +1,9 @@
 /* Lumen contract tests: runs every case against a driver and prints TAP.
 
-     contract-x11 [CASE...]
+     contract-x11 [--config NAME] [CASE...]
 
+   Runs the cases written for the default configuration, or with --config,
+   those written for that one (the window manager must already run with it).
    With names, runs only those cases. Exits non-zero when a case fails. */
 
 #include "contract.h"
@@ -78,17 +80,28 @@ bool ct_rect_contains(ct_rect o, ct_rect i)
         i.x + i.w <= o.x + o.w && i.y + i.h <= o.y + o.h;
 }
 
-static bool wanted(const char *name, int argc, char **argv)
+static const char *config;
+
+static bool wanted(const ct_case *c, int argc, char **argv)
 {
+    if (!c->config != !config || (config && strcmp(c->config, config)))
+        return false;
     if (argc < 2) return true;
     for (int i = 1; i < argc; ++i)
-        if (!strcmp(argv[i], name)) return true;
+        if (!strcmp(argv[i], c->name)) return true;
     return false;
 }
 
 int main(int argc, char **argv)
 {
     int n = 0, bad = 0;
+
+    if (argc > 2 && !strcmp(argv[1], "--config")) {
+        config = argv[2];
+        argv[2] = argv[0];
+        argc -= 2;
+        argv += 2;
+    }
 
     if (!ct_driver_open()) {
         printf("Bail out! no window manager to test on the %s driver\n",
@@ -97,12 +110,13 @@ int main(int argc, char **argv)
     }
 
     for (const ct_case *c = ct_cases; c->name; ++c)
-        if (wanted(c->name, argc, argv)) ++n;
-    printf("TAP version 13\n1..%d\n# driver: %s\n", n, ct_driver_name());
+        if (wanted(c, argc, argv)) ++n;
+    printf("TAP version 13\n1..%d\n# driver: %s, configuration: %s\n", n,
+           ct_driver_name(), config ? config : "default");
 
     n = 0;
     for (const ct_case *c = ct_cases; c->name; ++c) {
-        if (!wanted(c->name, argc, argv)) continue;
+        if (!wanted(c, argc, argv)) continue;
         failed = skipped = false;
         c->fn();
         ct_settle();
