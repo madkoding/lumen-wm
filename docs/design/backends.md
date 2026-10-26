@@ -182,9 +182,11 @@ Every step is its own small PR, and the contract tests stay green on X11 through
    keysyms and modifier masks (`obt/keyboard`, xkbcommon in step 5), XSMP through ICE (`session.c`), libsn
    (`startupnotify.c`) and Xrm for theme files (`obrender/theme.c`, no display needed). Themes are unchanged, and
    `tools/shelf-themes.sh` checks that they still read.
-5. **backend-wlroots**: a compositor on wlroots' scene graph with xdg-shell, xdg-decoration, layer-shell,
-   foreign-toplevel, ext-workspace and XWayland. The contract tests get a Wayland driver that runs on wlroots'
-   headless backend, and both drivers run in CI.
+5. **backend-wlroots** (`openbox/backend-wlr*.c`): a compositor on wlroots' scene graph with xdg-shell,
+   xdg-decoration, xdg-activation, layer-shell, foreign-toplevel and XWayland (ext-workspace waits for a wlroots
+   newer than 0.17, which has no server side for it). The contract tests have a Wayland driver that runs on
+   wlroots' headless backend and reads back through `lumen_state_v1` (`protocols/lumen-state-v1.xml`, offered
+   only with `LUMEN_TEST_PROTOCOL` set), and both drivers run in CI.
 
 Step 3 is the long one. The order puts the steps with the least behaviour first, and leaves the event split,
 which carries the most behaviour, for after the smaller seams have shaped the interface.
@@ -201,7 +203,8 @@ which carries the most behaviour, for after the smaller seams have shaped the in
 
 - **Build:** decided: meson (the first step of phase 5), which brings wayland-scanner and wlroots' pkg-config
   with it. Autotools is gone.
-- **One binary or two:** `lumen-wm` could pick its backend at runtime (`WAYLAND_DISPLAY` unset and `DISPLAY` set
-  → X11), or ship as `lumen-wm` and `lumen-wl`. Runtime choice needs both sets of libraries installed.
+- **One binary or two:** one. `lumen-wm` picks its backend when it starts: `LUMEN_BACKEND=x11` or `wayland`,
+  otherwise X11 when `DISPLAY` is set and `WAYLAND_DISPLAY` isn't. That needs wlroots installed with it, so
+  `-Dwayland=disabled` builds an X11-only binary for those who don't want it.
 - **wlroots version:** the API changes between releases. The backend targets one version, pinned in the build:
-  0.17 first, the one Ubuntu 24.04 (CI) ships; moving to a newer one is a step of its own.
+  0.17, the one Ubuntu 24.04 (CI) ships; moving to a newer one (and ext-workspace with it) is a step of its own.
