@@ -497,6 +497,58 @@ bool ct_wm_announced(void)
     return r;
 }
 
+/* A window the client mapped itself carries WM_STATE once managed, so a
+   frame has it on a child. */
+static bool holds_client(Window w)
+{
+    Atom wm_state = XInternAtom(dpy, "WM_STATE", False), type;
+    Window rt, parent, *children = NULL;
+    unsigned int n = 0;
+    int format;
+    unsigned long items, after;
+    unsigned char *data = NULL;
+    bool r = false;
+
+    if (XGetWindowProperty(dpy, w, wm_state, 0, 1, False, AnyPropertyType,
+                           &type, &format, &items, &after, &data) == Success
+        && type != None)
+        r = true;
+    if (data) XFree(data);
+    if (!r && XQueryTree(dpy, w, &rt, &parent, &children, &n)) {
+        for (unsigned int i = 0; i < n && !r; ++i) {
+            data = NULL;
+            if (XGetWindowProperty(dpy, children[i], wm_state, 0, 1, False,
+                                   AnyPropertyType, &type, &format, &items,
+                                   &after, &data) == Success && type != None)
+                r = true;
+            if (data) XFree(data);
+        }
+    }
+    if (children) XFree(children);
+    return r;
+}
+
+int ct_popup_count(void)
+{
+    Window rt, parent, *children = NULL;
+    unsigned int n = 0;
+    int count = 0;
+
+    /* what the window manager shows by itself: windows on screen that no
+       client is in (its support window sits off screen) */
+    XQueryTree(dpy, root, &rt, &parent, &children, &n);
+    for (unsigned int i = 0; i < n; ++i) {
+        XWindowAttributes a;
+        if (XGetWindowAttributes(dpy, children[i], &a) &&
+            a.map_state == IsViewable &&
+            a.x + a.width > 0 && a.y + a.height > 0 &&
+            !holds_client(children[i]))
+            ++count;
+    }
+    if (children) XFree(children);
+    return count;
+}
+
 bool ct_nothing_focused(void)
 {
     Window f;
@@ -857,8 +909,22 @@ void ct_input_title_click(ct_win *w, int count)
     }
     XFlush(dpy);
 }
+void ct_input_root_click(int button)
+{
+    int scr = DefaultScreen(dpy);
+
+    /* the middle of the screen, where no window is */
+    XTestFakeMotionEvent(dpy, -1, DisplayWidth(dpy, scr) / 2,
+                         DisplayHeight(dpy, scr) / 2, 0);
+    fake_sync();
+    XTestFakeButtonEvent(dpy, button, True, 0);
+    fake_sync();
+    XTestFakeButtonEvent(dpy, button, False, 0);
+    XFlush(dpy);
+}
 #else
 void ct_input_keys(const char *keys) { (void)keys; }
+void ct_input_root_click(int button) { (void)button; }
 void ct_input_title_click(ct_win *w, int count) { (void)w; (void)count; }
 void ct_input_click(ct_win *w, int x, int y) { (void)w; (void)x; (void)y; }
 void ct_input_client_drag(ct_win *w, ct_edge edge, int dx, int dy)

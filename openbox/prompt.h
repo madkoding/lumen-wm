@@ -19,6 +19,7 @@
 #ifndef ob__prompt_h
 #define ob__prompt_h
 
+#include "backend.h"
 #include "window.h"
 #include "geom.h"
 #include "obrender/render.h"
@@ -115,8 +116,8 @@ void prompt_unref(ObPrompt *self);
 void prompt_show(ObPrompt *self, struct _ObClient *parent, gboolean modal);
 void prompt_hide(ObPrompt *self);
 
-gboolean prompt_key_event(ObPrompt *self, XEvent *e);
-gboolean prompt_mouse_event(ObPrompt *self, XEvent *e);
+gboolean prompt_key_event(ObPrompt *self, const ObInputEvent *e);
+gboolean prompt_mouse_event(ObPrompt *self, const ObInputEvent *e);
 void prompt_cancel(ObPrompt *self);
 
 ObPrompt* prompt_show_message(const gchar *msg, const gchar *title,

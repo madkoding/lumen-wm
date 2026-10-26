@@ -468,23 +468,23 @@ void prompt_hide(ObPrompt *self)
     self->mapped = FALSE;
 }
 
-gboolean prompt_key_event(ObPrompt *self, XEvent *e)
+gboolean prompt_key_event(ObPrompt *self, const ObInputEvent *e)
 {
     gboolean shift;
     guint shift_mask, mods;
     KeySym sym;
 
-    if (e->type != KeyPress) return FALSE;
+    if (e->type != OB_INPUT_KEY_PRESS) return FALSE;
 
     shift_mask = obt_keyboard_modkey_to_modmask(OBT_KEYBOARD_MODKEY_SHIFT);
-    mods = obt_keyboard_only_modmasks(e->xkey.state);
+    mods = obt_keyboard_only_modmasks(e->mods);
     shift = !!(mods & shift_mask);
 
     /* only accept shift */
     if (mods != 0 && mods != shift_mask)
         return FALSE;
 
-    sym = obt_keyboard_keypress_to_keysym(e);
+    sym = e->keysym;
 
     if (sym == XK_Escape)
         prompt_cancel(self);
@@ -511,26 +511,26 @@ gboolean prompt_key_event(ObPrompt *self, XEvent *e)
     return TRUE;
 }
 
-gboolean prompt_mouse_event(ObPrompt *self, XEvent *e)
+gboolean prompt_mouse_event(ObPrompt *self, const ObInputEvent *e)
 {
     gint i;
     ObPromptElement *but;
 
-    if (e->type != ButtonPress && e->type != ButtonRelease &&
-        e->type != MotionNotify) return FALSE;
+    if (e->type != OB_INPUT_BUTTON_PRESS &&
+        e->type != OB_INPUT_BUTTON_RELEASE &&
+        e->type != OB_INPUT_MOTION) return FALSE;
 
     /* find the button */
     but = NULL;
     for (i = 0; i < self->n_buttons; ++i)
-        if (self->button[i].window ==
-            (e->type == MotionNotify ? e->xmotion.window : e->xbutton.window))
+        if (self->button[i].window == (Window)e->over)
         {
             but = &self->button[i];
             break;
         }
     if (!but) return FALSE;
 
-    if (e->type == ButtonPress) {
+    if (e->type == OB_INPUT_BUTTON_PRESS) {
         ObPromptElement *oldfocus;
 
         oldfocus = self->focus;
@@ -541,17 +541,17 @@ gboolean prompt_mouse_event(ObPrompt *self, XEvent *e)
         if (oldfocus != but) render_button(self, oldfocus);
         render_button(self, but);
     }
-    else if (e->type == ButtonRelease) {
+    else if (e->type == OB_INPUT_BUTTON_RELEASE) {
         if (but->hover)
             prompt_run_callback(self, but->result);
         but->pressed = FALSE;
     }
-    else if (e->type == MotionNotify) {
+    else if (e->type == OB_INPUT_MOTION) {
         if (but->pressed) {
             gboolean hover;
 
-            hover = (e->xmotion.x >= 0 && e->xmotion.y >= 0 &&
-                     e->xmotion.x < but->width && e->xmotion.y < but->height);
+            hover = (e->x >= 0 && e->y >= 0 &&
+                     e->x < but->width && e->y < but->height);
 
             if (hover != but->hover) {
                 but->hover = hover;

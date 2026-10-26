@@ -135,6 +135,7 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         out->keysym = e->type == KeyPress ?
             obt_keyboard_keypress_to_keysym(e) : NoSymbol;
         out->key_mod = obt_keyboard_keyevent_to_modmask(e);
+        out->text = 0;
         out->button = 0;
         out->root_x = e->xkey.x_root;
         out->root_y = e->xkey.y_root;
@@ -152,6 +153,7 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         out->keycode = 0;
         out->keysym = NoSymbol;
         out->key_mod = 0;
+        out->text = 0;
         out->button = e->xbutton.button;
         out->root_x = e->xbutton.x_root;
         out->root_y = e->xbutton.y_root;
@@ -192,6 +194,7 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         out->keycode = 0;
         out->keysym = NoSymbol;
         out->key_mod = 0;
+        out->text = 0;
         out->button = 0;
         out->root_x = e->xmotion.x_root;
         out->root_y = e->xmotion.y_root;

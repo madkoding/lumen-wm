@@ -636,6 +636,28 @@ static void title_double_click_maximizes(void)
     ct_window_destroy(w);
 }
 
+/* A middle click on the desktop opens the window list menu; Escape closes
+   it, and so does a click outside it. */
+static void root_menu_opens_and_closes(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT);
+    ct_settle();
+    int before = ct_popup_count();
+
+    ct_input_root_click(2);
+    CT_EVENTUALLY(ct_popup_count() > before);
+    ct_input_keys("Escape");
+    CT_EVENTUALLY(ct_popup_count() == before);
+
+    ct_input_root_click(2);
+    CT_EVENTUALLY(ct_popup_count() > before);
+    ct_input_keys("Down");
+    ct_settle();
+    CT_CHECK(ct_popup_count() > before);
+    ct_input_root_click(1);
+    CT_EVENTUALLY(ct_popup_count() == before);
+}
+
 /* Dragging a window with Alt held moves it by as much. */
 static void alt_drag_moves(void)
 {
@@ -686,6 +708,7 @@ const ct_case ct_cases[] = {
     { "alt_tab_switches", alt_tab_switches },
     { "click_focuses_and_passes", click_focuses_and_passes },
     { "title_double_click_maximizes", title_double_click_maximizes },
+    { "root_menu_opens_and_closes", root_menu_opens_and_closes },
     { "alt_drag_moves", alt_drag_moves },
     { "client_move_follows_pointer", client_move_follows_pointer },
     { "client_resize_follows_pointer", client_resize_follows_pointer },
