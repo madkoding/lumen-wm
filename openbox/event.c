@@ -85,9 +85,9 @@ typedef struct
 static void event_process(const XEvent *e, gpointer data);
 static void event_handle_root(XEvent *e);
 static gboolean event_handle_menu_input(const ObInputEvent *e);
-static void event_handle_menu(ObMenuFrame *frame, XEvent *e);
+static void event_handle_menu(ObMenuFrame *frame, const ObInputEvent *e);
 static gboolean event_handle_prompt(ObPrompt *p, XEvent *e);
-static void event_handle_dock(ObDock *s, XEvent *e);
+static void event_handle_dock(ObDock *s, const ObInputEvent *e);
 static void event_handle_dockapp(ObDockApp *app, XEvent *e);
 static void event_handle_client(ObClient *c, XEvent *e);
 static gboolean event_handle_user_input(ObClient *client, XEvent *e);
@@ -590,10 +590,19 @@ static void event_process(const XEvent *ec, gpointer data)
         event_handle_client(client, e);
     else if (dockapp)
         event_handle_dockapp(dockapp, e);
-    else if (dock)
-        event_handle_dock(dock, e);
-    else if (menu)
-        event_handle_menu(menu, e);
+    else if ((dock || menu) &&
+             (e->type == EnterNotify || e->type == LeaveNotify ||
+              e->type == MotionNotify))
+    {
+        ObInputEvent input;
+
+        if (backend_x11_input_event(e, FALSE, &input)) {
+            if (dock)
+                event_handle_dock(dock, &input);
+            else
+                event_handle_menu(menu, &input);
+        }
+    }
     else if (window == obt_root(ob_screen))
         event_handle_root(e);
     else if (e->type == MapRequest)
@@ -893,7 +902,10 @@ static gboolean *context_to_button(ObFrame *f, ObFrameContext con, gboolean pres
     }
 }
 
-static void event_handle_client(ObClient *client, XEvent *e)
+/* The pointer over a client's frame: the title bar buttons light up and
+   press, and focus follows the mouse. */
+static void event_handle_frame_pointer(ObClient *client,
+                                       const ObInputEvent *e)
 {
     ObFrameContext con;
     gboolean *but;
@@ -902,52 +914,52 @@ static void event_handle_client(ObClient *client, XEvent *e)
     static ObFrameContext pcon = OB_FRAME_CONTEXT_NONE;
 
     switch (e->type) {
-    case ButtonPress:
+    case OB_INPUT_BUTTON_PRESS:
         /* save where the press occured for the first button pressed */
         if (!pb) {
-            pb = e->xbutton.button;
-            px = e->xbutton.x;
-            py = e->xbutton.y;
+            pb = e->button;
+            px = e->x;
+            py = e->y;
 
-            pcon = frame_context(client, e->xbutton.window, px, py);
-            pcon = mouse_button_frame_context(pcon, e->xbutton.button,
-                                              e->xbutton.state);
+            pcon = frame_context(client, (Window)e->over, px, py);
+            pcon = mouse_button_frame_context(pcon, e->button,
+                                              e->mods);
         }
-    case ButtonRelease:
+    case OB_INPUT_BUTTON_RELEASE:
         /* Wheel buttons don't draw because they are an instant click, so it
            is a waste of resources to go drawing it.
            if the user is doing an interactive thing, or has a menu open then
            the mouse is grabbed (possibly) and if we get these events we don't
            want to deal with them
         */
-        if (!(e->xbutton.button == 4 || e->xbutton.button == 5) &&
+        if (!(e->button == 4 || e->button == 5) &&
             !grab_on_keyboard())
         {
             /* use where the press occured */
-            con = frame_context(client, e->xbutton.window, px, py);
-            con = mouse_button_frame_context(con, e->xbutton.button,
-                                             e->xbutton.state);
+            con = frame_context(client, (Window)e->over, px, py);
+            con = mouse_button_frame_context(con, e->button,
+                                             e->mods);
 
             /* button presses on CLIENT_CONTEXTs are not accompanied by a
                release because they are Replayed to the client */
-            if ((e->type == ButtonRelease || CLIENT_CONTEXT(con, client)) &&
-                e->xbutton.button == pb)
+            if ((e->type == OB_INPUT_BUTTON_RELEASE || CLIENT_CONTEXT(con, client)) &&
+                e->button == pb)
                 pb = 0, px = py = -1, pcon = OB_FRAME_CONTEXT_NONE;
 
             but = context_to_button(client->frame, con, TRUE);
             if (but) {
-                *but = (e->type == ButtonPress);
+                *but = (e->type == OB_INPUT_BUTTON_PRESS);
                 frame_adjust_state(client->frame);
             }
         }
         break;
-    case MotionNotify:
+    case OB_INPUT_MOTION:
         /* when there is a grab on the pointer, we won't get enter/leave
            notifies, but we still get motion events */
         if (grab_on_pointer()) break;
 
-        con = frame_context(client, e->xmotion.window,
-                            e->xmotion.x, e->xmotion.y);
+        con = frame_context(client, (Window)e->over,
+                            e->x, e->y);
         switch (con) {
         case OB_FRAME_CONTEXT_TITLEBAR:
         case OB_FRAME_CONTEXT_TLCORNER:
@@ -974,9 +986,9 @@ static void event_handle_client(ObClient *client, XEvent *e)
             break;
         }
         break;
-    case LeaveNotify:
-        con = frame_context(client, e->xcrossing.window,
-                            e->xcrossing.x, e->xcrossing.y);
+    case OB_INPUT_LEAVE:
+        con = frame_context(client, (Window)e->over,
+                            e->x, e->y);
         switch (con) {
         case OB_FRAME_CONTEXT_TITLEBAR:
         case OB_FRAME_CONTEXT_TLCORNER:
@@ -987,7 +999,7 @@ static void event_handle_client(ObClient *client, XEvent *e)
                 client->frame->shade_hover =
                 client->frame->iconify_hover =
                 client->frame->close_hover = FALSE;
-            if (e->xcrossing.mode == NotifyGrab) {
+            if (e->crossing == OB_CROSSING_GRAB) {
                 client->frame->max_press =
                     client->frame->desk_press =
                     client->frame->shade_press =
@@ -1003,17 +1015,16 @@ static void event_handle_client(ObClient *client, XEvent *e)
                 event_end_ignore_all_enters(event_start_ignore_all_enters());
 
             ob_debug_type(OB_DEBUG_FOCUS,
-                          "%sNotify mode %d detail %d on %lx",
-                          (e->type == EnterNotify ? "Enter" : "Leave"),
-                          e->xcrossing.mode,
-                          e->xcrossing.detail, (client?client->window:0));
+                          "Leave mode %d inferior %d on %lx",
+                          e->crossing, e->inferior,
+                          (client?client->window:0));
             if (grab_on_keyboard())
                 break;
             if (config_focus_follow &&
                 /* leave inferior events can happen when the mouse goes onto
                    the window's border and then into the window before the
                    delay is up */
-                e->xcrossing.detail != NotifyInferior)
+                !e->inferior)
             {
                 if (config_focus_delay && focus_delay_timeout_id)
                     g_source_remove(focus_delay_timeout_id);
@@ -1025,7 +1036,7 @@ static void event_handle_client(ObClient *client, XEvent *e)
             but = context_to_button(client->frame, con, FALSE);
             if (but) {
                 *but = FALSE;
-                if (e->xcrossing.mode == NotifyGrab) {
+                if (e->crossing == OB_CROSSING_GRAB) {
                     but = context_to_button(client->frame, con, TRUE);
                     *but = FALSE;
                 }
@@ -1034,38 +1045,31 @@ static void event_handle_client(ObClient *client, XEvent *e)
             break;
         }
         break;
-    case EnterNotify:
+    case OB_INPUT_ENTER:
     {
-        con = frame_context(client, e->xcrossing.window,
-                            e->xcrossing.x, e->xcrossing.y);
+        con = frame_context(client, (Window)e->over,
+                            e->x, e->y);
         switch (con) {
         case OB_FRAME_CONTEXT_FRAME:
             if (grab_on_keyboard())
                 break;
-            if (e->xcrossing.mode == NotifyGrab ||
-                (e->xcrossing.mode == NotifyUngrab &&
+            if (e->crossing == OB_CROSSING_GRAB ||
+                (e->crossing == OB_CROSSING_UNGRAB &&
                  /* ungrab enters are used when _under_ mouse is being used */
                  !(config_focus_follow && config_focus_under_mouse)) ||
                 /*ignore enters when we're already in the window */
-                e->xcrossing.detail == NotifyInferior)
+                e->inferior)
             {
                 ob_debug_type(OB_DEBUG_FOCUS,
-                              "%sNotify mode %d detail %d serial %lu on %lx "
-                              "IGNORED",
-                              (e->type == EnterNotify ? "Enter" : "Leave"),
-                              e->xcrossing.mode,
-                              e->xcrossing.detail,
-                              e->xcrossing.serial,
+                              "Enter mode %d inferior %d on %lx IGNORED",
+                              e->crossing, e->inferior,
                               client?client->window:0);
             }
             else {
                 ob_debug_type(OB_DEBUG_FOCUS,
-                              "%sNotify mode %d detail %d serial %lu on %lx, "
+                              "Enter mode %d inferior %d on %lx, "
                               "focusing window",
-                              (e->type == EnterNotify ? "Enter" : "Leave"),
-                              e->xcrossing.mode,
-                              e->xcrossing.detail,
-                              e->xcrossing.serial,
+                              e->crossing, e->inferior,
                               (client?client->window:0));
                 if (config_focus_follow) {
                     if (config_focus_delay && unfocus_delay_timeout_id)
@@ -1078,7 +1082,7 @@ static void event_handle_client(ObClient *client, XEvent *e)
             but = context_to_button(client->frame, con, FALSE);
             if (but) {
                 *but = TRUE;
-                if (e->xcrossing.mode == NotifyUngrab) {
+                if (e->crossing == OB_CROSSING_UNGRAB) {
                     but = context_to_button(client->frame, con, TRUE);
                     *but = (con == pcon);
                 }
@@ -1086,6 +1090,26 @@ static void event_handle_client(ObClient *client, XEvent *e)
             }
             break;
         }
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+static void event_handle_client(ObClient *client, XEvent *e)
+{
+    switch (e->type) {
+    case ButtonPress:
+    case ButtonRelease:
+    case MotionNotify:
+    case EnterNotify:
+    case LeaveNotify:
+    {
+        ObInputEvent input;
+
+        backend_x11_input_event(e, FALSE, &input);
+        event_handle_frame_pointer(client, &input);
         break;
     }
     case ConfigureRequest:
@@ -1157,15 +1181,15 @@ static void event_handle_client(ObClient *client, XEvent *e)
     }
 }
 
-static void event_handle_dock(ObDock *s, XEvent *e)
+static void event_handle_dock(ObDock *s, const ObInputEvent *e)
 {
     switch (e->type) {
-    case EnterNotify:
+    case OB_INPUT_ENTER:
         dock_hide(FALSE);
         break;
-    case LeaveNotify:
+    case OB_INPUT_LEAVE:
         /* don't hide when moving into a dock app */
-        if (e->xcrossing.detail != NotifyInferior)
+        if (!e->inferior)
             dock_hide(TRUE);
         break;
     }
@@ -1422,26 +1446,19 @@ static gboolean event_handle_menu_input(const ObInputEvent *ev)
     return ret;
 }
 
-static gboolean event_look_for_menu_enter(XEvent *ev, gpointer data)
-{
-    const ObMenuFrame *f = (ObMenuFrame*)data;
-    ObMenuEntryFrame *e;
-    return ev->type == EnterNotify &&
-        (e = g_hash_table_lookup(menu_frame_map, &ev->xcrossing.window)) &&
-        e->frame == f && !e->ignore_enters;
-}
-
-static void event_handle_menu(ObMenuFrame *frame, XEvent *ev)
+static void event_handle_menu(ObMenuFrame *frame, const ObInputEvent *ev)
 {
     ObMenuFrame *f;
     ObMenuEntryFrame *e;
+    Window over = (Window)ev->over, next = (Window)ev->next_over;
 
     switch (ev->type) {
-    case MotionNotify:
-        /* We need to catch MotionNotify in addition to EnterNotify because
+    case OB_INPUT_MOTION:
+        /* We need to catch motion in addition to enters because
            it is possible for the menu to be opened under the mouse cursor, and
            moving the mouse should select the item. */
-        if ((e = g_hash_table_lookup(menu_frame_map, &ev->xmotion.window))) {
+    case OB_INPUT_ENTER:
+        if ((e = g_hash_table_lookup(menu_frame_map, &over))) {
             if (e->ignore_enters)
                 --e->ignore_enters;
             else if (!(f = find_active_menu()) ||
@@ -1451,28 +1468,23 @@ static void event_handle_menu(ObMenuFrame *frame, XEvent *ev)
                 menu_frame_select(e->frame, e, FALSE);
         }
         break;
-    case EnterNotify:
-        if ((e = g_hash_table_lookup(menu_frame_map, &ev->xcrossing.window))) {
-            if (e->ignore_enters)
-                --e->ignore_enters;
-            else if (!(f = find_active_menu()) ||
-                     f == e->frame ||
-                     f->parent == e->frame ||
-                     f->child == e->frame)
-                menu_frame_select(e->frame, e, FALSE);
-        }
-        break;
-    case LeaveNotify:
+    case OB_INPUT_LEAVE:
         /* ignore leaves when we're already in the window */
-        if (ev->xcrossing.detail == NotifyInferior)
+        if (ev->inferior)
             break;
 
-        if ((e = g_hash_table_lookup(menu_frame_map, &ev->xcrossing.window))) {
-            /* check if an EnterNotify event is coming, and if not, then select
-               nothing in the menu */
-            if (!xqueue_exists_local(event_look_for_menu_enter, e->frame))
+        if ((e = g_hash_table_lookup(menu_frame_map, &over))) {
+            ObMenuEntryFrame *n;
+
+            /* if the pointer goes on to another entry of the menu, that one
+               gets selected, else select nothing in the menu */
+            if (!(next &&
+                  (n = g_hash_table_lookup(menu_frame_map, &next)) &&
+                  n->frame == e->frame && !n->ignore_enters))
                 menu_frame_select(e->frame, NULL, FALSE);
         }
+        break;
+    default:
         break;
     }
 }

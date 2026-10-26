@@ -40,8 +40,9 @@ void backend_x11_configure_request(const XConfigureRequestEvent *e);
 void backend_x11_map_event(const XEvent *e);
 /*! The event's timestamp, or CurrentTime when it has none. */
 guint32 backend_x11_event_time(const XEvent *e);
-/*! Read a key, button or motion event; FALSE for any other. latest_motion:
-  skip to the last motion already queued for the same window. */
+/*! Read a key, button, motion or crossing event; FALSE for any other.
+  latest_motion: skip to the last motion already queued for the same
+  window. */
 gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
                                  ObInputEvent *out);
 /*! An XSync alarm went off. */

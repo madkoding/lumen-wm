@@ -121,9 +121,20 @@ static gboolean find_timestamp(XEvent *e, gpointer data)
     return *t != CurrentTime;
 }
 
+static gboolean find_enter(XEvent *e, gpointer data)
+{
+    if (e->type != EnterNotify) return FALSE;
+    *(Window*)data = e->xcrossing.window;
+    return TRUE;
+}
+
 gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
                                  ObInputEvent *out)
 {
+    out->crossing = OB_CROSSING_NORMAL;
+    out->inferior = FALSE;
+    out->next_over = 0;
+
     switch (e->type) {
     case KeyPress:
     case KeyRelease:
@@ -202,6 +213,34 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         out->x = e->xmotion.x;
         out->y = e->xmotion.y;
         out->inside = FALSE;
+        return TRUE;
+    case EnterNotify:
+    case LeaveNotify:
+        out->type = e->type == EnterNotify ? OB_INPUT_ENTER : OB_INPUT_LEAVE;
+        out->time = e->xcrossing.time;
+        out->mods = e->xcrossing.state;
+        out->keycode = 0;
+        out->keysym = NoSymbol;
+        out->key_mod = 0;
+        out->text = 0;
+        out->button = 0;
+        out->root_x = e->xcrossing.x_root;
+        out->root_y = e->xcrossing.y_root;
+        out->over = e->xcrossing.window;
+        out->x = e->xcrossing.x;
+        out->y = e->xcrossing.y;
+        out->inside = FALSE;
+        out->crossing = e->xcrossing.mode == NotifyGrab ? OB_CROSSING_GRAB :
+            e->xcrossing.mode == NotifyUngrab ? OB_CROSSING_UNGRAB :
+            OB_CROSSING_NORMAL;
+        out->inferior = e->xcrossing.detail == NotifyInferior;
+        if (e->type == LeaveNotify) {
+            Window next = None;
+
+            /* the enter that goes with this leave is queued with it */
+            xqueue_exists_local(find_enter, &next);
+            out->next_over = next;
+        }
         return TRUE;
     default:
         return FALSE;

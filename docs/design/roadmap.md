@@ -50,8 +50,9 @@ Done:
 
 Left:
 
-- [ ] **Pointer crossings** (enter/leave), 1–2 PRs: title bar button hover, focus follows mouse, menu item
-  selection, dock auto-hide.
+- [x] **Pointer crossings** (enter/leave): title bar button hover, focus follows mouse, menu item selection,
+  dock auto-hide. The contract tests can now run cases under another configuration (`configs/*.sed`), starting
+  with focus following the mouse.
 - [ ] **Frames as canvases**, 3–5 PRs, the largest step left. `frame.c` holds most of the Xlib still in the core
   (about 220 calls). Reparenting and the frame's subwindows go into the backend; the core finds the part of the
   frame under the pointer from coordinates instead of from which subwindow got the event. This brings

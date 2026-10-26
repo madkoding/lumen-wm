@@ -272,8 +272,18 @@ typedef enum {
     OB_INPUT_KEY_RELEASE,
     OB_INPUT_BUTTON_PRESS,
     OB_INPUT_BUTTON_RELEASE,
-    OB_INPUT_MOTION
+    OB_INPUT_MOTION,
+    OB_INPUT_ENTER,         /*!< the pointer came into over */
+    OB_INPUT_LEAVE          /*!< the pointer went out of over */
 } ObInputType;
+
+/*! Why the pointer entered or left. */
+typedef enum {
+    OB_CROSSING_NORMAL,     /*!< it moved, or what was under it changed */
+    OB_CROSSING_GRAB,       /*!< a grab started: it stays put, but its
+                              events go to the grab */
+    OB_CROSSING_UNGRAB      /*!< the grab ended */
+} ObCrossingMode;
 
 /*! Something the user did, as the core's input handlers (move/resize,
   bindings, menus) see it. The backend's key, button and motion events
@@ -294,12 +304,20 @@ typedef struct _ObInputEvent {
     guint button;           /*!< buttons */
     /*! where the pointer is, in layout coordinates */
     gint root_x, root_y;
-    /*! buttons and motion: the canvas or surface it happened over (X11:
-      the event's window), and where in it */
+    /*! buttons, motion and crossings: the canvas or surface it happened
+      over (X11: the event's window), and where in it */
     guintptr over;
     gint x, y;
     /*! buttons: x, y lie inside over, borders included */
     gboolean inside;
+    /*! crossings: why */
+    ObCrossingMode crossing;
+    /*! crossings: it went between over and something inside it (X11:
+      NotifyInferior), so it did not really leave over */
+    gboolean inferior;
+    /*! leaves: what the pointer enters next, when the backend already
+      knows (X11: an EnterNotify waiting in the queue); 0 otherwise */
+    guintptr next_over;
 } ObInputEvent;
 
 /*! A picture the core drew, in premultiplied ARGB32 (cairo's

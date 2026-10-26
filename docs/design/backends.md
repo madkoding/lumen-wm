@@ -149,7 +149,10 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       XEvent, one at a time: `moveresize_event()`, window cycling, `keyboard_event()`, `mouse_event()`, the menus and the prompts do (done;
       a menu asks for `text`, the character a key types through the input method, for its accelerators; a click
       counts when `inside` says it was let go over the window it started in), and `backend_x11_input_event()` builds it, skipping
-      to the last queued motion while a window moves. Next: move/resize (9).
+      to the last queued motion while a window moves. Pointer crossings are `OB_INPUT_ENTER` and `OB_INPUT_LEAVE`, with why
+      (`crossing`: a grab starting or ending), whether it only went into a child (`inferior`) and, for a leave,
+      what it enters next when that is already known (`next_over`); the frames, the dock and the menus take them
+      (done; the shelf still reads its own). Next: move/resize (9).
    9. Move/resize: XSync and pointer warps go behind the backend. Done: `moveresize_start()` takes an
       `ObMoveResize` (the `_NET_WM_MOVERESIZE` directions as a core enum) instead of the atoms, and the
       client's `_NET_WM_MOVERESIZE` is `request_move_resize`. The pointer queries and warps (keyboard moves,
