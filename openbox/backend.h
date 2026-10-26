@@ -47,6 +47,7 @@ typedef guintptr ObWindowId;
 
 typedef struct _ObBackend       ObBackend;
 typedef struct _ObBackendEvents ObBackendEvents;
+struct _RrFontSettings;
 
 #define OB_SURFACE_NONE ((ObSurfaceId)0)
 #define OB_CANVAS_NONE ((ObCanvasId)0)
