@@ -444,7 +444,10 @@ static void decoration_destroy(struct wl_listener *l, void *data)
     Decoration *d = wl_container_of(l, d, destroy);
     WlrSurface *s = d->d->toplevel->base->data;
 
-    if (s && s->decoration == d->d) s->decoration = NULL;
+    if (s && s->decoration == d->d) {
+        s->decoration = NULL;
+        emit_changed(s, OB_SURFACE_INFO_DECOR);
+    }
     wl_list_remove(&d->request_mode.link);
     wl_list_remove(&d->destroy.link);
     g_free(d);
@@ -457,7 +460,10 @@ static void decoration_new(struct wl_listener *l, void *data)
     WlrSurface *s = wd->toplevel->base->data;
 
     d->d = wd;
-    if (s) s->decoration = wd;
+    if (s) {
+        s->decoration = wd;
+        emit_changed(s, OB_SURFACE_INFO_DECOR);
+    }
     d->request_mode.notify = decoration_request_mode;
     wl_signal_add(&wd->events.request_mode, &d->request_mode);
     d->destroy.notify = decoration_destroy;
@@ -869,6 +875,12 @@ void lw_surface_info(ObSurfaceId id, ObSurfaceInfoFields fields,
         wl_client_get_credentials(wl_resource_get_client(t->resource),
                                   &pid, NULL, NULL);
         info->pid = pid;
+    }
+    if ((fields & OB_SURFACE_INFO_DECOR) && !s->decoration) {
+        /* without xdg-decoration it draws its own, like a client with
+           Motif hints for no decorations */
+        info->decor_hints.flags = OB_MWM_FLAG_DECORATIONS;
+        info->decor_hints.decorations = 0;
     }
     if (fields & OB_SURFACE_INFO_STATES)
         info->states = s->initial_states;
