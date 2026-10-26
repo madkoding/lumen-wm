@@ -48,12 +48,6 @@ extern Window screen_support_win;
 /*! The last time at which the user changed desktops */
 extern Time screen_desktop_user_time;
 
-typedef struct ObDesktopLayout {
-    ObOrientation orientation;
-    ObCorner start_corner;
-    guint rows;
-    guint columns;
-} ObDesktopLayout;
 extern ObDesktopLayout screen_desktop_layout;
 
 /*! An array of gchar*'s which are desktop names in UTF-8 format */

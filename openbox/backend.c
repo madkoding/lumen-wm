@@ -21,11 +21,11 @@
 
 const ObBackend *ob_backend = NULL;
 
-gboolean backend_startup(const gchar *display, gboolean replace)
+gboolean backend_startup(const gchar *display, ObStartupFlags flags)
 {
     /* X11 is the only backend so far */
     ob_backend = &ob_backend_x11;
-    return ob_backend->startup(display, replace, &ob_backend_events);
+    return ob_backend->startup(display, flags, &ob_backend_events);
 }
 
 void backend_shutdown(void)

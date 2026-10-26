@@ -95,6 +95,29 @@ typedef enum {
     OB_SURFACE_STATE_UNDECORATED    = 1 << 13
 } ObSurfaceStates;
 
+/*! How the backend starts. */
+typedef enum {
+    /*! when the core claims the screen, replace a running window manager
+      (X11) instead of failing */
+    OB_STARTUP_REPLACE = 1 << 0,
+    /*! for debugging: report errors where they happen (X11 synchronous
+      requests) */
+    OB_STARTUP_SYNC    = 1 << 1
+} ObStartupFlags;
+
+/*! What the window manager before this one left, to carry on from it
+  (X11: the root window's properties). */
+typedef struct _ObPreviousState {
+    gboolean has_names;     /*!< it named the desktops */
+    gboolean has_count;
+    guint count;            /*!< how many desktops */
+    gboolean has_current;
+    guint current;          /*!< the desktop shown */
+    gboolean has_last;
+    guint last;             /*!< the desktop shown before that one */
+    ObSurfaceId active;     /*!< what had the focus, or OB_SURFACE_NONE */
+} ObPreviousState;
+
 /*! What a new surface is, to manage it as. */
 typedef enum {
     OB_SURFACE_KIND_GONE,       /*!< it went away before it could be
@@ -383,10 +406,8 @@ struct _ObBackend {
 
     /* --- lifetime --- */
 
-    /*! Connect, and report to events from then on. replace: when the core
-      claims the screen, replace a running window manager (X11) instead of
-      failing. */
-    gboolean (*startup)(const gchar *display, gboolean replace,
+    /*! Connect, and report to events from then on. */
+    gboolean (*startup)(const gchar *display, ObStartupFlags flags,
                         const ObBackendEvents *events);
     void (*shutdown)(void);
     /*! Become the screen's window manager and tell clients what we
@@ -399,6 +420,16 @@ struct _ObBackend {
     GSource *(*event_source)(void);
     /*! Milliseconds since some fixed point, comparable to event times. */
     guint32 (*time)(void);
+    /*! Ask the window manager already running to reconfigure (1),
+      restart (2) or exit (3), for --reconfigure, --restart and --exit
+      (X11: an _OB_CONTROL message). */
+    void (*request_running)(guint what);
+    void (*previous_state)(ObPreviousState *state);
+    /*! The desktop names and layout that pagers set (X11: root window
+      properties); NULL, or FALSE, when they set none. g_strfreev() the
+      names. */
+    gchar **(*desktop_names)(void);
+    gboolean (*desktop_layout)(ObDesktopLayout *layout);
 
     /* --- outputs --- */
 
@@ -408,6 +439,8 @@ struct _ObBackend {
     /*! An output's area in layout coordinates, as output_count() last
       found it. */
     void (*output_area)(guint output, Rect *area);
+    /*! The size of the whole layout, every output included. */
+    void (*layout_size)(gint *width, gint *height);
 
     /* --- managed surfaces --- */
 
@@ -587,6 +620,13 @@ struct _ObBackend {
                                    const gchar *icon);
     /*! One area per desktop. */
     void (*publish_workareas)(const Rect *areas, guint n);
+    void (*publish_layout_size)(gint width, gint height);
+    void (*publish_last_desktop)(guint desktop);
+    void (*publish_showing_desktop)(gboolean showing);
+    /*! For tools that edit the configuration (obconf): the rc.xml in use,
+      NULL for none, and the theme's name. */
+    void (*publish_config_file)(const gchar *path);
+    void (*publish_theme)(const gchar *name);
     /*! How much the decoration adds around it on each side. */
     void (*publish_surface_extents)(ObSurfaceId s, const Strut *extents);
     void (*publish_surface_actions)(ObSurfaceId s, ObSurfaceActions actions);
@@ -678,7 +718,7 @@ extern const ObBackendEvents ob_backend_events;
 extern const ObBackend ob_backend_x11;
 
 /*! Pick the backend and start it. */
-gboolean backend_startup(const gchar *display, gboolean replace);
+gboolean backend_startup(const gchar *display, ObStartupFlags flags);
 void backend_shutdown(void);
 /*! Start delivering the backend's events to the main loop. */
 void backend_listen(void);

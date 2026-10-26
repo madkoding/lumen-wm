@@ -38,7 +38,6 @@
 #include "obrender/render.h"
 #include "gettext.h"
 #include "obt/display.h"
-#include "obt/xqueue.h"
 #include "obt/prop.h"
 
 #include <X11/Xlib.h>
@@ -111,6 +110,7 @@ void screen_startup(gboolean reconfig)
     gchar **names = NULL;
     guint32 d;
     gboolean namesexist = FALSE;
+    ObPreviousState prev;
 
     desktop_popup_perm = FALSE;
 
@@ -127,11 +127,11 @@ void screen_startup(gboolean reconfig)
     /* get the initial size */
     screen_resize();
 
+    /* what the window manager before us left */
+    ob_backend->previous_state(&prev);
+
     /* have names already been set for the desktops? */
-    if (OBT_PROP_GETSS_UTF8(obt_root(ob_screen), NET_DESKTOP_NAMES, &names)) {
-        g_strfreev(names);
-        namesexist = TRUE;
-    }
+    namesexist = prev.has_names;
 
     /* if names don't exist and we have session names, set those.
        do this stuff BEFORE setting the number of desktops, because that
@@ -159,9 +159,8 @@ void screen_startup(gboolean reconfig)
        this will also set the default names from the config file up for
        desktops that don't have names yet */
     screen_num_desktops = 0;
-    if (OBT_PROP_GET32(obt_root(ob_screen),
-                       NET_NUMBER_OF_DESKTOPS, CARDINAL, &d))
-    {
+    if (prev.has_count) {
+        d = prev.count;
         if (d != config_desktops_num) {
             /* TRANSLATORS: If you need to specify a different order of the
                arguments, you can use %1$d for the first one and %2$d for the
@@ -180,27 +179,24 @@ void screen_startup(gboolean reconfig)
 
     screen_desktop = screen_num_desktops;  /* something invalid */
     /* start on the current desktop when a wm was already running */
-    if (OBT_PROP_GET32(obt_root(ob_screen),
-                       NET_CURRENT_DESKTOP, CARDINAL, &d) &&
-        d < screen_num_desktops)
-    {
-        screen_set_desktop(d, FALSE);
+    if (prev.has_current && prev.current < screen_num_desktops) {
+        screen_set_desktop(prev.current, FALSE);
     } else if (session_desktop >= 0)
         screen_set_desktop(MIN((guint)session_desktop,
                                screen_num_desktops), FALSE);
     else
         screen_set_desktop(MIN(config_screen_firstdesk,
                                screen_num_desktops) - 1, FALSE);
-    OBT_PROP_GET32(obt_root(ob_screen), OB_LAST_DESKTOP, CARDINAL, &screen_last_desktop);
+    if (prev.has_last)
+        screen_last_desktop = prev.last;
     if (screen_last_desktop < 0 || screen_last_desktop >= screen_num_desktops) {
         screen_last_desktop = screen_desktop;
-        OBT_PROP_SET32(obt_root(ob_screen), OB_LAST_DESKTOP, CARDINAL, screen_last_desktop);
+        ob_backend->publish_last_desktop(screen_last_desktop);
     }
 
     /* don't start in showing-desktop mode */
     screen_show_desktop_mode = SCREEN_SHOW_DESKTOP_NO;
-    OBT_PROP_SET32(obt_root(ob_screen),
-                   NET_SHOWING_DESKTOP, CARDINAL, screen_showing_desktop());
+    ob_backend->publish_showing_desktop(screen_showing_desktop());
 
     if (session_desktop_layout_present &&
         screen_validate_layout(&session_desktop_layout))
@@ -238,16 +234,13 @@ void screen_resize(void)
 {
     gint w, h;
     GList *it;
-    gulong geometry[2];
 
-    w = WidthOfScreen(ScreenOfDisplay(obt_display, ob_screen));
-    h = HeightOfScreen(ScreenOfDisplay(obt_display, ob_screen));
+    ob_backend->layout_size(&w, &h);
 
     /* Set the _NET_DESKTOP_GEOMETRY hint */
-    screen_physical_size.width = geometry[0] = w;
-    screen_physical_size.height = geometry[1] = h;
-    OBT_PROP_SETA32(obt_root(ob_screen),
-                    NET_DESKTOP_GEOMETRY, CARDINAL, geometry, 2);
+    screen_physical_size.width = w;
+    screen_physical_size.height = h;
+    ob_backend->publish_layout_size(w, h);
 
     if (ob_state() != OB_STATE_RUNNING)
         return;
@@ -349,7 +342,7 @@ static void screen_fallback_focus(void)
 static gboolean last_desktop_func(gpointer data)
 {
     screen_desktop_timeout = TRUE;
-    OBT_PROP_SET32(obt_root(ob_screen), OB_LAST_DESKTOP, CARDINAL, screen_last_desktop);
+    ob_backend->publish_last_desktop(screen_last_desktop);
     screen_desktop_timer = 0;
     return FALSE; /* don't repeat */
 }
@@ -887,49 +880,14 @@ void screen_update_layout(void)
 
 {
     ObDesktopLayout l;
-    guint32 *data;
-    guint num;
 
     screen_desktop_layout.orientation = OB_ORIENTATION_HORZ;
     screen_desktop_layout.start_corner = OB_CORNER_TOPLEFT;
     screen_desktop_layout.rows = 1;
     screen_desktop_layout.columns = screen_num_desktops;
 
-    if (OBT_PROP_GETA32(obt_root(ob_screen),
-                        NET_DESKTOP_LAYOUT, CARDINAL, &data, &num)) {
-        if (num == 3 || num == 4) {
-
-            if (data[0] == OBT_PROP_ATOM(NET_WM_ORIENTATION_VERT))
-                l.orientation = OB_ORIENTATION_VERT;
-            else if (data[0] == OBT_PROP_ATOM(NET_WM_ORIENTATION_HORZ))
-                l.orientation = OB_ORIENTATION_HORZ;
-            else
-                return;
-
-            if (num < 4)
-                l.start_corner = OB_CORNER_TOPLEFT;
-            else {
-                if (data[3] == OBT_PROP_ATOM(NET_WM_TOPLEFT))
-                    l.start_corner = OB_CORNER_TOPLEFT;
-                else if (data[3] == OBT_PROP_ATOM(NET_WM_TOPRIGHT))
-                    l.start_corner = OB_CORNER_TOPRIGHT;
-                else if (data[3] == OBT_PROP_ATOM(NET_WM_BOTTOMRIGHT))
-                    l.start_corner = OB_CORNER_BOTTOMRIGHT;
-                else if (data[3] == OBT_PROP_ATOM(NET_WM_BOTTOMLEFT))
-                    l.start_corner = OB_CORNER_BOTTOMLEFT;
-                else
-                    return;
-            }
-
-            l.columns = data[1];
-            l.rows = data[2];
-
-            if (screen_validate_layout(&l))
-                screen_desktop_layout = l;
-
-            g_free(data);
-        }
-    }
+    if (ob_backend->desktop_layout(&l) && screen_validate_layout(&l))
+        screen_desktop_layout = l;
 }
 
 void screen_update_desktop_names(void)
@@ -940,8 +898,7 @@ void screen_update_desktop_names(void)
     g_strfreev(screen_desktop_names);
     screen_desktop_names = NULL;
 
-    if (OBT_PROP_GETSS(obt_root(ob_screen),
-                       NET_DESKTOP_NAMES, &screen_desktop_names))
+    if ((screen_desktop_names = ob_backend->desktop_names()))
         for (i = 0; screen_desktop_names[i] && i < screen_num_desktops; ++i);
     else
         i = 0;
@@ -1054,10 +1011,7 @@ void screen_show_desktop(ObScreenShowDestopMode show_mode, ObClient *show_only)
         }
     }
 
-    OBT_PROP_SET32(obt_root(ob_screen),
-                   NET_SHOWING_DESKTOP,
-                   CARDINAL,
-                   !!showing_after);
+    ob_backend->publish_showing_desktop(showing_after);
 }
 
 gboolean screen_showing_desktop()
@@ -1611,12 +1565,8 @@ const Rect* screen_physical_area_primary(gboolean fixed)
 
 void screen_set_root_cursor(void)
 {
-    if (sn_app_starting())
-        XDefineCursor(obt_display, obt_root(ob_screen),
-                      ob_cursor(OB_CURSOR_BUSYPOINTER));
-    else
-        XDefineCursor(obt_display, obt_root(ob_screen),
-                      ob_cursor(OB_CURSOR_POINTER));
+    ob_backend->set_cursor(OB_CANVAS_NONE, sn_app_starting() ?
+                           OB_CURSOR_BUSYPOINTER : OB_CURSOR_POINTER);
 }
 
 guint screen_find_monitor_point(guint x, guint y)

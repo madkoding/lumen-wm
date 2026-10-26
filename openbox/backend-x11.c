@@ -34,6 +34,10 @@
 #include "obt/keyboard.h"
 
 #include <X11/Xatom.h>
+#include <X11/cursorfont.h>
+#if USE_XCURSOR
+#include <X11/Xcursor/Xcursor.h>
+#endif
 #ifdef SHAPE
 #include <X11/extensions/shape.h>
 #endif
@@ -56,12 +60,188 @@ static Window root(void);
 static Rect *outputs;
 static guint n_outputs;
 
-static gboolean x11_startup(const gchar *display, gboolean rep,
+static Cursor cursors[OB_NUM_CURSORS];
+
+static Cursor load_cursor(const gchar *name, guint fontval)
+{
+    Cursor c = None;
+
+#if USE_XCURSOR
+    c = XcursorLibraryLoadCursor(obt_display, name);
+#endif
+    if (c == None)
+        c = XCreateFontCursor(obt_display, fontval);
+    return c;
+}
+
+Cursor x11_cursor(ObCursor cursor)
+{
+    g_assert(cursor < OB_NUM_CURSORS);
+    return cursors[cursor];
+}
+
+static gboolean x11_startup(const gchar *display, ObStartupFlags flags,
                             const ObBackendEvents *ev)
 {
-    replace = rep;
+    replace = !!(flags & OB_STARTUP_REPLACE);
     events = ev;
-    return obt_display_open(display);
+    if (!obt_display_open(display))
+        return FALSE;
+
+    ob_screen = DefaultScreen(obt_display);
+
+    XSynchronize(obt_display, !!(flags & OB_STARTUP_SYNC));
+
+    /* check for locale support */
+    if (!XSupportsLocale())
+        g_message(_("X server does not support locale."));
+    if (!XSetLocaleModifiers(""))
+        g_message(_("Cannot set locale modifiers for the X server."));
+
+    /* set the DISPLAY environment variable for any lauched children, to the
+       display we're using, so they open in the right place. */
+    g_setenv("DISPLAY", DisplayString(obt_display), TRUE);
+
+    /* create available cursors */
+    cursors[OB_CURSOR_NONE] = None;
+    cursors[OB_CURSOR_POINTER] = load_cursor("left_ptr", XC_left_ptr);
+    cursors[OB_CURSOR_BUSYPOINTER] = load_cursor("left_ptr_watch",XC_left_ptr);
+    cursors[OB_CURSOR_BUSY] = load_cursor("watch", XC_watch);
+    cursors[OB_CURSOR_MOVE] = load_cursor("fleur", XC_fleur);
+    cursors[OB_CURSOR_NORTH] = load_cursor("top_side", XC_top_side);
+    cursors[OB_CURSOR_NORTHEAST] = load_cursor("top_right_corner",
+                                               XC_top_right_corner);
+    cursors[OB_CURSOR_EAST] = load_cursor("right_side", XC_right_side);
+    cursors[OB_CURSOR_SOUTHEAST] = load_cursor("bottom_right_corner",
+                                               XC_bottom_right_corner);
+    cursors[OB_CURSOR_SOUTH] = load_cursor("bottom_side", XC_bottom_side);
+    cursors[OB_CURSOR_SOUTHWEST] = load_cursor("bottom_left_corner",
+                                               XC_bottom_left_corner);
+    cursors[OB_CURSOR_WEST] = load_cursor("left_side", XC_left_side);
+    cursors[OB_CURSOR_NORTHWEST] = load_cursor("top_left_corner",
+                                               XC_top_left_corner);
+    return TRUE;
+}
+
+static void x11_set_cursor(ObCanvasId c, ObCursor cursor)
+{
+    XSetWindowAttributes a;
+
+    /* OB_CANVAS_NONE is the desktop */
+    a.cursor = x11_cursor(cursor);
+    XChangeWindowAttributes(obt_display, c ? (Window)c : root(), CWCursor,
+                            &a);
+}
+
+static void x11_request_running(guint what)
+{
+    OBT_PROP_MSG(ob_screen, root(), OB_CONTROL, what, 0, 0, 0, 0);
+    XFlush(obt_display);
+}
+
+static void x11_previous_state(ObPreviousState *st)
+{
+    guint32 d, xid;
+    gchar **names;
+
+    st->has_names = OBT_PROP_GETSS_UTF8(root(), NET_DESKTOP_NAMES, &names);
+    if (st->has_names)
+        g_strfreev(names);
+    st->has_count = OBT_PROP_GET32(root(), NET_NUMBER_OF_DESKTOPS, CARDINAL,
+                                   &d);
+    st->count = st->has_count ? d : 0;
+    st->has_current = OBT_PROP_GET32(root(), NET_CURRENT_DESKTOP, CARDINAL,
+                                     &d);
+    st->current = st->has_current ? d : 0;
+    st->has_last = OBT_PROP_GET32(root(), OB_LAST_DESKTOP, CARDINAL, &d);
+    st->last = st->has_last ? d : 0;
+    st->active = OBT_PROP_GET32(root(), NET_ACTIVE_WINDOW, WINDOW, &xid) ?
+        (ObSurfaceId)xid : OB_SURFACE_NONE;
+}
+
+static gchar **x11_desktop_names(void)
+{
+    gchar **names;
+
+    if (!OBT_PROP_GETSS(root(), NET_DESKTOP_NAMES, &names))
+        return NULL;
+    return names;
+}
+
+static gboolean x11_desktop_layout(ObDesktopLayout *l)
+{
+    guint32 *data;
+    guint num;
+    gboolean ok = FALSE;
+
+    if (!OBT_PROP_GETA32(root(), NET_DESKTOP_LAYOUT, CARDINAL, &data, &num))
+        return FALSE;
+
+    if (num == 3 || num == 4) {
+        ok = TRUE;
+        if (data[0] == OBT_PROP_ATOM(NET_WM_ORIENTATION_VERT))
+            l->orientation = OB_ORIENTATION_VERT;
+        else if (data[0] == OBT_PROP_ATOM(NET_WM_ORIENTATION_HORZ))
+            l->orientation = OB_ORIENTATION_HORZ;
+        else
+            ok = FALSE;
+
+        if (num < 4)
+            l->start_corner = OB_CORNER_TOPLEFT;
+        else if (data[3] == OBT_PROP_ATOM(NET_WM_TOPLEFT))
+            l->start_corner = OB_CORNER_TOPLEFT;
+        else if (data[3] == OBT_PROP_ATOM(NET_WM_TOPRIGHT))
+            l->start_corner = OB_CORNER_TOPRIGHT;
+        else if (data[3] == OBT_PROP_ATOM(NET_WM_BOTTOMRIGHT))
+            l->start_corner = OB_CORNER_BOTTOMRIGHT;
+        else if (data[3] == OBT_PROP_ATOM(NET_WM_BOTTOMLEFT))
+            l->start_corner = OB_CORNER_BOTTOMLEFT;
+        else
+            ok = FALSE;
+
+        l->columns = data[1];
+        l->rows = data[2];
+    }
+    g_free(data);
+    return ok;
+}
+
+static void x11_layout_size(gint *w, gint *h)
+{
+    *w = WidthOfScreen(ScreenOfDisplay(obt_display, ob_screen));
+    *h = HeightOfScreen(ScreenOfDisplay(obt_display, ob_screen));
+}
+
+static void x11_publish_layout_size(gint w, gint h)
+{
+    gulong geometry[2];
+
+    geometry[0] = w;
+    geometry[1] = h;
+    OBT_PROP_SETA32(root(), NET_DESKTOP_GEOMETRY, CARDINAL, geometry, 2);
+}
+
+static void x11_publish_last_desktop(guint desktop)
+{
+    OBT_PROP_SET32(root(), OB_LAST_DESKTOP, CARDINAL, desktop);
+}
+
+static void x11_publish_showing_desktop(gboolean showing)
+{
+    OBT_PROP_SET32(root(), NET_SHOWING_DESKTOP, CARDINAL, !!showing);
+}
+
+static void x11_publish_config_file(const gchar *path)
+{
+    if (path)
+        OBT_PROP_SETS(root(), OB_CONFIG_FILE, path);
+    else
+        OBT_PROP_ERASE(root(), OB_CONFIG_FILE);
+}
+
+static void x11_publish_theme(const gchar *name)
+{
+    OBT_PROP_SETS(root(), OB_THEME, name);
 }
 
 static void x11_shutdown(void)
@@ -1519,7 +1699,7 @@ static gboolean x11_grab_pointer(gboolean grab, gboolean owner_events,
     }
     return XGrabPointer(obt_display, screen_support_win, owner_events,
                         GRAB_PTR_MASK, GrabModeAsync, GrabModeAsync,
-                        confine ? root() : None, ob_cursor(cursor),
+                        confine ? root() : None, x11_cursor(cursor),
                         time) == Success;
 }
 
@@ -1586,7 +1766,7 @@ static void x11_bind_button(guintptr over, guint button, guint mods,
     for (i = 0; i < N_LOCK_MASKS; ++i)
         XGrabButton(obt_display, button, mods | locks[i], (Window)over,
                     False, mask, hold ? GrabModeSync : GrabModeAsync,
-                    GrabModeAsync, None, ob_cursor(cursor));
+                    GrabModeAsync, None, x11_cursor(cursor));
     obt_display_ignore_errors(FALSE);
     if (obt_display_error_occured)
         ob_debug("Failed to grab button %d modifiers %d", button, mods);
@@ -1769,11 +1949,16 @@ const ObBackend ob_backend_x11 = {
     .shutdown = x11_shutdown,
     .event_source = x11_event_source,
     .time = x11_time,
+    .request_running = x11_request_running,
+    .previous_state = x11_previous_state,
+    .desktop_names = x11_desktop_names,
+    .desktop_layout = x11_desktop_layout,
     .claim_screen = x11_claim_screen,
     .release_screen = x11_release_screen,
 
     .output_count = x11_output_count,
     .output_area = x11_output_area,
+    .layout_size = x11_layout_size,
 
     .existing_surfaces = x11_existing_surfaces,
     .surface_kind = x11_surface_kind,
@@ -1800,6 +1985,7 @@ const ObBackend ob_backend_x11 = {
 
     .restack = x11_restack,
     .flush = x11_flush,
+    .set_cursor = x11_set_cursor,
 
     .canvas_new = x11_canvas_new,
     .canvas_free = x11_canvas_free,
@@ -1831,6 +2017,11 @@ const ObBackend ob_backend_x11 = {
     .publish_surface_titles = x11_publish_surface_titles,
     .publish_workareas = x11_publish_workareas,
     .publish_surface_extents = x11_publish_surface_extents,
+    .publish_layout_size = x11_publish_layout_size,
+    .publish_last_desktop = x11_publish_last_desktop,
+    .publish_showing_desktop = x11_publish_showing_desktop,
+    .publish_config_file = x11_publish_config_file,
+    .publish_theme = x11_publish_theme,
     .publish_surface_actions = x11_publish_surface_actions,
     .publish_surface_app = x11_publish_surface_app,
     .publish_surface_hidden = x11_publish_surface_hidden,

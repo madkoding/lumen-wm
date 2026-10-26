@@ -821,56 +821,55 @@ static void frame_adjust_cursors(ObFrame *self)
             !(self->client->max_horz && self->client->max_vert);
         gboolean topbot = !self->client->max_vert;
         gboolean sh = self->client->shaded;
-        XSetWindowAttributes a;
+        ObCursor c;
 
         /* these ones turn off when max vert, and some when shaded */
-        a.cursor = ob_cursor(r && topbot && !sh ?
-                             OB_CURSOR_NORTH : OB_CURSOR_NONE);
-        XChangeWindowAttributes(obt_display, self->topresize, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->titletop, CWCursor, &a);
-        a.cursor = ob_cursor(r && topbot ? OB_CURSOR_SOUTH : OB_CURSOR_NONE);
-        XChangeWindowAttributes(obt_display, self->handle, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->handletop, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->handlebottom, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->innerbottom, CWCursor, &a);
+        c = (r && topbot && !sh ? OB_CURSOR_NORTH : OB_CURSOR_NONE);
+        ob_backend->set_cursor(self->topresize, c);
+        ob_backend->set_cursor(self->titletop, c);
+        c = (r && topbot ? OB_CURSOR_SOUTH : OB_CURSOR_NONE);
+        ob_backend->set_cursor(self->handle, c);
+        ob_backend->set_cursor(self->handletop, c);
+        ob_backend->set_cursor(self->handlebottom, c);
+        ob_backend->set_cursor(self->innerbottom, c);
 
         /* these ones change when shaded */
-        a.cursor = ob_cursor(r ? (sh ? OB_CURSOR_WEST : OB_CURSOR_NORTHWEST) :
-                             OB_CURSOR_NONE);
-        XChangeWindowAttributes(obt_display, self->titleleft, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->tltresize, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->tllresize, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->titletopleft, CWCursor, &a);
-        a.cursor = ob_cursor(r ? (sh ? OB_CURSOR_EAST : OB_CURSOR_NORTHEAST) :
-                             OB_CURSOR_NONE);
-        XChangeWindowAttributes(obt_display, self->titleright, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->trtresize, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->trrresize, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->titletopright, CWCursor,&a);
+        c = (r ? (sh ? OB_CURSOR_WEST : OB_CURSOR_NORTHWEST) :
+             OB_CURSOR_NONE);
+        ob_backend->set_cursor(self->titleleft, c);
+        ob_backend->set_cursor(self->tltresize, c);
+        ob_backend->set_cursor(self->tllresize, c);
+        ob_backend->set_cursor(self->titletopleft, c);
+        c = (r ? (sh ? OB_CURSOR_EAST : OB_CURSOR_NORTHEAST) :
+             OB_CURSOR_NONE);
+        ob_backend->set_cursor(self->titleright, c);
+        ob_backend->set_cursor(self->trtresize, c);
+        ob_backend->set_cursor(self->trrresize, c);
+        ob_backend->set_cursor(self->titletopright, c);
 
         /* these ones are pretty static */
-        a.cursor = ob_cursor(r ? OB_CURSOR_WEST : OB_CURSOR_NONE);
-        XChangeWindowAttributes(obt_display, self->left, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->innerleft, CWCursor, &a);
-        a.cursor = ob_cursor(r ? OB_CURSOR_EAST : OB_CURSOR_NONE);
-        XChangeWindowAttributes(obt_display, self->right, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->innerright, CWCursor, &a);
-        a.cursor = ob_cursor(r ? OB_CURSOR_SOUTHWEST : OB_CURSOR_NONE);
-        XChangeWindowAttributes(obt_display, self->lgrip, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->handleleft, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->lgripleft, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->lgriptop, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->lgripbottom, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->innerbll, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->innerblb, CWCursor, &a);
-        a.cursor = ob_cursor(r ? OB_CURSOR_SOUTHEAST : OB_CURSOR_NONE);
-        XChangeWindowAttributes(obt_display, self->rgrip, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->handleright, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->rgripright, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->rgriptop, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->rgripbottom, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->innerbrr, CWCursor, &a);
-        XChangeWindowAttributes(obt_display, self->innerbrb, CWCursor, &a);
+        c = (r ? OB_CURSOR_WEST : OB_CURSOR_NONE);
+        ob_backend->set_cursor(self->left, c);
+        ob_backend->set_cursor(self->innerleft, c);
+        c = (r ? OB_CURSOR_EAST : OB_CURSOR_NONE);
+        ob_backend->set_cursor(self->right, c);
+        ob_backend->set_cursor(self->innerright, c);
+        c = (r ? OB_CURSOR_SOUTHWEST : OB_CURSOR_NONE);
+        ob_backend->set_cursor(self->lgrip, c);
+        ob_backend->set_cursor(self->handleleft, c);
+        ob_backend->set_cursor(self->lgripleft, c);
+        ob_backend->set_cursor(self->lgriptop, c);
+        ob_backend->set_cursor(self->lgripbottom, c);
+        ob_backend->set_cursor(self->innerbll, c);
+        ob_backend->set_cursor(self->innerblb, c);
+        c = (r ? OB_CURSOR_SOUTHEAST : OB_CURSOR_NONE);
+        ob_backend->set_cursor(self->rgrip, c);
+        ob_backend->set_cursor(self->handleright, c);
+        ob_backend->set_cursor(self->rgripright, c);
+        ob_backend->set_cursor(self->rgriptop, c);
+        ob_backend->set_cursor(self->rgripbottom, c);
+        ob_backend->set_cursor(self->innerbrr, c);
+        ob_backend->set_cursor(self->innerbrb, c);
     }
 }
 

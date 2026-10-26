@@ -24,6 +24,9 @@
 
 #include <X11/Xlib.h>
 
+/* backend-x11.c */
+Cursor x11_cursor(ObCursor cursor);
+
 /* backend-x11-surface.c: managed windows and the frames around them */
 ObSurfaceId *x11_existing_surfaces(guint *n);
 ObSurfaceKind x11_surface_kind(ObSurfaceId s, ObSurfaceId *icon);
