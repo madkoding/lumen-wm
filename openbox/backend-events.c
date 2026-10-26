@@ -713,11 +713,6 @@ static void keymap_changed(void)
     ob_set_state(OB_STATE_RUNNING);
 }
 
-static void canvas_exposed(ObCanvasId c)
-{
-    shelf_exposed(c);
-}
-
 const ObBackendEvents ob_backend_events = {
     .begin = event_begin,
     .end = event_end,
@@ -750,5 +745,4 @@ const ObBackendEvents ob_backend_events = {
     .keymap_changed = keymap_changed,
     .outputs_changed = screen_resize,
     .input = event_input,
-    .canvas_exposed = canvas_exposed,
 };

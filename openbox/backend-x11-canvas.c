@@ -24,12 +24,14 @@
 #include "openbox.h"
 #include "obrender/render.h"
 #include "obt/display.h"
+#include "obt/prop.h"
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/extensions/shape.h>
 #include <cairo.h>
 #include <cairo-xlib.h>
+#include <string.h>
 
 typedef struct {
     Window window;
@@ -77,8 +79,10 @@ static gulong event_mask(ObCanvasFlags flags)
 {
     gulong mask = 0;
 
-    if (flags & OB_CANVAS_INPUT_BUTTONS)
-        mask |= ButtonPressMask | ButtonReleaseMask;
+    if (flags & OB_CANVAS_INPUT_PRESS)
+        mask |= ButtonPressMask;
+    if (flags & OB_CANVAS_INPUT_RELEASE)
+        mask |= ButtonReleaseMask;
     if (flags & OB_CANVAS_INPUT_CROSSING)
         mask |= EnterWindowMask | LeaveWindowMask;
     if (flags & OB_CANVAS_INPUT_MOTION)
@@ -140,9 +144,9 @@ ObCanvasId x11_canvas_new(ObCanvasLayer layer, ObSurfaceId owner,
     }
     attrib.colormap = cmap;
     /* menus are mapped by the window manager itself, which doesn't
-       manage them; everything else stays out of other window managers'
-       way too */
-    if (layer != OB_CANVAS_MENU) {
+       manage them, and dialogs are managed like clients; everything else
+       stays out of other window managers' way */
+    if (layer != OB_CANVAS_MENU && layer != OB_CANVAS_DIALOG) {
         mask |= CWOverrideRedirect;
         attrib.override_redirect = True;
     }
@@ -155,6 +159,16 @@ ObCanvasId x11_canvas_new(ObCanvasLayer layer, ObSurfaceId owner,
 
     w = XCreateWindow(obt_display, obt_root(ob_screen), 0, 0, 1, 1, 0,
                       depth, InputOutput, visual, mask, &attrib);
+    /* so compositors can tell what it is */
+    if (layer == OB_CANVAS_MENU)
+        OBT_PROP_SET32(w, NET_WM_WINDOW_TYPE, ATOM,
+                       OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_POPUP_MENU));
+    else if (layer == OB_CANVAS_DIALOG)
+        OBT_PROP_SET32(w, NET_WM_WINDOW_TYPE, ATOM,
+                       OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_DIALOG));
+    else if (layer == OB_CANVAS_PANEL)
+        OBT_PROP_SET32(w, NET_WM_WINDOW_TYPE, ATOM,
+                       OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_DOCK));
     add(w, None, visual, depth, FALSE);
     return (ObCanvasId)w;
 }
@@ -347,4 +361,123 @@ void x11_canvas_set_outline(ObCanvasId c, const ObImage *mask)
                       ShapeSet);
     XFreePixmap(obt_display, bits);
     g_free(data);
+}
+
+void x11_canvas_move(ObCanvasId c, gint x, gint y)
+{
+    XMoveWindow(obt_display, (Window)c, x, y);
+}
+
+void x11_canvas_resize(ObCanvasId c, gint width, gint height)
+{
+    XResizeWindow(obt_display, (Window)c, width, height);
+}
+
+void x11_canvas_set_input(ObCanvasId c, const Rect *rects, guint n)
+{
+    XRectangle *xr;
+    guint i;
+
+    if (!rects) {
+        XShapeCombineMask(obt_display, (Window)c, ShapeInput, 0, 0, None,
+                          ShapeSet);
+        return;
+    }
+    xr = g_new(XRectangle, MAX(n, 1));
+    for (i = 0; i < n; ++i) {
+        xr[i].x = rects[i].x;
+        xr[i].y = rects[i].y;
+        xr[i].width = rects[i].width;
+        xr[i].height = rects[i].height;
+    }
+    XShapeCombineRectangles(obt_display, (Window)c, ShapeInput, 0, 0, xr, n,
+                            ShapeSet, Unsorted);
+    g_free(xr);
+}
+
+void x11_dialog_set_title(ObCanvasId c, const gchar *title)
+{
+    OBT_PROP_SETS((Window)c, NET_WM_NAME, title);
+}
+
+void x11_dialog_set_size(ObCanvasId c, gint width, gint height,
+                         gboolean managed)
+{
+    XSizeHints hints;
+
+    hints.flags = PMinSize | PMaxSize;
+    hints.min_width = hints.max_width = width;
+    hints.min_height = hints.max_height = height;
+    XSetWMNormalHints(obt_display, (Window)c, &hints);
+
+    if (managed) {
+        /* send a configure request like a normal client would */
+        XConfigureRequestEvent req;
+
+        req.type = ConfigureRequest;
+        req.display = obt_display;
+        req.parent = obt_root(ob_screen);
+        req.window = (Window)c;
+        req.width = width;
+        req.height = height;
+        req.value_mask = CWWidth | CWHeight;
+        XSendEvent(req.display, req.window, FALSE, StructureNotifyMask,
+                   (XEvent*)&req);
+    } else
+        XResizeWindow(obt_display, (Window)c, width, height);
+}
+
+void x11_dialog_set_parent(ObCanvasId c, ObSurfaceId parent,
+                           ObSurfaceId group, gboolean modal)
+{
+    Window w = (Window)c;
+    XWMHints h;
+    Atom states[1];
+
+    if (!parent && !group) {
+        OBT_PROP_ERASE(w, WM_TRANSIENT_FOR);
+        return;
+    }
+    if (group) {
+        /* transient for the window's group */
+        h.flags = WindowGroupHint;
+        h.window_group = (Window)group;
+        parent = (ObSurfaceId)obt_root(ob_screen);
+    } else
+        h.flags = 0;
+    XSetWMHints(obt_display, w, &h);
+    OBT_PROP_SET32(w, WM_TRANSIENT_FOR, WINDOW, (Window)parent);
+
+    states[0] = OBT_PROP_ATOM(NET_WM_STATE_MODAL);
+    OBT_PROP_SETA32(w, NET_WM_STATE, ATOM, states, modal ? 1 : 0);
+}
+
+gboolean x11_screen_read(const Rect *area, ObImage *img)
+{
+    XImage *im;
+    guint32 *data;
+    gint y;
+
+    im = XGetImage(obt_display, obt_root(ob_screen), area->x, area->y,
+                   area->width, area->height, AllPlanes, ZPixmap);
+    if (!im) return FALSE;
+    if (im->bits_per_pixel != 32) {
+        XDestroyImage(im);
+        return FALSE;
+    }
+    data = g_new(guint32, area->width * area->height);
+    for (y = 0; y < area->height; ++y) {
+        guint32 *row = data + y * area->width;
+        gint x;
+
+        memcpy(row, im->data + y * im->bytes_per_line, 4 * area->width);
+        for (x = 0; x < area->width; ++x)
+            row[x] |= 0xff000000u;
+    }
+    XDestroyImage(im);
+    img->data = data;
+    img->width = area->width;
+    img->height = area->height;
+    img->stride = area->width * 4;
+    return TRUE;
 }

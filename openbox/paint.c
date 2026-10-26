@@ -41,3 +41,11 @@ void paint_fill(ObCanvasId w, const RrColor *c)
 {
     ob_backend->canvas_fill(w, paint_argb(c));
 }
+
+void paint_place(ObCanvasId c, gint x, gint y, gint w, gint h)
+{
+    Rect r;
+
+    RECT_SET(r, x, y, w, h);
+    ob_backend->canvas_place(c, &r, NULL);
+}

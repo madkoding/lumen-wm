@@ -31,6 +31,9 @@ void paint_canvas(ObCanvasId c, RrAppearance *a, gint w, gint h);
 /*! A theme color as a canvas color (opaque ARGB). */
 guint32 paint_argb(const RrColor *c);
 
+/*! Put canvas c at x, y (relative to its parent) with this size. */
+void paint_place(ObCanvasId c, gint x, gint y, gint w, gint h);
+
 /*! Show color c all over canvas w. */
 void paint_fill(ObCanvasId w, const RrColor *c);
 

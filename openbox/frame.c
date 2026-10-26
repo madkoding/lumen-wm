@@ -29,6 +29,7 @@
 #include "moveresize.h"
 #include "screen.h"
 #include "obrender/theme.h"
+#include "paint.h"
 #include "obt/display.h"
 #include "obt/xqueue.h"
 #include "obt/prop.h"
@@ -51,14 +52,6 @@ static void frame_adjust_cursors(ObFrame *self);
 static Window createWindow(Window parent, ObCanvasFlags flags)
 {
     return (Window)ob_backend->canvas_new_child((ObCanvasId)parent, flags);
-}
-
-static void place(Window w, gint x, gint y, gint width, gint height)
-{
-    Rect r;
-
-    RECT_SET(r, x, y, width, height);
-    ob_backend->canvas_place((ObCanvasId)w, &r, NULL);
 }
 
 ObFrame *frame_new(ObClient *client)
@@ -301,82 +294,82 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
                 ob_rr_theme->grip_width - self->size.bottom;
 
             if (self->cbwidth_l) {
-                place(self->innerleft,
-                      self->size.left - self->cbwidth_l,
-                      self->size.top,
-                      self->cbwidth_l, self->client->area.height);
+                paint_place(self->innerleft,
+                            self->size.left - self->cbwidth_l,
+                            self->size.top,
+                            self->cbwidth_l, self->client->area.height);
 
                 ob_backend->canvas_show(self->innerleft, TRUE);
             } else
                 ob_backend->canvas_show(self->innerleft, FALSE);
 
             if (self->cbwidth_l && innercornerheight > 0) {
-                place(self->innerbll,
-                      0,
-                      self->client->area.height - 
-                      (ob_rr_theme->grip_width -
-                       self->size.bottom),
-                      self->cbwidth_l,
-                      ob_rr_theme->grip_width - self->size.bottom);
+                paint_place(self->innerbll,
+                            0,
+                            self->client->area.height - 
+                            (ob_rr_theme->grip_width -
+                             self->size.bottom),
+                            self->cbwidth_l,
+                            ob_rr_theme->grip_width - self->size.bottom);
 
                 ob_backend->canvas_show(self->innerbll, TRUE);
             } else
                 ob_backend->canvas_show(self->innerbll, FALSE);
 
             if (self->cbwidth_r) {
-                place(self->innerright,
-                      self->size.left + self->client->area.width,
-                      self->size.top,
-                      self->cbwidth_r, self->client->area.height);
+                paint_place(self->innerright,
+                            self->size.left + self->client->area.width,
+                            self->size.top,
+                            self->cbwidth_r, self->client->area.height);
 
                 ob_backend->canvas_show(self->innerright, TRUE);
             } else
                 ob_backend->canvas_show(self->innerright, FALSE);
 
             if (self->cbwidth_r && innercornerheight > 0) {
-                place(self->innerbrr,
-                      0,
-                      self->client->area.height - 
-                      (ob_rr_theme->grip_width -
-                       self->size.bottom),
-                      self->cbwidth_r,
-                      ob_rr_theme->grip_width - self->size.bottom);
+                paint_place(self->innerbrr,
+                            0,
+                            self->client->area.height - 
+                            (ob_rr_theme->grip_width -
+                             self->size.bottom),
+                            self->cbwidth_r,
+                            ob_rr_theme->grip_width - self->size.bottom);
 
                 ob_backend->canvas_show(self->innerbrr, TRUE);
             } else
                 ob_backend->canvas_show(self->innerbrr, FALSE);
 
             if (self->cbwidth_t) {
-                place(self->innertop,
-                      self->size.left - self->cbwidth_l,
-                      self->size.top - self->cbwidth_t,
-                      self->client->area.width +
-                      self->cbwidth_l + self->cbwidth_r,
-                      self->cbwidth_t);
+                paint_place(self->innertop,
+                            self->size.left - self->cbwidth_l,
+                            self->size.top - self->cbwidth_t,
+                            self->client->area.width +
+                            self->cbwidth_l + self->cbwidth_r,
+                            self->cbwidth_t);
 
                 ob_backend->canvas_show(self->innertop, TRUE);
             } else
                 ob_backend->canvas_show(self->innertop, FALSE);
 
             if (self->cbwidth_b) {
-                place(self->innerbottom,
-                      self->size.left - self->cbwidth_l,
-                      self->size.top + self->client->area.height,
-                      self->client->area.width +
-                      self->cbwidth_l + self->cbwidth_r,
-                      self->cbwidth_b);
+                paint_place(self->innerbottom,
+                            self->size.left - self->cbwidth_l,
+                            self->size.top + self->client->area.height,
+                            self->client->area.width +
+                            self->cbwidth_l + self->cbwidth_r,
+                            self->cbwidth_b);
 
-                place(self->innerblb,
-                      0, 0,
-                      ob_rr_theme->grip_width + self->bwidth,
-                      self->cbwidth_b);
-                place(self->innerbrb,
-                      self->client->area.width +
-                      self->cbwidth_l + self->cbwidth_r -
-                      (ob_rr_theme->grip_width + self->bwidth),
-                      0,
-                      ob_rr_theme->grip_width + self->bwidth,
-                      self->cbwidth_b);
+                paint_place(self->innerblb,
+                            0, 0,
+                            ob_rr_theme->grip_width + self->bwidth,
+                            self->cbwidth_b);
+                paint_place(self->innerbrb,
+                            self->client->area.width +
+                            self->cbwidth_l + self->cbwidth_r -
+                            (ob_rr_theme->grip_width + self->bwidth),
+                            0,
+                            ob_rr_theme->grip_width + self->bwidth,
+                            self->cbwidth_b);
 
                 ob_backend->canvas_show(self->innerbottom, TRUE);
                 ob_backend->canvas_show(self->innerblb, TRUE);
@@ -393,35 +386,35 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
                 /* height of titleleft and titleright */
                 titlesides = (!self->max_horz ? ob_rr_theme->grip_width : 0);
 
-                place(self->titletop,
-                      ob_rr_theme->grip_width + self->bwidth, 0,
-                      /* width + bwidth*2 - bwidth*2 - grips*2 */
-                      self->width - ob_rr_theme->grip_width * 2,
-                      self->bwidth);
-                place(self->titletopleft,
-                      0, 0,
-                      ob_rr_theme->grip_width + self->bwidth,
-                      self->bwidth);
-                place(self->titletopright,
-                      self->client->area.width +
-                      self->size.left + self->size.right -
-                      ob_rr_theme->grip_width - self->bwidth,
-                      0,
-                      ob_rr_theme->grip_width + self->bwidth,
-                      self->bwidth);
+                paint_place(self->titletop,
+                            ob_rr_theme->grip_width + self->bwidth, 0,
+                            /* width + bwidth*2 - bwidth*2 - grips*2 */
+                            self->width - ob_rr_theme->grip_width * 2,
+                            self->bwidth);
+                paint_place(self->titletopleft,
+                            0, 0,
+                            ob_rr_theme->grip_width + self->bwidth,
+                            self->bwidth);
+                paint_place(self->titletopright,
+                            self->client->area.width +
+                            self->size.left + self->size.right -
+                            ob_rr_theme->grip_width - self->bwidth,
+                            0,
+                            ob_rr_theme->grip_width + self->bwidth,
+                            self->bwidth);
 
                 if (titlesides > 0) {
-                    place(self->titleleft,
-                          0, self->bwidth,
-                          self->bwidth,
-                          titlesides);
-                    place(self->titleright,
-                          self->client->area.width +
-                          self->size.left + self->size.right -
-                          self->bwidth,
-                          self->bwidth,
-                          self->bwidth,
-                          titlesides);
+                    paint_place(self->titleleft,
+                                0, self->bwidth,
+                                self->bwidth,
+                                titlesides);
+                    paint_place(self->titleright,
+                                self->client->area.width +
+                                self->size.left + self->size.right -
+                                self->bwidth,
+                                self->bwidth,
+                                self->bwidth,
+                                titlesides);
 
                     ob_backend->canvas_show(self->titleleft, TRUE);
                     ob_backend->canvas_show(self->titleright, TRUE);
@@ -435,11 +428,11 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
                 ob_backend->canvas_show(self->titletopright, TRUE);
 
                 if (self->decorations & OB_FRAME_DECOR_TITLEBAR) {
-                    place(self->titlebottom,
-                          (self->max_horz ? 0 : self->bwidth),
-                          ob_rr_theme->title_height + self->bwidth,
-                          self->width,
-                          self->bwidth);
+                    paint_place(self->titlebottom,
+                                (self->max_horz ? 0 : self->bwidth),
+                                ob_rr_theme->title_height + self->bwidth,
+                                self->width,
+                                self->bwidth);
 
                     ob_backend->canvas_show(self->titlebottom, TRUE);
                 } else
@@ -455,31 +448,34 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
             }
 
             if (self->decorations & OB_FRAME_DECOR_TITLEBAR) {
-                place(self->title,
-                      (self->max_horz ? 0 : self->bwidth),
-                      self->bwidth,
-                      self->width, ob_rr_theme->title_height);
+                paint_place(self->title,
+                            (self->max_horz ? 0 : self->bwidth),
+                            self->bwidth,
+                            self->width, ob_rr_theme->title_height);
 
                 ob_backend->canvas_show(self->title, TRUE);
 
                 if (self->decorations & OB_FRAME_DECOR_GRIPS) {
-                    place(self->topresize,
-                          ob_rr_theme->grip_width,
-                          0,
-                          self->width - ob_rr_theme->grip_width *2,
-                          ob_rr_theme->paddingy + 1);
+                    paint_place(self->topresize,
+                                ob_rr_theme->grip_width,
+                                0,
+                                self->width - ob_rr_theme->grip_width *2,
+                                ob_rr_theme->paddingy + 1);
 
-                    place(self->tltresize, 0, 0,
-                          ob_rr_theme->grip_width, ob_rr_theme->paddingy + 1);
-                    place(self->tllresize, 0, 0, ob_rr_theme->paddingx + 1,
-                          ob_rr_theme->title_height);
-                    place(self->trtresize,
-                          self->width - ob_rr_theme->grip_width, 0,
-                          ob_rr_theme->grip_width, ob_rr_theme->paddingy + 1);
-                    place(self->trrresize,
-                          self->width - ob_rr_theme->paddingx - 1, 0,
-                          ob_rr_theme->paddingx + 1,
-                          ob_rr_theme->title_height);
+                    paint_place(self->tltresize, 0, 0,
+                                ob_rr_theme->grip_width,
+                                ob_rr_theme->paddingy + 1);
+                    paint_place(self->tllresize, 0, 0,
+                                ob_rr_theme->paddingx + 1,
+                                ob_rr_theme->title_height);
+                    paint_place(self->trtresize,
+                                self->width - ob_rr_theme->grip_width, 0,
+                                ob_rr_theme->grip_width,
+                                ob_rr_theme->paddingy + 1);
+                    paint_place(self->trrresize,
+                                self->width - ob_rr_theme->paddingx - 1, 0,
+                                ob_rr_theme->paddingx + 1,
+                                ob_rr_theme->title_height);
 
                     ob_backend->canvas_show(self->topresize, TRUE);
                     ob_backend->canvas_show(self->tltresize, TRUE);
@@ -505,43 +501,43 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
             gint sidebwidth = self->max_horz ? 0 : self->bwidth;
 
             if (self->bwidth && self->size.bottom) {
-                place(self->handlebottom,
-                      ob_rr_theme->grip_width +
-                      self->bwidth + sidebwidth,
-                      self->size.top + self->client->area.height +
-                      self->size.bottom - self->bwidth,
-                      self->width - (ob_rr_theme->grip_width +
-                                     sidebwidth) * 2,
-                      self->bwidth);
+                paint_place(self->handlebottom,
+                            ob_rr_theme->grip_width +
+                            self->bwidth + sidebwidth,
+                            self->size.top + self->client->area.height +
+                            self->size.bottom - self->bwidth,
+                            self->width - (ob_rr_theme->grip_width +
+                                           sidebwidth) * 2,
+                            self->bwidth);
 
 
                 if (sidebwidth) {
-                    place(self->lgripleft,
-                          0,
-                          self->size.top +
-                          self->client->area.height +
-                          self->size.bottom -
-                          (!self->max_horz ?
-                           ob_rr_theme->grip_width :
-                           self->size.bottom - self->cbwidth_b),
-                          self->bwidth,
-                          (!self->max_horz ?
-                           ob_rr_theme->grip_width :
-                           self->size.bottom - self->cbwidth_b));
-                    place(self->rgripright,
-                      self->size.left +
-                          self->client->area.width +
-                          self->size.right - self->bwidth,
-                          self->size.top +
-                          self->client->area.height +
-                          self->size.bottom -
-                          (!self->max_horz ?
-                           ob_rr_theme->grip_width :
-                           self->size.bottom - self->cbwidth_b),
-                          self->bwidth,
-                          (!self->max_horz ?
-                           ob_rr_theme->grip_width :
-                           self->size.bottom - self->cbwidth_b));
+                    paint_place(self->lgripleft,
+                                0,
+                                self->size.top +
+                                self->client->area.height +
+                                self->size.bottom -
+                                (!self->max_horz ?
+                                 ob_rr_theme->grip_width :
+                                 self->size.bottom - self->cbwidth_b),
+                                self->bwidth,
+                                (!self->max_horz ?
+                                 ob_rr_theme->grip_width :
+                                 self->size.bottom - self->cbwidth_b));
+                    paint_place(self->rgripright,
+                            self->size.left +
+                                self->client->area.width +
+                                self->size.right - self->bwidth,
+                                self->size.top +
+                                self->client->area.height +
+                                self->size.bottom -
+                                (!self->max_horz ?
+                                 ob_rr_theme->grip_width :
+                                 self->size.bottom - self->cbwidth_b),
+                                self->bwidth,
+                                (!self->max_horz ?
+                                 ob_rr_theme->grip_width :
+                                 self->size.bottom - self->cbwidth_b));
 
                     ob_backend->canvas_show(self->lgripleft, TRUE);
                     ob_backend->canvas_show(self->rgripright, TRUE);
@@ -550,20 +546,20 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
                     ob_backend->canvas_show(self->rgripright, FALSE);
                 }
 
-                place(self->lgripbottom,
-                      sidebwidth,
-                      self->size.top + self->client->area.height +
-                      self->size.bottom - self->bwidth,
-                      ob_rr_theme->grip_width + self->bwidth,
-                      self->bwidth);
-                place(self->rgripbottom,
-                      self->size.left + self->client->area.width +
-                      self->size.right - self->bwidth - sidebwidth-
-                      ob_rr_theme->grip_width,
-                      self->size.top + self->client->area.height +
-                      self->size.bottom - self->bwidth,
-                      ob_rr_theme->grip_width + self->bwidth,
-                      self->bwidth);
+                paint_place(self->lgripbottom,
+                            sidebwidth,
+                            self->size.top + self->client->area.height +
+                            self->size.bottom - self->bwidth,
+                            ob_rr_theme->grip_width + self->bwidth,
+                            self->bwidth);
+                paint_place(self->rgripbottom,
+                            self->size.left + self->client->area.width +
+                            self->size.right - self->bwidth - sidebwidth-
+                            ob_rr_theme->grip_width,
+                            self->size.top + self->client->area.height +
+                            self->size.bottom - self->bwidth,
+                            ob_rr_theme->grip_width + self->bwidth,
+                            self->bwidth);
 
                 ob_backend->canvas_show(self->handlebottom, TRUE);
                 ob_backend->canvas_show(self->lgripbottom, TRUE);
@@ -572,44 +568,44 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
                 if (self->decorations & OB_FRAME_DECOR_HANDLE &&
                     ob_rr_theme->handle_height > 0)
                 {
-                    place(self->handletop,
-                          ob_rr_theme->grip_width +
-                          self->bwidth + sidebwidth,
-                          FRAME_HANDLE_Y(self),
-                          self->width - (ob_rr_theme->grip_width +
-                                         sidebwidth) * 2,
-                          self->bwidth);
+                    paint_place(self->handletop,
+                                ob_rr_theme->grip_width +
+                                self->bwidth + sidebwidth,
+                                FRAME_HANDLE_Y(self),
+                                self->width - (ob_rr_theme->grip_width +
+                                               sidebwidth) * 2,
+                                self->bwidth);
                     ob_backend->canvas_show(self->handletop, TRUE);
 
                     if (self->decorations & OB_FRAME_DECOR_GRIPS) {
-                        place(self->handleleft,
-                              ob_rr_theme->grip_width,
-                              0,
-                              self->bwidth,
-                              ob_rr_theme->handle_height);
-                        place(self->handleright,
-                              self->width -
-                              ob_rr_theme->grip_width -
-                              self->bwidth,
-                              0,
-                              self->bwidth,
-                              ob_rr_theme->handle_height);
+                        paint_place(self->handleleft,
+                                    ob_rr_theme->grip_width,
+                                    0,
+                                    self->bwidth,
+                                    ob_rr_theme->handle_height);
+                        paint_place(self->handleright,
+                                    self->width -
+                                    ob_rr_theme->grip_width -
+                                    self->bwidth,
+                                    0,
+                                    self->bwidth,
+                                    ob_rr_theme->handle_height);
 
-                        place(self->lgriptop,
-                              sidebwidth,
-                              FRAME_HANDLE_Y(self),
-                              ob_rr_theme->grip_width +
-                              self->bwidth,
-                              self->bwidth);
-                        place(self->rgriptop,
-                              self->size.left +
-                              self->client->area.width +
-                              self->size.right - self->bwidth -
-                              sidebwidth - ob_rr_theme->grip_width,
-                              FRAME_HANDLE_Y(self),
-                              ob_rr_theme->grip_width +
-                              self->bwidth,
-                              self->bwidth);
+                        paint_place(self->lgriptop,
+                                    sidebwidth,
+                                    FRAME_HANDLE_Y(self),
+                                    ob_rr_theme->grip_width +
+                                    self->bwidth,
+                                    self->bwidth);
+                        paint_place(self->rgriptop,
+                                    self->size.left +
+                                    self->client->area.width +
+                                    self->size.right - self->bwidth -
+                                    sidebwidth - ob_rr_theme->grip_width,
+                                    FRAME_HANDLE_Y(self),
+                                    ob_rr_theme->grip_width +
+                                    self->bwidth,
+                                    self->bwidth);
 
                         ob_backend->canvas_show(self->handleleft, TRUE);
                         ob_backend->canvas_show(self->handleright, TRUE);
@@ -647,22 +643,22 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
             if (self->decorations & OB_FRAME_DECOR_HANDLE &&
                 ob_rr_theme->handle_height > 0)
             {
-                place(self->handle,
-                      sidebwidth,
-                      FRAME_HANDLE_Y(self) + self->bwidth,
-                      self->width, ob_rr_theme->handle_height);
+                paint_place(self->handle,
+                            sidebwidth,
+                            FRAME_HANDLE_Y(self) + self->bwidth,
+                            self->width, ob_rr_theme->handle_height);
                 ob_backend->canvas_show(self->handle, TRUE);
 
                 if (self->decorations & OB_FRAME_DECOR_GRIPS) {
-                    place(self->lgrip,
-                          0, 0,
-                          ob_rr_theme->grip_width,
-                          ob_rr_theme->handle_height);
-                    place(self->rgrip,
-                          self->width - ob_rr_theme->grip_width,
-                          0,
-                          ob_rr_theme->grip_width,
-                          ob_rr_theme->handle_height);
+                    paint_place(self->lgrip,
+                                0, 0,
+                                ob_rr_theme->grip_width,
+                                ob_rr_theme->handle_height);
+                    paint_place(self->rgrip,
+                                self->width - ob_rr_theme->grip_width,
+                                0,
+                                ob_rr_theme->grip_width,
+                                ob_rr_theme->handle_height);
 
                     ob_backend->canvas_show(self->lgrip, TRUE);
                     ob_backend->canvas_show(self->rgrip, TRUE);
@@ -681,13 +677,13 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
                 (self->client->area.height + self->size.top +
                  self->size.bottom) > ob_rr_theme->grip_width * 2)
             {
-                place(self->left,
-                      0,
-                      self->bwidth + ob_rr_theme->grip_width,
-                      self->bwidth,
-                      self->client->area.height +
-                      self->size.top + self->size.bottom -
-                      ob_rr_theme->grip_width * 2);
+                paint_place(self->left,
+                            0,
+                            self->bwidth + ob_rr_theme->grip_width,
+                            self->bwidth,
+                            self->client->area.height +
+                            self->size.top + self->size.bottom -
+                            ob_rr_theme->grip_width * 2);
 
                 ob_backend->canvas_show(self->left, TRUE);
             } else
@@ -697,23 +693,23 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
                 (self->client->area.height + self->size.top +
                  self->size.bottom) > ob_rr_theme->grip_width * 2)
             {
-                place(self->right,
-                      self->client->area.width + self->cbwidth_l +
-                      self->cbwidth_r + self->bwidth,
-                      self->bwidth + ob_rr_theme->grip_width,
-                      self->bwidth,
-                      self->client->area.height +
-                      self->size.top + self->size.bottom -
-                      ob_rr_theme->grip_width * 2);
+                paint_place(self->right,
+                            self->client->area.width + self->cbwidth_l +
+                            self->cbwidth_r + self->bwidth,
+                            self->bwidth + ob_rr_theme->grip_width,
+                            self->bwidth,
+                            self->client->area.height +
+                            self->size.top + self->size.bottom -
+                            ob_rr_theme->grip_width * 2);
 
                 ob_backend->canvas_show(self->right, TRUE);
             } else
                 ob_backend->canvas_show(self->right, FALSE);
 
-            place(self->backback,
-                  self->size.left, self->size.top,
-                  self->client->area.width,
-                  self->client->area.height);
+            paint_place(self->backback,
+                        self->size.left, self->size.top,
+                        self->client->area.width,
+                        self->client->area.height);
         }
     }
 
@@ -774,8 +770,8 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
     if (resized && (self->decorations & OB_FRAME_DECOR_TITLEBAR) &&
         self->label_width)
     {
-        place(self->label, self->label_x, ob_rr_theme->paddingy,
-              self->label_width, ob_rr_theme->label_height);
+        paint_place(self->label, self->label_x, ob_rr_theme->paddingy,
+                    self->label_width, ob_rr_theme->label_height);
     }
 }
 
@@ -846,9 +842,9 @@ static void frame_adjust_cursors(ObFrame *self)
 void frame_adjust_client_area(ObFrame *self)
 {
     /* adjust the window which is there to prevent flashing on unmap */
-    place(self->backfront, 0, 0,
-          self->client->area.width,
-          self->client->area.height);
+    paint_place(self->backfront, 0, 0,
+                self->client->area.width,
+                self->client->area.height);
 }
 
 void frame_adjust_state(ObFrame *self)
@@ -1123,50 +1119,50 @@ static void layout_title(ObFrame *self)
     /* position and map the elements */
     if (self->icon_on) {
         ob_backend->canvas_show(self->icon, TRUE);
-        place(self->icon, self->icon_x, ob_rr_theme->paddingy,
-              ob_rr_theme->button_size + 2, ob_rr_theme->button_size + 2);
+        paint_place(self->icon, self->icon_x, ob_rr_theme->paddingy,
+                    ob_rr_theme->button_size + 2, ob_rr_theme->button_size + 2);
     } else
         ob_backend->canvas_show(self->icon, FALSE);
 
     if (self->desk_on) {
         ob_backend->canvas_show(self->desk, TRUE);
-        place(self->desk, self->desk_x, ob_rr_theme->paddingy + 1,
-              ob_rr_theme->button_size, ob_rr_theme->button_size);
+        paint_place(self->desk, self->desk_x, ob_rr_theme->paddingy + 1,
+                    ob_rr_theme->button_size, ob_rr_theme->button_size);
     } else
         ob_backend->canvas_show(self->desk, FALSE);
 
     if (self->shade_on) {
         ob_backend->canvas_show(self->shade, TRUE);
-        place(self->shade, self->shade_x, ob_rr_theme->paddingy + 1,
-              ob_rr_theme->button_size, ob_rr_theme->button_size);
+        paint_place(self->shade, self->shade_x, ob_rr_theme->paddingy + 1,
+                    ob_rr_theme->button_size, ob_rr_theme->button_size);
     } else
         ob_backend->canvas_show(self->shade, FALSE);
 
     if (self->iconify_on) {
         ob_backend->canvas_show(self->iconify, TRUE);
-        place(self->iconify, self->iconify_x, ob_rr_theme->paddingy + 1,
-              ob_rr_theme->button_size, ob_rr_theme->button_size);
+        paint_place(self->iconify, self->iconify_x, ob_rr_theme->paddingy + 1,
+                    ob_rr_theme->button_size, ob_rr_theme->button_size);
     } else
         ob_backend->canvas_show(self->iconify, FALSE);
 
     if (self->max_on) {
         ob_backend->canvas_show(self->max, TRUE);
-        place(self->max, self->max_x, ob_rr_theme->paddingy + 1,
-              ob_rr_theme->button_size, ob_rr_theme->button_size);
+        paint_place(self->max, self->max_x, ob_rr_theme->paddingy + 1,
+                    ob_rr_theme->button_size, ob_rr_theme->button_size);
     } else
         ob_backend->canvas_show(self->max, FALSE);
 
     if (self->close_on) {
         ob_backend->canvas_show(self->close, TRUE);
-        place(self->close, self->close_x, ob_rr_theme->paddingy + 1,
-              ob_rr_theme->button_size, ob_rr_theme->button_size);
+        paint_place(self->close, self->close_x, ob_rr_theme->paddingy + 1,
+                    ob_rr_theme->button_size, ob_rr_theme->button_size);
     } else
         ob_backend->canvas_show(self->close, FALSE);
 
     if (self->label_on && self->label_width > 0) {
         ob_backend->canvas_show(self->label, TRUE);
-        place(self->label, self->label_x, ob_rr_theme->paddingy,
-              self->label_width, ob_rr_theme->label_height);
+        paint_place(self->label, self->label_x, ob_rr_theme->paddingy,
+                    self->label_width, ob_rr_theme->label_height);
     } else
         ob_backend->canvas_show(self->label, FALSE);
 }

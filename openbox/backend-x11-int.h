@@ -61,6 +61,15 @@ ObCanvasId x11_canvas_new_child(ObCanvasId parent, ObCanvasFlags flags);
 void x11_canvas_free(ObCanvasId c);
 gboolean x11_canvas_has_alpha(ObCanvasId c);
 void x11_canvas_present(ObCanvasId c, const ObImage *img, const Rect *damage);
+void x11_canvas_move(ObCanvasId c, gint x, gint y);
+void x11_canvas_resize(ObCanvasId c, gint width, gint height);
+void x11_canvas_set_input(ObCanvasId c, const Rect *rects, guint n);
+gboolean x11_screen_read(const Rect *area, ObImage *img);
+void x11_dialog_set_title(ObCanvasId c, const gchar *title);
+void x11_dialog_set_size(ObCanvasId c, gint width, gint height,
+                         gboolean managed);
+void x11_dialog_set_parent(ObCanvasId c, ObSurfaceId parent,
+                           ObSurfaceId group, gboolean modal);
 void x11_canvas_fill(ObCanvasId c, guint32 argb);
 void x11_canvas_set_border(ObCanvasId c, gint width, guint32 argb);
 void x11_canvas_set_outline(ObCanvasId c, const ObImage *mask);

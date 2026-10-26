@@ -336,25 +336,32 @@ typedef enum {
     OB_CANVAS_POPUP,        /*!< focus cycling, popups */
     OB_CANVAS_MENU,         /*!< menus (X11: not override-redirect, as
                               they always were) */
-    OB_CANVAS_OVERLAY       /*!< above everything: move/resize outlines,
+    OB_CANVAS_OVERLAY,      /*!< above everything: move/resize outlines,
                               the focus indicator */
+    /*! a window of the window manager's own that it manages as a client
+      (prompts); it is also a surface, the core frames it with
+      client_manage(). X11: an ordinary top-level window. */
+    OB_CANVAS_DIALOG
 } ObCanvasLayer;
 
 /*! What a canvas takes from the pointer and the keyboard, and how it
   shows. What a canvas doesn't take goes to its parent (X11: event
   propagation). */
 typedef enum {
-    OB_CANVAS_INPUT_BUTTONS  = 1 << 0,  /*!< presses and releases */
-    OB_CANVAS_INPUT_CROSSING = 1 << 1,  /*!< the pointer coming and going */
-    OB_CANVAS_INPUT_MOTION   = 1 << 2,  /*!< every pointer motion */
-    OB_CANVAS_INPUT_DRAG     = 1 << 3,  /*!< motion with a button held */
+    OB_CANVAS_INPUT_PRESS    = 1 << 0,  /*!< button presses */
+    OB_CANVAS_INPUT_RELEASE  = 1 << 1,  /*!< button releases */
+    OB_CANVAS_INPUT_CROSSING = 1 << 2,  /*!< the pointer coming and going */
+    OB_CANVAS_INPUT_MOTION   = 1 << 3,  /*!< every pointer motion */
+    OB_CANVAS_INPUT_DRAG     = 1 << 4,  /*!< motion with a button held */
     /*! it shows nothing, and only takes input (X11 InputOnly) */
-    OB_CANVAS_INVISIBLE      = 1 << 4,
+    OB_CANVAS_INVISIBLE      = 1 << 5,
     /*! it draws with transparency where the screen can show it (X11: a
       32-bit visual while a compositor runs); canvas_has_alpha() says */
-    OB_CANVAS_ALPHA          = 1 << 5
+    OB_CANVAS_ALPHA          = 1 << 6
 } ObCanvasFlags;
 
+#define OB_CANVAS_INPUT_BUTTONS (OB_CANVAS_INPUT_PRESS | \
+                                 OB_CANVAS_INPUT_RELEASE)
 #define OB_CANVAS_INPUT_POINTER (OB_CANVAS_INPUT_BUTTONS | \
                                  OB_CANVAS_INPUT_CROSSING | \
                                  OB_CANVAS_INPUT_MOTION | \
@@ -576,6 +583,10 @@ struct _ObBackend {
       decoration, inner is where the client shows through, relative to
       outer, or NULL to leave the client where it is. */
     void (*canvas_place)(ObCanvasId c, const Rect *outer, const Rect *inner);
+    /*! Only where it is (x, y: relative to its parent, or the screen). */
+    void (*canvas_move)(ObCanvasId c, gint x, gint y);
+    /*! Only its size. */
+    void (*canvas_resize)(ObCanvasId c, gint width, gint height);
     void (*canvas_show)(ObCanvasId c, gboolean show);
     /*! Show this picture, scaled by the output's scale; damage, in canvas
       coordinates, says what changed (NULL for all of it). It stays until
@@ -610,6 +621,24 @@ struct _ObBackend {
       ObSurfaceInfo's opacity); set FALSE leaves that to the compositor.
       A decoration's id is the one restack takes for the frame. */
     void (*canvas_set_opacity)(ObCanvasId c, gboolean set, guint32 opacity);
+
+    /*! What the screen shows in area (the wallpaper under a canvas that
+      draws it in when nothing composites), in ObImage's layout with opaque
+      pixels, or FALSE. Free img->data with g_free(). */
+    gboolean (*screen_read)(const Rect *area, ObImage *img);
+
+    /* --- dialogs: what an OB_CANVAS_DIALOG says about itself, as a client
+       would --- */
+
+    void (*dialog_set_title)(ObCanvasId c, const gchar *title);
+    /*! A size the user can't change. managed: it is a client now, so ask
+      for the size as a client does (and the frame follows). */
+    void (*dialog_set_size)(ObCanvasId c, gint width, gint height,
+                            gboolean managed);
+    /*! Whose dialog it is: parent, or the group led by group (then parent
+      is OB_SURFACE_NONE); both none for nobody's. */
+    void (*dialog_set_parent)(ObCanvasId c, ObSurfaceId parent,
+                              ObSurfaceId group, gboolean modal);
 
     /* --- input --- */
 
@@ -797,8 +826,6 @@ struct _ObBackendEvents {
     void (*focus_lost)(gboolean refocus);
     /*! A key, button, motion or crossing. */
     void (*input)(const ObInputEvent *e);
-    /*! A canvas needs drawing again (X11: Expose). */
-    void (*canvas_exposed)(ObCanvasId c);
     /*! Monitors came, went or changed; ask output_count() and
       output_area() again. */
     void (*outputs_changed)(void);
