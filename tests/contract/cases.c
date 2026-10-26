@@ -442,7 +442,7 @@ static void desktops_switch(void)
    and the current desktop doesn't change. */
 static void starts_on_desktop(void)
 {
-    CT_REQUIRE(CT_CAP_DESKTOPS);
+    CT_REQUIRE(CT_CAP_DESKTOPS | CT_CAP_CLIENT_DESKTOP);
     int home = ct_current_desktop();
     int away = (home + 1) % ct_desktop_count();
 

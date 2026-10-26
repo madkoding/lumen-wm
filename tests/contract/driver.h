@@ -27,6 +27,7 @@ typedef enum {
     CT_CAP_INPUT           = 1 << 5, /* the driver can type and click */
     CT_CAP_SYNC_RESIZE     = 1 << 6, /* clients can sync resizes (XSync) */
     CT_CAP_OPACITY         = 1 << 7, /* clients can ask to be see-through */
+    CT_CAP_CLIENT_DESKTOP  = 1 << 8, /* a client can ask for a desktop */
 } ct_caps;
 
 typedef enum {
@@ -59,12 +60,13 @@ void ct_window_set_parent(ct_win *w, ct_win *parent);
 void ct_window_set_title(ct_win *w, const char *title);
 /* The application it belongs to (WM_CLASS on X11, app_id on Wayland). */
 void ct_window_set_app_id(ct_win *w, const char *app_id);
-/* Ask for no decorations from the window manager (Motif hints on X11,
-   client-side xdg-decoration on Wayland). */
+/* Ask for no decorations from the window manager (Motif hints on X11, no
+   xdg-decoration on Wayland). */
 void ct_window_set_undecorated(ct_win *w);
 /* Reserve this many pixels at the top of the screen (a dock). */
 void ct_window_set_strut(ct_win *w, int top);
-/* Before mapping: ask to show up in this state, or on this desktop. */
+/* Before mapping: ask to show up in this state, or on this desktop
+   (CT_CAP_CLIENT_DESKTOP). */
 void ct_window_set_initial_state(ct_win *w, ct_state s);
 void ct_window_set_initial_desktop(ct_win *w, int d);
 /* Before mapping: the client draws each size the window manager asks for

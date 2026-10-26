@@ -106,6 +106,27 @@ if use_wayland
     output: '@BASENAME@-protocol.c',
     command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
+  # the contract tests' Wayland driver is a client of these
+  wayland_client = dependency('wayland-client', required: false)
+  xkbcommon = dependency('xkbcommon', required: false)
+  contract_protocols = []
+  foreach p : [
+      wl_protocol_dir / 'stable/xdg-shell/xdg-shell.xml',
+      wl_protocol_dir / 'unstable/xdg-decoration/xdg-decoration-unstable-v1.xml',
+      wl_protocol_dir / 'staging/xdg-activation/xdg-activation-v1.xml',
+      'protocols/wlr-layer-shell-unstable-v1.xml',
+      'protocols/lumen-state-v1.xml',
+      # vendored: the virtual input wlroots offers
+      'protocols/virtual-keyboard-unstable-v1.xml',
+      'protocols/wlr-virtual-pointer-unstable-v1.xml',
+    ]
+    contract_protocols += custom_target(fs.stem(p) + '-client-protocol.h',
+      input: p, output: '@BASENAME@-client-protocol.h',
+      command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+    contract_protocols += custom_target(fs.stem(p) + '-client-protocol.c',
+      input: p, output: '@BASENAME@-client-protocol.c',
+      command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+  endforeach
 endif
 # the contract tests type and click with XTest; without it they skip the
 # input cases
@@ -379,6 +400,22 @@ contract_x11 = executable('contract-x11',
   'tests/contract/driver-x11.c',
   c_args: ['-std=gnu99'] + (xtst.found() ? ['-DCT_HAVE_XTEST'] : []),
   dependencies: [xtst, xext, x11])
+if use_wayland and wayland_client.found() and xkbcommon.found()
+  contract_wayland = executable('contract-wayland',
+    'tests/contract/contract.c',
+    'tests/contract/cases.c',
+    'tests/contract/driver-wayland.c',
+    contract_protocols,
+    c_args: ['-std=gnu99'],
+    dependencies: [wayland_client, xkbcommon])
+  # on a headless wlroots output, with an installed Lumen
+  run_target('contract-wayland-run',
+    command: ['sh', '-c', 'CONTRACT="$1" "$2" "$3"', 'sh',
+              contract_wayland.full_path(),
+              meson.project_source_root() / 'tests/contract/run-wayland.sh',
+              prefix],
+    depends: contract_wayland)
+endif
 # needs Xvfb, xterm and an installed Lumen: tests/contract/run.sh PREFIX
 run_target('contract',
   command: ['sh', '-c', 'CONTRACT="$1" "$2" "$3"', 'sh',
