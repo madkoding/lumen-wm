@@ -19,7 +19,6 @@
 #ifndef __events_h
 #define __events_h
 
-#include <X11/Xlib.h>
 #include <glib.h>
 
 struct _ObClient;
@@ -30,10 +29,16 @@ struct _ObInputEvent;
 #define OB_EVENT_USER_TIME_DELAY (1000) /* milliseconds */
 
 /*! The last user-interaction time, as given by the clients */
-extern Time event_last_user_time;
+extern guint32 event_last_user_time;
 
 void event_startup(gboolean reconfig);
 void event_shutdown(gboolean reconfig);
+
+/*! The backend starts and ends reporting one event
+  (ObBackendEvents.begin and end): event_time() and the serial of
+  ignored crossings come from it. */
+void event_begin(guint32 time, gulong serial);
+void event_end(void);
 
 /*! What the user did: the pointer over a frame, a menu or the dock, and
   bindings, menus, prompts and move/resize. */
@@ -69,10 +74,10 @@ void event_halt_focus_delay(void);
     comes at the same time or later than t2. */
 gboolean event_time_after(guint32 t1, guint32 t2);
 
-/*! Time at which the current event occured.  If this is not known, this
+/*! guint32 at which the current event occured.  If this is not known, this
   is a time at or after it, but at or before any other events we will process
 */
-Time event_time(void);
+guint32 event_time(void);
 
 /*! Force event_time() to skip the current timestamp and look for the next
   one. */
@@ -82,10 +87,10 @@ void event_reset_time(void);
   generated.  This is a user-provided time and not to be trusted.
   Returns CurrentTime if there was no source time provided.
 */
-Time event_source_time(void);
+guint32 event_source_time(void);
 /*! The time a request says the user asked for it, for focus stealing
   prevention; only for the event being handled. */
-void event_set_source_time(Time t);
+void event_set_source_time(guint32 t);
 
 /*! Update the timestamp for when the user has last used the focused window.
   This updates the timestamp to the time of the last event, given by

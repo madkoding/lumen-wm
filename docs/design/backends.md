@@ -19,7 +19,7 @@ through the core rather than kept behind a layer:
 | Frames | `frame.c`, `framerender.c` | reparenting, a dozen subwindows per frame, Shape, Xlib pixmaps |
 | Clients | `client.c` | ICCCM/EWMH properties, WM_PROTOCOLS, XKillClient, XSetInputFocus |
 | Screen | `screen.c` | root properties, Xinerama/RandR, the support window |
-| Events | `event.c` | the XEvent dispatch for everything below |
+| Events | `event.c` | the XEvent dispatch for everything below (moved to the X11 backend) |
 | Move/resize | `moveresize.c` | XSync counters, pointer warps |
 | Input | `grab.c`, `keyboard.c`, `mouse.c` | passive and active grabs |
 | Stacking | `stacking.c` | XRestackWindows |
@@ -128,36 +128,41 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       theme's icon with `publish_surface_icon` for a window that has none. Still read in `client.c`: the geometry,
       shape and colormap, which go with the frames. The opacity a client asks for is `OB_SURFACE_INFO_OPACITY`,
       and the core hands it to its frame with `canvas_set_opacity` (the frame's window until frames are canvases).
-   7. Requests: `event.c` splits in two. The X11 half turns XEvents into `ObBackendEvents`, and the core half
-      (`backend-events.c`) handles them. While `event.c` still reads the X queue, it hands each kind of event
-      that has moved to a `backend_x11_*` function (`backend-x11.h`). Done for property changes on clients
-      (`surface_changed`, with the queue compression for titles and icons in the backend; opacity and the
-      sync counter followed, the counter with move/resize, 9) and for the client messages
-      about states, iconifying, activating, closing and desktops (`request_*`; `client_set_state()` now
-      takes `ObSurfaceStates`). Configure requests, `_NET_MOVERESIZE_WINDOW` and
+   7. Requests: `event.c` splits in two (done). The X11 backend reads the queue (`backend-x11-event.c`) and
+      turns each XEvent into `ObBackendEvents`; the core half (`backend-events.c`, and `event.c` for input)
+      handles them. Property changes on clients are `surface_changed`, with the queue compression for titles
+      and icons in the backend; opacity and the sync counter followed, the counter with move/resize (9). The
+      client messages about states, iconifying, activating, closing and desktops are `request_*`
+      (`client_set_state()` takes `ObSurfaceStates`). Configure requests, `_NET_MOVERESIZE_WINDOW` and
       `_NET_RESTACK_WINDOW` are `request_configure`, `request_geometry` and `request_restack`, with
-      `ObConfigureRequest` and `ObStackMode` in place of X's value masks and stack modes. Map requests,
-      unmaps, destroys and reparents out of the frame are `surface_new`, `surface_withdrawn` and
-      `surface_gone` (`backend_x11_map_event`); the core still counts the unmaps it causes itself
-      (`ignore_unmaps`), and dock apps stay X11-only in `event.c`. Focus changes a client makes itself are
-      `focus_changed`, `focus_left` and `focus_lost`; the FocusIn/FocusOut bookkeeping (the queue look-ahead,
-      focus on another screen) stays in `event.c` and moves to the backend with the event queue. Next: the
-      interactive `_NET_WM_MOVERESIZE` with move/resize (9).
+      `ObConfigureRequest` and `ObStackMode` in place of X's value masks and stack modes; a window nobody
+      manages is configured as it asks without the core, and one that asks for its frame before it is mapped
+      is `request_frame_extents`. Map requests, unmaps, destroys and reparents out of the frame are
+      `surface_new`, `surface_withdrawn` and `surface_gone`, for dock apps too (a dock app that resizes itself
+      is `surface_changed` with `OB_SURFACE_INFO_GEOMETRY`); the core still counts the unmaps it causes itself
+      (`ignore_unmaps`). What a client asks or says about itself is dropped when the client is already going
+      away (`client_validate`). Focus changes a client makes itself are `focus_changed`, `focus_left` and
+      `focus_lost`, with the FocusIn/FocusOut bookkeeping (the queue look-ahead, focus on another screen) in
+      the backend. The root's messages are `request_desktop`, `request_desktop_count`,
+      `request_show_desktop`, `desktop_names_changed`, `desktop_layout_changed`, `running_requested` (the other
+      end of `request_running`, for `--reconfigure`, `--restart` and `--exit`), `replaced`, `pong`,
+      `outputs_changed` and `keymap_changed`. `begin` and `end` frame each event, so `event_time()` and the
+      serials of the crossings the core's own moves cause (`request_serial`, `request_serial_bump`) work as
+      before. Left in X11: `startupnotify.c` feeds libsn from its own queue callback until phase 5.
    8. Input: `grab.c`, `keyboard.c`, `mouse.c`. The contract cases type and click with XTest (a key binding,
       Alt-Tab, Alt-drag). Done: the active grabs (`grab_keyboard`, `grab_pointer`, `grab_server`); `grab.c`
       keeps counting nested grabs and picking the ungrab time. The passive grabs are `bind_key` (xkb keycodes
       and modifier masks, which are X11's) and `bind_button` (on a frame, a client, or a dock app), with
       every lock-key combination in the backend; a held click reaches the client with `pass_click`. What is
-      left in `mouse.c` and `keyboard.c` reads the XEvent itself (and asks the size of the window a click is
-      let go over), and becomes the `button`, `motion` and `key` events when the backend reads the queue. The core's
+      left in `mouse.c` and `keyboard.c` came to the core as the backend's `input` event. The core's
       handlers take an `ObInputEvent` (keysym, keycode, button, modifiers and pointer position) instead of the
       XEvent, one at a time: `moveresize_event()`, window cycling, `keyboard_event()`, `mouse_event()`, the menus and the prompts do (done;
       a menu asks for `text`, the character a key types through the input method, for its accelerators; a click
-      counts when `inside` says it was let go over the window it started in), and `backend_x11_input_event()` builds it, skipping
-      to the last queued motion while a window moves. Pointer crossings are `OB_INPUT_ENTER` and `OB_INPUT_LEAVE`, with why
+      counts when `inside` says it was let go over the window it started in), and the backend builds it, compressing
+      queued motion. `event_input()` finds what the input is over and hands it on. Pointer crossings are `OB_INPUT_ENTER` and `OB_INPUT_LEAVE`, with why
       (`crossing`: a grab starting or ending), whether it only went into a child (`inferior`) and, for a leave,
       what it enters next when that is already known (`next_over`); the frames, the dock and the menus take them
-      (done; the shelf still reads its own). Next: move/resize (9).
+      (done; the shelf too, and it repaints on `canvas_exposed`).
    9. Move/resize: XSync and pointer warps go behind the backend. Done: `moveresize_start()` takes an
       `ObMoveResize` (the `_NET_WM_MOVERESIZE` directions as a core enum) instead of the atoms, and the
       client's `_NET_WM_MOVERESIZE` is `request_move_resize`. The pointer queries and warps (keyboard moves,

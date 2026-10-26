@@ -25,10 +25,47 @@
 #include <X11/Xlib.h>
 
 /* backend-x11.c */
+/*! What the core gave startup(). */
+extern const ObBackendEvents *x11_events;
 Cursor x11_cursor(ObCursor cursor);
+/*! The event's timestamp, or CurrentTime when it has none. */
+guint32 x11_event_time(const XEvent *e);
+/*! Read a key, button, motion or crossing event; FALSE for any other. */
+gboolean x11_input_event(const XEvent *e, ObInputEvent *out);
+/*! A property of a managed window changed. Returns FALSE when it isn't one
+  the core hears about. */
+gboolean x11_property_notify(const XPropertyEvent *e);
+/*! A client message about a managed window. Returns FALSE when it isn't
+  one the core hears about. */
+gboolean x11_client_message(const XClientMessageEvent *e);
+/*! A managed window configures itself. */
+void x11_configure_request(const XConfigureRequestEvent *e);
+/*! A window asks to be mapped (MapRequest), or a managed window was
+  unmapped, destroyed or reparented out of its frame (UnmapNotify,
+  DestroyNotify, ReparentNotify). */
+void x11_map_event(const XEvent *e);
+/*! A managed window's colormap changed. */
+void x11_colormap_notify(const XColormapEvent *e);
+/*! A managed window's shape changed (ShapeNotify). Returns FALSE when e
+  isn't that. */
+gboolean x11_shape_notify(const XEvent *e);
+/*! The input method context for keys typed during a grab (menus). */
+struct _ObtIC *x11_grab_input_context(void);
+/*! An XSync alarm went off. */
+void x11_sync_alarm(const XEvent *e);
+
+/* backend-x11-event.c: reading the event queue */
+void x11_events_listen(void);
+void x11_events_stop(void);
 
 /* backend-x11-surface.c: managed windows and the frames around them */
 ObSurfaceId *x11_existing_surfaces(guint *n);
+/*! The managed window w is, or whose frame it is; None for any other. */
+Window x11_managed_of(Window w);
+/*! Whether w is a dock app's icon window. */
+gboolean x11_is_dockapp(Window w);
+/*! Whether parent is w's frame. */
+gboolean x11_is_frame_of(Window parent, Window w);
 ObSurfaceKind x11_surface_kind(ObSurfaceId s, ObSurfaceId *icon);
 void x11_dockapp_adopt(ObSurfaceId icon, ObSurfaceId name, ObCanvasId dock,
                        gint x, gint y);

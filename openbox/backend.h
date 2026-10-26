@@ -610,6 +610,13 @@ struct _ObBackend {
       done (X11 XSync), so the screen keeps up with the pointer. */
     void (*flush)(gboolean wait);
     void (*set_cursor)(ObCanvasId c, ObCursor cursor);
+    /*! The serial events caused by the core's next requests carry, or a
+      later one (X11: NextRequest). The core ignores pointer crossings
+      that its own moves and restacks cause by their serials. */
+    gulong (*request_serial)(void);
+    /*! Make the events still to come carry a serial past every one
+      request_serial() gave so far (X11: a request that does nothing). */
+    void (*request_serial_bump)(void);
 
     /* --- state for pagers and taskbars --- */
 
@@ -652,18 +659,30 @@ struct _ObBackend {
 /*! What a backend tells the core. The core fills it in; the backend calls
   it from its event source. */
 struct _ObBackendEvents {
+    /*! The backend starts reporting one event: what follows until end()
+      came from it. time: when it happened, 0 when unknown; serial: see
+      request_serial(). */
+    void (*begin)(guint32 time, gulong serial);
+    void (*end)(void);
+
     /*! A client wants to be shown (X11 MapRequest, a first buffer on
       Wayland). The core asks surface_info() about a new one and decides
       where, configures it and shows it, or leaves it alone (for one, when
       it is a dock app); one it already manages is shown again if it was
       iconified. */
     void (*surface_new)(ObSurfaceId s);
-    /*! The client is gone (destroyed, or on X11 reparented away). */
+    /*! The client is gone (destroyed, or on X11 reparented away). This,
+      surface_withdrawn and surface_changed (OB_SURFACE_INFO_GEOMETRY, when
+      it resizes itself) come for dock apps too. */
     void (*surface_gone)(ObSurfaceId s);
     /*! The client changed what it says about itself; ask surface_info()
       for the new values. time: when, in event time. */
     void (*surface_changed)(ObSurfaceId s, ObSurfaceInfoFields changed,
                             guint32 time);
+    /*! A window not managed yet asks what its frame will be
+      (_NET_REQUEST_FRAME_EXTENTS); the core answers with
+      publish_surface_extents(). */
+    void (*request_frame_extents)(ObSurfaceId s);
     /*! The client hid itself (X11 unmap, a null buffer on Wayland). */
     void (*surface_withdrawn)(ObSurfaceId s);
     /*! It answered surface_ping(). */

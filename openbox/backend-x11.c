@@ -19,7 +19,6 @@
    moves here one area at a time (docs/design/backends.md). */
 
 #include "backend.h"
-#include "backend-x11.h"
 #include "backend-x11-int.h"
 #include "openbox.h"
 #include "debug.h"
@@ -47,7 +46,7 @@
 #include <string.h>
 #include <unistd.h>
 
-static const ObBackendEvents *events;
+const ObBackendEvents *x11_events;
 static gboolean replace; /* take over from a running window manager */
 
 /* never shown: it holds the WM_Sn selection, takes the focus when no
@@ -87,13 +86,18 @@ static gboolean x11_startup(const gchar *display, ObStartupFlags flags,
                             const ObBackendEvents *ev)
 {
     replace = !!(flags & OB_STARTUP_REPLACE);
-    events = ev;
+    x11_events = ev;
     if (!obt_display_open(display))
         return FALSE;
 
     ob_screen = DefaultScreen(obt_display);
 
     XSynchronize(obt_display, !!(flags & OB_STARTUP_SYNC));
+
+#ifdef XKB
+    /* a held key repeats presses only, so bindings can tell them apart */
+    XkbSetDetectableAutoRepeat(obt_display, True, NULL);
+#endif
 
     /* check for locale support */
     if (!XSupportsLocale())
@@ -249,8 +253,9 @@ static void x11_publish_theme(const gchar *name)
 
 static void x11_shutdown(void)
 {
+    x11_events_stop();
     obt_display_close();
-    events = NULL;
+    x11_events = NULL;
     g_free(outputs);
     outputs = NULL;
     n_outputs = 0;
@@ -258,7 +263,7 @@ static void x11_shutdown(void)
 
 /* --- time --- */
 
-guint32 backend_x11_event_time(const XEvent *e)
+guint32 x11_event_time(const XEvent *e)
 {
     Time t = CurrentTime;
 
@@ -304,7 +309,7 @@ static gboolean find_timestamp(XEvent *e, gpointer data)
 {
     Time *t = data;
 
-    *t = backend_x11_event_time(e);
+    *t = x11_event_time(e);
     return *t != CurrentTime;
 }
 
@@ -315,7 +320,7 @@ static gboolean find_enter(XEvent *e, gpointer data)
     return TRUE;
 }
 
-gboolean backend_x11_input_event(const XEvent *e, ObInputEvent *out)
+gboolean x11_input_event(const XEvent *e, ObInputEvent *out)
 {
     out->crossing = OB_CROSSING_NORMAL;
     out->inferior = FALSE;
@@ -704,7 +709,7 @@ static void x11_release_screen(void)
 
 static GSource *x11_event_source(void)
 {
-    /* event.c reads the queue through its xqueue callback */
+    x11_events_listen();
     return xqueue_source_new();
 }
 
@@ -1369,7 +1374,7 @@ static ObSurfaceInfoFields property_fields(Atom a)
     return 0;
 }
 
-gboolean backend_x11_property_notify(const XPropertyEvent *e)
+gboolean x11_property_notify(const XPropertyEvent *e)
 {
     ObSurfaceInfoFields f = property_fields(e->atom);
     struct skip_property s;
@@ -1381,7 +1386,7 @@ gboolean backend_x11_property_notify(const XPropertyEvent *e)
     s.window = e->window;
     s.prop = e->atom;
     if (!xqueue_exists_local(skip_property_change, &s))
-        events->surface_changed((ObSurfaceId)e->window, f, e->time);
+        x11_events->surface_changed((ObSurfaceId)e->window, f, e->time);
     return TRUE;
 }
 
@@ -1429,7 +1434,7 @@ static gboolean more_client_message_event(Window window, Atom msgtype)
     return xqueue_exists_local(xqueue_match_window_message, &wm);
 }
 
-gboolean backend_x11_client_message(const XClientMessageEvent *e)
+gboolean x11_client_message(const XClientMessageEvent *e)
 {
     const ObSurfaceId s = (ObSurfaceId)e->window;
     const Atom msgtype = e->message_type;
@@ -1437,13 +1442,13 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
     if (msgtype == OBT_PROP_ATOM(WM_CHANGE_STATE)) {
         if (!more_client_message_event(e->window, msgtype)) {
             if (e->data.l[0] == IconicState)
-                events->request_iconify(s, TRUE);
+                x11_events->request_iconify(s, TRUE);
             else if (e->data.l[0] == NormalState)
-                events->request_iconify(s, FALSE);
+                x11_events->request_iconify(s, FALSE);
         }
     } else if (msgtype == OBT_PROP_ATOM(NET_WM_DESKTOP)) {
         if (!more_client_message_event(e->window, msgtype))
-            events->request_surface_desktop(s, (guint)e->data.l[0]);
+            x11_events->request_surface_desktop(s, (guint)e->data.l[0]);
     } else if (msgtype == OBT_PROP_ATOM(NET_WM_STATE)) {
         const Atom action = e->data.l[0];
         ObStateAction a;
@@ -1459,7 +1464,7 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
             /* an invalid action was passed to the client message, ignore
                it */
             return TRUE;
-        events->request_states(s, a, atom_state(e->data.l[1]),
+        x11_events->request_states(s, a, atom_state(e->data.l[1]),
                                atom_state(e->data.l[2]),
                                request_source(e->data.l[3]));
     } else if (msgtype == OBT_PROP_ATOM(NET_MOVERESIZE_WINDOW)) {
@@ -1477,7 +1482,7 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
         if (flags & 1 << 11) req.fields |= OB_CONFIGURE_HEIGHT;
         RECT_SET(req.want, e->data.l[1], e->data.l[2],
                  e->data.l[3], e->data.l[4]);
-        events->request_geometry(s, &req, request_source(flags >> 12 & 0xf));
+        x11_events->request_geometry(s, &req, request_source(flags >> 12 & 0xf));
     } else if (msgtype == OBT_PROP_ATOM(NET_RESTACK_WINDOW)) {
         const glong detail = e->data.l[2];
         ObStackMode mode;
@@ -1493,13 +1498,13 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
                           "with invalid detail %ld", e->window, detail);
             return TRUE;
         }
-        events->request_restack(s, (guintptr)e->data.l[1], mode,
+        x11_events->request_restack(s, (guintptr)e->data.l[1], mode,
                                 request_source(e->data.l[0]));
     } else if (msgtype == OBT_PROP_ATOM(NET_CLOSE_WINDOW)) {
-        events->request_close(s, request_source(e->data.l[1]));
+        x11_events->request_close(s, request_source(e->data.l[1]));
     } else if (msgtype == OBT_PROP_ATOM(NET_ACTIVE_WINDOW)) {
         const ObRequestSource from = request_source(e->data.l[0]);
-        events->request_activate(s, from,
+        x11_events->request_activate(s, from,
                                  from == OB_REQUEST_FROM_UNKNOWN ?
                                  0 : (guint32)e->data.l[1]);
     } else if (msgtype == OBT_PROP_ATOM(NET_WM_MOVERESIZE)) {
@@ -1509,14 +1514,14 @@ gboolean backend_x11_client_message(const XClientMessageEvent *e)
                  e->window, dir);
         /* ObMoveResize has _NET_WM_MOVERESIZE's order */
         if (dir >= OB_MOVERESIZE_SIZE_TOPLEFT && dir <= OB_MOVERESIZE_CANCEL)
-            events->request_move_resize(s, (ObMoveResize)dir, e->data.l[0],
+            x11_events->request_move_resize(s, (ObMoveResize)dir, e->data.l[0],
                                         e->data.l[1], e->data.l[3]);
     } else
         return FALSE;
     return TRUE;
 }
 
-void backend_x11_configure_request(const XConfigureRequestEvent *e)
+void x11_configure_request(const XConfigureRequestEvent *e)
 {
     ObConfigureRequest req;
 
@@ -1540,7 +1545,7 @@ void backend_x11_configure_request(const XConfigureRequestEvent *e)
     }
     req.gravity = 0;
 
-    events->request_configure((ObSurfaceId)e->window, &req);
+    x11_events->request_configure((ObSurfaceId)e->window, &req);
 }
 
 /* compositors read it off the frame */
@@ -1568,6 +1573,16 @@ static void x11_flush(gboolean wait)
         XSync(obt_display, FALSE);
     else
         XFlush(obt_display);
+}
+
+static gulong x11_request_serial(void)
+{
+    return NextRequest(obt_display);
+}
+
+static void x11_request_serial_bump(void)
+{
+    OBT_PROP_ERASE(screen_support_win, MOTIF_WM_HINTS);
 }
 
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)
@@ -1907,13 +1922,13 @@ static void x11_sync_stop(void)
 #endif
 }
 
-void backend_x11_sync_alarm(const XEvent *e)
+void x11_sync_alarm(const XEvent *e)
 {
 #ifdef SYNC
     const XSyncAlarmNotifyEvent *se = (const XSyncAlarmNotifyEvent*)e;
 
     if (sync_alarm != None && se->alarm == sync_alarm)
-        events->surface_synced((ObSurfaceId)sync_window);
+        x11_events->surface_synced((ObSurfaceId)sync_window);
 #else
     (void)e;
 #endif
@@ -1981,6 +1996,8 @@ const ObBackend ob_backend_x11 = {
     .restack = x11_restack,
     .flush = x11_flush,
     .set_cursor = x11_set_cursor,
+    .request_serial = x11_request_serial,
+    .request_serial_bump = x11_request_serial_bump,
 
     .canvas_new = x11_canvas_new,
     .canvas_free = x11_canvas_free,
@@ -2022,12 +2039,12 @@ const ObBackend ob_backend_x11 = {
     .publish_surface_hidden = x11_publish_surface_hidden,
 };
 
-void backend_x11_colormap_notify(const XColormapEvent *e)
+void x11_colormap_notify(const XColormapEvent *e)
 {
     x11_colormap_changed(e->window, e->colormap);
 }
 
-ObtIC *backend_x11_grab_input_context(void)
+ObtIC *x11_grab_input_context(void)
 {
     /* grabs go to the support window */
     if (!grab_ic)
@@ -2035,7 +2052,7 @@ ObtIC *backend_x11_grab_input_context(void)
     return grab_ic;
 }
 
-gboolean backend_x11_shape_notify(const XEvent *e)
+gboolean x11_shape_notify(const XEvent *e)
 {
 #ifdef SHAPE
     if (obt_display_extension_shape &&
@@ -2043,7 +2060,7 @@ gboolean backend_x11_shape_notify(const XEvent *e)
     {
         const XShapeEvent *se = (const XShapeEvent*)e;
 
-        events->surface_changed((ObSurfaceId)se->window,
+        x11_events->surface_changed((ObSurfaceId)se->window,
                                 OB_SURFACE_INFO_SHAPE, se->time);
         return TRUE;
     }
@@ -2051,26 +2068,26 @@ gboolean backend_x11_shape_notify(const XEvent *e)
     return FALSE;
 }
 
-void backend_x11_map_event(const XEvent *e)
+void x11_map_event(const XEvent *e)
 {
     switch (e->type) {
     case MapRequest:
         ob_debug("MapRequest for 0x%lx", e->xmaprequest.window);
-        events->surface_new((ObSurfaceId)e->xmaprequest.window);
+        x11_events->surface_new((ObSurfaceId)e->xmaprequest.window);
         break;
     case UnmapNotify:
         ob_debug("UnmapNotify for window 0x%lx eventwin 0x%lx "
                  "fromconfigure %d", e->xunmap.window, e->xunmap.event,
                  e->xunmap.from_configure);
-        events->surface_withdrawn((ObSurfaceId)e->xunmap.window);
+        x11_events->surface_withdrawn((ObSurfaceId)e->xunmap.window);
         break;
     case DestroyNotify:
         ob_debug("DestroyNotify for window 0x%lx", e->xdestroywindow.window);
-        events->surface_gone((ObSurfaceId)e->xdestroywindow.window);
+        x11_events->surface_gone((ObSurfaceId)e->xdestroywindow.window);
         break;
     case ReparentNotify:
         ob_debug("ReparentNotify for window 0x%lx", e->xreparent.window);
-        events->surface_gone((ObSurfaceId)e->xreparent.window);
+        x11_events->surface_gone((ObSurfaceId)e->xreparent.window);
         break;
     }
 }

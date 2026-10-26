@@ -52,6 +52,50 @@ typedef struct {
 /* Decor by frame, and by owner */
 static GHashTable *decor_frames, *decor_owners;
 
+/* the windows the core manages, and the dock apps' icon windows */
+static GHashTable *managed, *dockapps;
+
+static void add_window(GHashTable **set, Window w)
+{
+    Window *key = g_new(Window, 1);
+
+    if (!*set)
+        *set = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, NULL);
+    *key = w;
+    g_hash_table_replace(*set, key, key);
+}
+
+static void remove_window(GHashTable *set, Window w)
+{
+    if (set) g_hash_table_remove(set, &w);
+}
+
+static gboolean has_window(GHashTable *set, Window w)
+{
+    return set && g_hash_table_lookup(set, &w);
+}
+
+Window x11_managed_of(Window w)
+{
+    Decor *d;
+
+    if (has_window(managed, w))
+        return w;
+    d = decor_frames ? g_hash_table_lookup(decor_frames, &w) : NULL;
+    return d ? d->owner : None;
+}
+
+gboolean x11_is_dockapp(Window w)
+{
+    return has_window(dockapps, w);
+}
+
+gboolean x11_is_frame_of(Window parent, Window w)
+{
+    Decor *d = decor_owners ? g_hash_table_lookup(decor_owners, &w) : NULL;
+    return d && d->frame == parent;
+}
+
 typedef struct {
     Window window;
     Colormap colormap;
@@ -170,6 +214,8 @@ void x11_surface_adopt(ObSurfaceId s, gboolean internal)
     XSetWindowAttributes attrib;
     XWindowAttributes wattrib;
 
+    add_window(&managed, (Window)s);
+
     attrib.event_mask = CLIENT_EVENTMASK | (internal ? KeyPressMask : 0);
     attrib.do_not_propagate_mask = CLIENT_NOPROPAGATEMASK;
     XChangeWindowAttributes(obt_display, (Window)s,
@@ -194,6 +240,7 @@ void x11_surface_unwatch(ObSurfaceId s, gboolean internal)
 {
     Window w = (Window)s;
 
+    remove_window(managed, w);
     XSelectInput(obt_display, w, NoEventMask);
     if (!internal)
         XChangeSaveSet(obt_display, w, SetModeDelete);
@@ -652,11 +699,13 @@ void x11_dockapp_adopt(ObSurfaceId icon, ObSurfaceId name, ObCanvasId dock,
     XSync(obt_display, False);
 
     XSelectInput(obt_display, (Window)icon, DOCKAPP_EVENT_MASK);
+    add_window(&dockapps, (Window)icon);
 }
 
 void x11_dockapp_release(ObSurfaceId icon, ObSurfaceId name,
                          gboolean reparent)
 {
+    remove_window(dockapps, (Window)icon);
     XSelectInput(obt_display, (Window)icon, NoEventMask);
     /* remove the window from our save set */
     XChangeSaveSet(obt_display, (Window)icon, SetModeDelete);
