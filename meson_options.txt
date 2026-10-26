@@ -1,3 +1,5 @@
+option('wayland', type: 'feature', value: 'auto',
+       description: 'the Wayland backend (wlroots 0.17)')
 option('startup-notification', type: 'feature', value: 'auto',
        description: 'launch feedback through libstartup-notification')
 option('xcursor', type: 'feature', value: 'auto',

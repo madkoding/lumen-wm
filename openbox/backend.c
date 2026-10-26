@@ -21,10 +21,28 @@
 
 const ObBackend *ob_backend = NULL;
 
+/*! LUMEN_BACKEND (x11 or wayland) picks; otherwise Lumen is the window
+  manager of the X server in DISPLAY, and a Wayland compositor anywhere else
+  (on a console, or nested in another Wayland session). */
+static const ObBackend *pick(void)
+{
+    const gchar *want = g_getenv("LUMEN_BACKEND");
+
+#ifdef USE_WLROOTS
+    if (want && !strcmp(want, "wayland"))
+        return &ob_backend_wlr;
+    if (!(want && !strcmp(want, "x11")) &&
+        (g_getenv("WAYLAND_DISPLAY") || !g_getenv("DISPLAY")))
+        return &ob_backend_wlr;
+#else
+    (void)want;
+#endif
+    return &ob_backend_x11;
+}
+
 gboolean backend_startup(const gchar *display, ObStartupFlags flags)
 {
-    /* X11 is the only backend so far */
-    ob_backend = &ob_backend_x11;
+    ob_backend = pick();
     return ob_backend->startup(display, flags, &ob_backend_events);
 }
 

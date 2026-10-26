@@ -874,6 +874,9 @@ extern const ObBackend *ob_backend;
 extern const ObBackendEvents ob_backend_events;
 
 extern const ObBackend ob_backend_x11;
+#ifdef USE_WLROOTS
+extern const ObBackend ob_backend_wlr;
+#endif
 
 /*! Pick the backend and start it. */
 gboolean backend_startup(const gchar *display, ObStartupFlags flags);

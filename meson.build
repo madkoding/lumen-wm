@@ -64,6 +64,28 @@ imlib2 = dependency('imlib2', required: get_option('imlib2'))
 librsvg = dependency('librsvg-2.0', required: get_option('librsvg'))
 sm = dependency('sm', required: get_option('session'))
 ice = dependency('ice', required: get_option('session'))
+# the Wayland backend
+wlroots = dependency('wlroots', version: ['>= 0.17', '< 0.18'],
+                     required: get_option('wayland'))
+use_wayland = wlroots.found()
+if use_wayland
+  wayland_server = dependency('wayland-server')
+  wayland_protocols = dependency('wayland-protocols')
+  pixman = dependency('pixman-1')
+  libdrm = dependency('libdrm').partial_dependency(compile_args: true)
+  wayland_scanner = find_program(
+    dependency('wayland-scanner', native: true).get_variable('wayland_scanner'))
+  wl_protocol_dir = wayland_protocols.get_variable('pkgdatadir')
+  protocol_headers = []
+  foreach p : [
+      wl_protocol_dir / 'stable/xdg-shell/xdg-shell.xml',
+      wl_protocol_dir / 'unstable/xdg-decoration/xdg-decoration-unstable-v1.xml',
+    ]
+    protocol_headers += custom_target(fs.stem(p) + '-protocol.h',
+      input: p, output: '@BASENAME@-protocol.h',
+      command: [wayland_scanner, 'server-header', '@INPUT@', '@OUTPUT@'])
+  endforeach
+endif
 # the contract tests type and click with XTest; without it they skip the
 # input cases
 xtst = dependency('xtst', required: false)
@@ -112,6 +134,9 @@ endif
 use_sm = sm.found() and ice.found()
 if use_sm
   defs += '-DUSE_SM'
+endif
+if use_wayland
+  defs += '-DUSE_WLROOTS'
 endif
 add_project_arguments(defs, language: 'c')
 
@@ -277,9 +302,18 @@ executable('lumen-wm',
   'openbox/translate.c',
   'openbox/window.c',
   version_h,
-  c_args: paths + ['-DG_LOG_DOMAIN="Openbox"'],
+  use_wayland ? [
+    'openbox/backend-wlr.c',
+    'openbox/backend-wlr-canvas.c',
+    'openbox/backend-wlr-input.c',
+    'openbox/backend-wlr-surface.c',
+    protocol_headers,
+  ] : [],
+  c_args: paths + ['-DG_LOG_DOMAIN="Openbox"'] +
+    (use_wayland ? ['-DWLR_USE_UNSTABLE'] : []),
   dependencies: [obrender, obt, cairo_xlib, x11, xext, xrandr, xinerama,
-                 glib, xml, xkbcommon, libm, libsn, xcursor, sm, ice],
+                 glib, xml, xkbcommon, libm, libsn, xcursor, sm, ice] +
+    (use_wayland ? [wlroots, wayland_server, pixman, libdrm] : []),
   export_dynamic: true,
   install_rpath: rpath,
   install: true)
@@ -431,6 +465,7 @@ summary({
   'Startup notification': libsn.found(),
   'X Cursor library': xcursor.found(),
   'Session management': use_sm,
+  'Wayland (wlroots)': use_wayland,
   'Imlib2': imlib2.found(),
   'SVG (librsvg)': librsvg.found(),
   'Translations': nls,
