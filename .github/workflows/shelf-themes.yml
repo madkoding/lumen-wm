@@ -1,7 +1,8 @@
 name: shelf-themes
 
-# Builds Lumen, runs the contract tests (tests/contract), then shoots the shelf
-# under every bundled theme and checks that its colours read
+# Builds Lumen with both backends, runs the contract tests (tests/contract) on
+# X11 (Xvfb) and on Wayland (headless wlroots), then shoots the shelf under
+# every bundled theme and checks that its colours read
 # (tools/shelf-themes.sh). The screenshots are kept as an artifact.
 on:
   push:
@@ -26,16 +27,21 @@ jobs:
             libpango1.0-dev libcairo2-dev libx11-dev libxext-dev \
             libxcursor-dev libxrandr-dev libxinerama-dev libxkbcommon-dev \
             libimlib2-dev libsm-dev libice-dev libxtst-dev \
-            xvfb xdotool xterm imagemagick fonts-dejavu-core picom hsetroot
+            xvfb xdotool xterm imagemagick fonts-dejavu-core picom hsetroot \
+            libwlroots-dev libwayland-dev wayland-protocols libpixman-1-dev \
+            libdrm-dev libxcb1-dev libxcb-icccm4-dev libxcb-ewmh-dev
       - name: Build and install
         run: |
-          meson setup build --prefix="$HOME/ob"
+          meson setup build --prefix="$HOME/ob" -Dwayland=enabled
           meson compile -C build
           meson test -C build --print-errorlogs
           meson install -C build
-      - name: Contract tests
+      - name: Contract tests on X11
         timeout-minutes: 5
         run: tests/contract/run.sh "$HOME/ob"
+      - name: Contract tests on Wayland
+        timeout-minutes: 5
+        run: tests/contract/run-wayland.sh "$HOME/ob"
       - name: Shoot the themes
         timeout-minutes: 10
         # with a compositor, so the menus take the cairo path
