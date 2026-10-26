@@ -84,6 +84,8 @@ bool ct_window_viewable(ct_win *w);
 bool ct_window_focused(ct_win *w);
 /* No client has the focus: keys go to the window manager. */
 bool ct_nothing_focused(void);
+/* How many menus and popups the window manager shows. */
+int ct_popup_count(void);
 /* The window manager says it runs and what it supports, as pagers and
    panels look for (X11: WM_Sn, _NET_SUPPORTING_WM_CHECK, _NET_SUPPORTED;
    Wayland: it is the compositor). */
@@ -142,6 +144,8 @@ void ct_input_click(ct_win *w, int x, int y);
 /* Click the first button on the window's title bar, count times in a
    row. */
 void ct_input_title_click(ct_win *w, int count);
+/* Click this button on the desktop, away from any window. */
+void ct_input_root_click(int button);
 /* How many times the window manager asked a syncing client to tell it
    when it has drawn a new size. */
 int ct_window_sync_requests(ct_win *w);
