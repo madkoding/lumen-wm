@@ -23,14 +23,12 @@
 #include "menu.h"
 #include "menuframe.h"
 #include "screen.h"
-#include "obt/display.h"
+#include "paint.h"
 #include "obrender/render.h"
 #include "obrender/font.h"
 #include "obrender/theme.h"
 
-#include <X11/extensions/shape.h>
 #include <cairo.h>
-#include <cairo-xlib.h>
 #include <pango/pangocairo.h>
 #include <math.h>
 #include <string.h>
@@ -365,8 +363,6 @@ static struct {
     gint             text_w;     /* the title's room in the media island */
     gboolean         argb;       /* a compositor is running */
     gboolean         shown;
-    Visual          *visual;
-    Colormap         cmap;
     gint             wx, wy, ww, wh;
     gint             dock_x, dock_w, status_x, status_w, island_y;
     GArray          *tiles;      /* Tile, the dock's app tiles */
@@ -1207,8 +1203,9 @@ static void update_art(void);
 
 static void paint(void)
 {
-    cairo_surface_t *img, *dst;
+    cairo_surface_t *img;
     cairo_t *cr;
+    ObImage pic;
     const Material *m = S.m;
     gint i, y = S.island_y;
     time_t now = time(NULL);
@@ -1355,24 +1352,21 @@ static void paint(void)
     }
     cairo_destroy(cr);
 
-    dst = cairo_xlib_surface_create(obt_display, S.win, S.visual, S.ww, S.wh);
-    cr = cairo_create(dst);
-    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_set_source_surface(cr, img, 0, 0);
-    cairo_paint(cr);
-    cairo_destroy(cr);
-    cairo_surface_flush(dst);
-    cairo_surface_destroy(dst);
+    cairo_surface_flush(img);
+    pic.data = (const guint32*)cairo_image_surface_get_data(img);
+    pic.width = S.ww;
+    pic.height = S.wh;
+    pic.stride = cairo_image_surface_get_stride(img);
+    ob_backend->canvas_present(S.win, &pic, NULL);
     cairo_surface_destroy(img);
-    XFlush(obt_display);
+    ob_backend->flush(FALSE);
 }
 
 /* ---- window --------------------------------------------------------------- */
 
 static void shape_input(void)
 {
-    if (!obt_display_extension_shape) return;
-    XRectangle r[4] = {
+    Rect r[4] = {
         { S.dock_x,    S.island_y, S.dock_w,    ISLAND_H },
         { S.media_x,   S.island_y, S.media_w,   ISLAND_H },
         { S.weather_x, S.island_y, S.weather_w, ISLAND_H },
@@ -1381,37 +1375,44 @@ static void shape_input(void)
     gint n = 0, i;
     for (i = 0; i < 4; ++i)
         if (r[i].width) r[n++] = r[i];
-    XShapeCombineRectangles(obt_display, S.win, ShapeInput, 0, 0, r, n,
-                            ShapeSet, YXBanded);
+    /* the pointer goes through between the islands */
+    ob_backend->canvas_set_input(S.win, r, n);
 }
 
 static void snapshot(void)
 {
-    XImage *im;
+    Rect area;
+    ObImage im;
+    gint y;
 
     if (S.argb) return;
     if (S.bg) { cairo_surface_destroy(S.bg); S.bg = NULL; }
-    im = XGetImage(obt_display, obt_root(ob_screen), S.wx, S.wy, S.ww, S.wh,
-                   AllPlanes, ZPixmap);
-    if (!im) return;
-    if (im->bits_per_pixel == 32) {
-        gint y;
-        S.bg = cairo_image_surface_create(CAIRO_FORMAT_RGB24, S.ww, S.wh);
-        cairo_surface_flush(S.bg);
-        for (y = 0; y < S.wh; ++y)
-            memcpy(cairo_image_surface_get_data(S.bg) +
-                   y * cairo_image_surface_get_stride(S.bg),
-                   im->data + y * im->bytes_per_line, 4 * S.ww);
-        cairo_surface_mark_dirty(S.bg);
-    }
-    XDestroyImage(im);
+    RECT_SET(area, S.wx, S.wy, S.ww, S.wh);
+    if (!ob_backend->screen_read(&area, &im)) return;
+    S.bg = cairo_image_surface_create(CAIRO_FORMAT_RGB24, S.ww, S.wh);
+    cairo_surface_flush(S.bg);
+    for (y = 0; y < S.wh; ++y)
+        memcpy(cairo_image_surface_get_data(S.bg) +
+               y * cairo_image_surface_get_stride(S.bg),
+               (const guchar*)im.data + y * im.stride, 4 * S.ww);
+    cairo_surface_mark_dirty(S.bg);
+    g_free((guint32*)im.data);
 }
 
 static void place(void)
 {
     layout();
-    XMoveResizeWindow(obt_display, S.win, S.wx, S.wy, S.ww, S.wh);
+    paint_place(S.win, S.wx, S.wy, S.ww, S.wh);
     shape_input();
+}
+
+/* above every window */
+static void show_raised(void)
+{
+    guintptr w = S.win;
+
+    ob_backend->restack(OB_SURFACE_NONE, &w, 1);
+    ob_backend->canvas_show(S.win, TRUE);
 }
 
 static gboolean snap_cb(gpointer data)
@@ -1420,7 +1421,7 @@ static gboolean snap_cb(gpointer data)
     snapshot();
     S.ready = TRUE;
     S.shown = !covered_by_fullscreen();
-    if (S.shown) XMapRaised(obt_display, S.win);
+    if (S.shown) show_raised();
     paint();
     return FALSE;
 }
@@ -1429,7 +1430,7 @@ static gboolean snap_cb(gpointer data)
 static void resnap(guint delay)
 {
     if (S.argb) { S.ready = TRUE; return; }
-    XUnmapWindow(obt_display, S.win);
+    ob_backend->canvas_show(S.win, FALSE);
     S.shown = FALSE;
     if (S.snap_id) g_source_remove(S.snap_id);
     S.snap_id = g_timeout_add(delay, snap_cb, NULL);
@@ -1477,12 +1478,12 @@ static gboolean tick(gpointer data)
 
     fs = covered_by_fullscreen();
     if (fs && S.shown) {
-        XUnmapWindow(obt_display, S.win);
+        ob_backend->canvas_show(S.win, FALSE);
         S.shown = FALSE;
     } else if (!fs && !S.shown) {
         S.shown = TRUE;
         place();
-        XMapRaised(obt_display, S.win);
+        show_raised();
     }
     if (S.shown) {
         gint ow = S.ww, ox = S.wx;
@@ -1740,16 +1741,10 @@ static void launch(const gchar *command)
 
 void shelf_startup(gboolean reconfig)
 {
-    XSetWindowAttributes attr;
-    XVisualInfo vi;
-    Display *d = obt_display;
-    gchar *cm = g_strdup_printf("_NET_WM_CM_S%d", ob_screen);
-    gulong mask;
-
     memset(&S, 0, sizeof S);
     S.hover = -1;
     STRUT_PARTIAL_SET(shelf_strut, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-    if (!config_shelf_enabled) { g_free(cm); return; }
+    if (!config_shelf_enabled) return;
 
     if (config_shelf_material &&
         !g_ascii_strcasecmp(config_shelf_material, "light"))
@@ -1761,36 +1756,19 @@ void shelf_startup(gboolean reconfig)
         S.m = theme_material();
     S.m = override_material(S.m);
     if (g_getenv("OB_SHELF_DEBUG")) dump_material(S.m);
-    S.argb = XGetSelectionOwner(d, XInternAtom(d, cm, False)) != None &&
-             XMatchVisualInfo(d, ob_screen, 32, TrueColor, &vi);
-    g_free(cm);
 
-    attr.override_redirect = True;
-    attr.border_pixel = 0;
-    attr.background_pixmap = None;
-    attr.event_mask = ExposureMask | ButtonPressMask | ButtonReleaseMask |
-                      PointerMotionMask |
-                      LeaveWindowMask;
-    mask = CWOverrideRedirect | CWBorderPixel | CWBackPixmap | CWEventMask;
-    if (S.argb) {
-        S.visual = vi.visual;
-        S.cmap = XCreateColormap(d, obt_root(ob_screen), vi.visual, AllocNone);
-        attr.colormap = S.cmap;
-        mask |= CWColormap;
-        load_pin_icons();
-        start_feeds();
-        layout();
-        S.win = XCreateWindow(d, obt_root(ob_screen), S.wx, S.wy, S.ww, S.wh,
-                              0, 32, InputOutput, vi.visual, mask, &attr);
-    } else {
-        S.visual = DefaultVisual(d, ob_screen);
-        load_pin_icons();
-        start_feeds();
-        layout();
-        S.win = XCreateWindow(d, obt_root(ob_screen), S.wx, S.wy, S.ww, S.wh,
-                              0, CopyFromParent, InputOutput, CopyFromParent,
-                              mask, &attr);
-    }
+    /* drawn with real alpha when a compositor runs, else over a copy of the
+       wallpaper */
+    S.win = (Window)ob_backend->canvas_new(OB_CANVAS_PANEL, OB_SURFACE_NONE,
+                                           OB_CANVAS_INPUT_BUTTONS |
+                                           OB_CANVAS_INPUT_MOTION |
+                                           OB_CANVAS_INPUT_CROSSING |
+                                           OB_CANVAS_ALPHA);
+    S.argb = ob_backend->canvas_has_alpha(S.win);
+    load_pin_icons();
+    start_feeds();
+    layout();
+    paint_place(S.win, S.wx, S.wy, S.ww, S.wh);
     shape_input();
     screen_update_areas();
     resnap(1200);
@@ -1803,8 +1781,7 @@ void shelf_shutdown(gboolean reconfig)
     if (!S.win) return;
     if (S.tick_id) g_source_remove(S.tick_id);
     if (S.snap_id) g_source_remove(S.snap_id);
-    XDestroyWindow(obt_display, S.win);
-    if (S.cmap) XFreeColormap(obt_display, S.cmap);
+    ob_backend->canvas_free(S.win);
     if (S.bg) cairo_surface_destroy(S.bg);
     if (S.tiles) g_array_free(S.tiles, TRUE);
     if (sys_cmds) { g_ptr_array_free(sys_cmds, TRUE); sys_cmds = NULL; }
@@ -2032,25 +2009,6 @@ gint shelf_menu_limit(void)
     return S.wy + S.island_y - 8;
 }
 
-gboolean shelf_menu_argb(Visual **visual, Colormap *cmap)
-{
-    static Colormap menu_cmap;
-    Display *d = obt_display;
-    XVisualInfo vi;
-    gchar *cm = g_strdup_printf("_NET_WM_CM_S%d", ob_screen);
-    gboolean ok = XGetSelectionOwner(d, XInternAtom(d, cm, False)) != None &&
-                  XMatchVisualInfo(d, ob_screen, 32, TrueColor, &vi);
-
-    g_free(cm);
-    if (!ok) return FALSE;
-    if (!menu_cmap)
-        menu_cmap = XCreateColormap(d, obt_root(ob_screen), vi.visual,
-                                    AllocNone);
-    if (visual) *visual = vi.visual;
-    if (cmap) *cmap = menu_cmap;
-    return TRUE;
-}
-
 /* the text of a menu entry, in the theme's font, laid out in a box */
 static void menu_text(cairo_t *cr, const gchar *text, const RrFont *font,
                       RrJustify justify, gdouble x, gdouble y, gdouble w,
@@ -2094,7 +2052,7 @@ static void menu_mask(cairo_t *cr, const RrPixmapMask *m, gdouble x,
     cairo_fill(cr);
 }
 
-void shelf_menu_paint(ObMenuFrame *f, Visual *visual)
+void shelf_menu_paint(ObMenuFrame *f)
 {
     const RrTheme *t = ob_rr_theme;
     gint w = f->area.width, h = f->area.height, b = t->mbwidth;
@@ -2105,16 +2063,13 @@ void shelf_menu_paint(ObMenuFrame *f, Visual *visual)
     Fill bg = rr_fill(t->a_menu), sel = rr_fill(t->a_menu_selected);
     Rgb bgm = fill_mean(&bg), selm = fill_mean(&sel);
     Rgb ink = readable(rr_rgb(t->menu_color), bgm, 4.5);
-    Pixmap pm;
     cairo_surface_t *dst;
+    ObImage img;
     cairo_t *cr;
     GList *it;
 
     if (w <= 0 || h <= 0) return;
-    /* drawn into the window's background pixmap, as RrPaint does, so the
-       server repaints it when the menu is mapped or exposed */
-    pm = XCreatePixmap(obt_display, f->window, ww, wh, 32);
-    dst = cairo_xlib_surface_create(obt_display, pm, visual, ww, wh);
+    dst = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, ww, wh);
     cr = cairo_create(dst);
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_BEST);
     cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
@@ -2242,10 +2197,12 @@ void shelf_menu_paint(ObMenuFrame *f, Visual *visual)
 
     cairo_destroy(cr);
     cairo_surface_flush(dst);
+    img.data = (const guint32*)cairo_image_surface_get_data(dst);
+    img.width = ww;
+    img.height = wh;
+    img.stride = cairo_image_surface_get_stride(dst);
+    ob_backend->canvas_present(f->window, &img, NULL);
     cairo_surface_destroy(dst);
-    XSetWindowBackgroundPixmap(obt_display, f->window, pm);
-    XClearWindow(obt_display, f->window);
-    XFreePixmap(obt_display, pm);
 }
 
 void shelf_menu_startup(void)
@@ -2474,13 +2431,6 @@ static void move_pin(gint from, gint to)
     config_shelf_pins = g_slist_remove(config_shelf_pins, p);
     config_shelf_pins = g_slist_insert(config_shelf_pins, p, at);
     pins_changed();
-}
-
-gboolean shelf_exposed(ObCanvasId c)
-{
-    if (!S.win || c != (ObCanvasId)S.win) return FALSE;
-    paint();
-    return TRUE;
 }
 
 gboolean shelf_input(const ObInputEvent *e)

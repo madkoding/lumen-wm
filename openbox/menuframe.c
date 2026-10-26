@@ -27,26 +27,24 @@
 #include "grab.h"
 #include "openbox.h"
 #include "config.h"
-#include "obt/prop.h"
 #include "obt/keyboard.h"
 #include "obrender/theme.h"
+#include "paint.h"
 
-#include <X11/extensions/shape.h>
 #include <math.h>
 
 #define PADDING MENU_ITEM_PADDING
 #define MARGIN  (config_shelf_menu_padding)
 
-static void round_corners(Window win, gint w, gint h, gint radius);
+static void round_corners(ObCanvasId c, gint w, gint h, gint radius);
 #define MAX_MENU_WIDTH 400
 
 #define ITEM_HEIGHT (ob_rr_theme->menu_font_height + 2*PADDING)
 
-#define FRAME_EVENTMASK (ButtonPressMask |ButtonMotionMask | EnterWindowMask |\
-                         LeaveWindowMask)
-#define ENTRY_EVENTMASK (EnterWindowMask | LeaveWindowMask | \
-                         ButtonPressMask | ButtonReleaseMask | \
-                         PointerMotionMask)
+#define FRAME_INPUT (OB_CANVAS_INPUT_PRESS | OB_CANVAS_INPUT_DRAG | \
+                     OB_CANVAS_INPUT_CROSSING)
+#define ENTRY_INPUT (OB_CANVAS_INPUT_CROSSING | OB_CANVAS_INPUT_BUTTONS | \
+                     OB_CANVAS_INPUT_MOTION)
 
 GList *menu_frame_visible;
 GHashTable *menu_frame_map;
@@ -64,29 +62,13 @@ static void menu_frame_hide(ObMenuFrame *self);
 
 static gboolean submenu_hide_timeout(gpointer data);
 
-static Window createWindow(Window parent, gulong mask,
-                           XSetWindowAttributes *attrib)
-{
-    XSetWindowAttributes a;
-
-    /* a colormap and a border pixel are needed when the parent is a 32-bit
-       window and this one is not */
-    if (attrib) a = *attrib;
-    a.colormap = RrColormap(ob_rr_inst);
-    a.border_pixel = 0;
-    return XCreateWindow(obt_display, parent, 0, 0, 1, 1, 0,
-                         RrDepth(ob_rr_inst), InputOutput,
-                         RrVisual(ob_rr_inst),
-                         mask | CWColormap | CWBorderPixel, &a);
-}
-
-/* An entry's window when its frame is drawn with cairo: it only takes the
+/* An entry's part; when its frame is drawn with cairo it only takes the
    pointer's events, the frame paints what it shows */
-static Window inputWindow(Window parent, gulong mask,
-                          XSetWindowAttributes *attrib)
+static Window createWindow(Window parent, gboolean input_only,
+                           ObCanvasFlags flags)
 {
-    return XCreateWindow(obt_display, parent, 0, 0, 1, 1, 0, 0, InputOnly,
-                         CopyFromParent, mask, attrib);
+    if (input_only) flags |= OB_CANVAS_INVISIBLE;
+    return (Window)ob_backend->canvas_new_child((ObCanvasId)parent, flags);
 }
 
 static void client_dest(ObClient *client, gpointer data)
@@ -133,7 +115,6 @@ void menu_frame_shutdown(gboolean reconfig)
 ObMenuFrame* menu_frame_new(ObMenu *menu, guint show_from, ObClient *client)
 {
     ObMenuFrame *self;
-    XSetWindowAttributes attr;
 
     self = g_slice_new0(ObMenuFrame);
     self->obwin.type = OB_WINDOW_CLASS_MENUFRAME;
@@ -143,38 +124,17 @@ ObMenuFrame* menu_frame_new(ObMenu *menu, guint show_from, ObClient *client)
     self->direction_right = TRUE;
     self->show_from = show_from;
 
-    attr.event_mask = FRAME_EVENTMASK;
-    {
-        Visual *vis;
-        Colormap cmap;
-
-        self->argb = config_shelf_menu_radius > 0 &&
-                     shelf_menu_argb(&vis, &cmap);
-        if (self->argb) {
-            self->shadow = 24;
-            attr.colormap = cmap;
-            attr.border_pixel = 0;
-            attr.background_pixmap = None;
-            self->window = XCreateWindow(obt_display, obt_root(ob_screen),
-                                         0, 0, 1, 1, 0, 32, InputOutput, vis,
-                                         CWEventMask | CWColormap |
-                                         CWBorderPixel | CWBackPixmap, &attr);
-        } else {
-            self->window = createWindow(obt_root(ob_screen),
-                                        CWEventMask, &attr);
-        }
-    }
-
-    /* make it a popup menu type window */
-    OBT_PROP_SET32(self->window, NET_WM_WINDOW_TYPE, ATOM,
-                   OBT_PROP_ATOM(NET_WM_WINDOW_TYPE_POPUP_MENU));
-
-    if (!self->argb) {
-        XSetWindowBorderWidth(obt_display, self->window,
-                              ob_rr_theme->mbwidth);
-        XSetWindowBorder(obt_display, self->window,
-                         RrColorPixel(ob_rr_theme->menu_border_color));
-    }
+    /* round corners are drawn with cairo, anti-aliased and with a shadow,
+       where a compositor shows them */
+    self->window = (Window)ob_backend->canvas_new(
+        OB_CANVAS_MENU, OB_SURFACE_NONE,
+        FRAME_INPUT | (config_shelf_menu_radius > 0 ? OB_CANVAS_ALPHA : 0));
+    self->argb = ob_backend->canvas_has_alpha(self->window);
+    if (self->argb)
+        self->shadow = 24;
+    else
+        ob_backend->canvas_set_border(self->window, ob_rr_theme->mbwidth,
+            paint_argb(ob_rr_theme->menu_border_color));
 
     self->a_items = RrAppearanceCopy(ob_rr_theme->a_menu);
 
@@ -197,7 +157,7 @@ void menu_frame_free(ObMenuFrame *self)
 
         RrAppearanceFree(self->a_items);
 
-        XDestroyWindow(obt_display, self->window);
+        ob_backend->canvas_free(self->window);
 
         g_slice_free(ObMenuFrame, self);
     }
@@ -207,7 +167,6 @@ static ObMenuEntryFrame* menu_entry_frame_new(ObMenuEntry *entry,
                                               ObMenuFrame *frame)
 {
     ObMenuEntryFrame *self;
-    XSetWindowAttributes attr;
 
     self = g_slice_new0(ObMenuEntryFrame);
     self->entry = entry;
@@ -215,30 +174,23 @@ static ObMenuEntryFrame* menu_entry_frame_new(ObMenuEntry *entry,
 
     menu_entry_ref(entry);
 
-    attr.event_mask = ENTRY_EVENTMASK;
-    if (frame->argb) {
-        self->window = inputWindow(self->frame->window, CWEventMask, &attr);
-        self->text = inputWindow(self->window, 0, NULL);
-    } else {
-        self->window = createWindow(self->frame->window, CWEventMask, &attr);
-        self->text = createWindow(self->window, 0, NULL);
-    }
+    self->window = createWindow(self->frame->window, frame->argb,
+                                ENTRY_INPUT);
+    self->text = createWindow(self->window, frame->argb, 0);
     g_hash_table_insert(menu_frame_map, &self->window, self);
     g_hash_table_insert(menu_frame_map, &self->text, self);
     if ((entry->type == OB_MENU_ENTRY_TYPE_NORMAL) ||
         (entry->type == OB_MENU_ENTRY_TYPE_SUBMENU)) {
-        self->icon = frame->argb ? inputWindow(self->window, 0, NULL) :
-                                   createWindow(self->window, 0, NULL);
+        self->icon = createWindow(self->window, frame->argb, 0);
         g_hash_table_insert(menu_frame_map, &self->icon, self);
     }
     if (entry->type == OB_MENU_ENTRY_TYPE_SUBMENU) {
-        self->bullet = frame->argb ? inputWindow(self->window, 0, NULL) :
-                                     createWindow(self->window, 0, NULL);
+        self->bullet = createWindow(self->window, frame->argb, 0);
         g_hash_table_insert(menu_frame_map, &self->bullet, self);
     }
 
-    XMapWindow(obt_display, self->window);
-    XMapWindow(obt_display, self->text);
+    ob_backend->canvas_show(self->window, TRUE);
+    ob_backend->canvas_show(self->text, TRUE);
 
     window_add(&self->window, MENUFRAME_AS_WINDOW(self->frame));
 
@@ -250,17 +202,17 @@ static void menu_entry_frame_free(ObMenuEntryFrame *self)
     if (self) {
         window_remove(self->window);
 
-        XDestroyWindow(obt_display, self->text);
-        XDestroyWindow(obt_display, self->window);
+        ob_backend->canvas_free(self->text);
+        ob_backend->canvas_free(self->window);
         g_hash_table_remove(menu_frame_map, &self->text);
         g_hash_table_remove(menu_frame_map, &self->window);
         if ((self->entry->type == OB_MENU_ENTRY_TYPE_NORMAL) ||
             (self->entry->type == OB_MENU_ENTRY_TYPE_SUBMENU)) {
-            XDestroyWindow(obt_display, self->icon);
+            ob_backend->canvas_free(self->icon);
             g_hash_table_remove(menu_frame_map, &self->icon);
         }
         if (self->entry->type == OB_MENU_ENTRY_TYPE_SUBMENU) {
-            XDestroyWindow(obt_display, self->bullet);
+            ob_backend->canvas_free(self->bullet);
             g_hash_table_remove(menu_frame_map, &self->bullet);
         }
 
@@ -273,8 +225,8 @@ void menu_frame_move(ObMenuFrame *self, gint x, gint y)
 {
     RECT_SET_POINT(self->area, x, y);
     self->monitor = screen_find_monitor_point(x, y);
-    XMoveWindow(obt_display, self->window, self->area.x - self->shadow,
-                self->area.y - self->shadow);
+    ob_backend->canvas_move(self->window, self->area.x - self->shadow,
+                            self->area.y - self->shadow);
 }
 
 static void menu_frame_place_topmenu(ObMenuFrame *self, const GravityPoint *pos,
@@ -454,14 +406,14 @@ static void menu_entry_frame_render(ObMenuEntryFrame *self)
     }
 
     RECT_SET_SIZE(self->area, self->frame->inner_w, th);
-    XResizeWindow(obt_display, self->window,
-                  self->area.width, self->area.height);
+    ob_backend->canvas_resize(self->window,
+                              self->area.width, self->area.height);
     /* a cairo frame paints its entries itself (shelf_menu_paint) */
     if (frame->argb) return;
     item_a->surface.parent = self->frame->a_items;
     item_a->surface.parentx = self->area.x;
     item_a->surface.parenty = self->area.y;
-    RrPaint(item_a, self->window, self->area.width, self->area.height);
+    paint_canvas(self->window, item_a, self->area.width, self->area.height);
 
     switch (self->entry->type) {
     case OB_MENU_ENTRY_TYPE_NORMAL:
@@ -517,39 +469,39 @@ static void menu_entry_frame_render(ObMenuEntryFrame *self)
 
     switch (self->entry->type) {
     case OB_MENU_ENTRY_TYPE_NORMAL:
-        XMoveResizeWindow(obt_display, self->text,
-                          self->frame->text_x, PADDING,
-                          self->frame->text_w,
-                          ITEM_HEIGHT - 2*PADDING);
+        paint_place(self->text,
+                    self->frame->text_x, PADDING,
+                    self->frame->text_w,
+                    ITEM_HEIGHT - 2*PADDING);
         text_a->surface.parent = item_a;
         text_a->surface.parentx = self->frame->text_x;
         text_a->surface.parenty = PADDING;
-        RrPaint(text_a, self->text, self->frame->text_w,
+        paint_canvas(self->text, text_a, self->frame->text_w,
                 ITEM_HEIGHT - 2*PADDING);
         break;
     case OB_MENU_ENTRY_TYPE_SUBMENU:
-        XMoveResizeWindow(obt_display, self->text,
-                          self->frame->text_x, PADDING,
-                          self->frame->text_w - ITEM_HEIGHT,
-                          ITEM_HEIGHT - 2*PADDING);
+        paint_place(self->text,
+                    self->frame->text_x, PADDING,
+                    self->frame->text_w - ITEM_HEIGHT,
+                    ITEM_HEIGHT - 2*PADDING);
         text_a->surface.parent = item_a;
         text_a->surface.parentx = self->frame->text_x;
         text_a->surface.parenty = PADDING;
-        RrPaint(text_a, self->text, self->frame->text_w - ITEM_HEIGHT,
+        paint_canvas(self->text, text_a, self->frame->text_w - ITEM_HEIGHT,
                 ITEM_HEIGHT - 2*PADDING);
         break;
     case OB_MENU_ENTRY_TYPE_SEPARATOR:
         if (self->entry->data.separator.label != NULL) {
             /* labeled separator */
-            XMoveResizeWindow(obt_display, self->text,
-                              ob_rr_theme->paddingx, ob_rr_theme->paddingy,
-                              self->area.width - 2*ob_rr_theme->paddingx,
-                              ob_rr_theme->menu_title_height -
-                              2*ob_rr_theme->paddingy);
+            paint_place(self->text,
+                        ob_rr_theme->paddingx, ob_rr_theme->paddingy,
+                        self->area.width - 2*ob_rr_theme->paddingx,
+                        ob_rr_theme->menu_title_height -
+                        2*ob_rr_theme->paddingy);
             text_a->surface.parent = item_a;
             text_a->surface.parentx = ob_rr_theme->paddingx;
             text_a->surface.parenty = ob_rr_theme->paddingy;
-            RrPaint(text_a, self->text,
+            paint_canvas(self->text, text_a,
                     self->area.width - 2*ob_rr_theme->paddingx,
                     ob_rr_theme->menu_title_height -
                     2*ob_rr_theme->paddingy);
@@ -557,10 +509,10 @@ static void menu_entry_frame_render(ObMenuEntryFrame *self)
             gint i;
 
             /* unlabeled separator */
-            XMoveResizeWindow(obt_display, self->text, 0, 0,
-                              self->area.width,
-                              ob_rr_theme->menu_sep_width +
-                              2*ob_rr_theme->menu_sep_paddingy);
+            paint_place(self->text, 0, 0,
+                        self->area.width,
+                        ob_rr_theme->menu_sep_width +
+                        2*ob_rr_theme->menu_sep_paddingy);
 
             a_sep->surface.parent = item_a;
             a_sep->surface.parentx = 0;
@@ -576,7 +528,7 @@ static void menu_entry_frame_render(ObMenuEntryFrame *self)
                     ob_rr_theme->menu_sep_paddingy + i;
             }
 
-            RrPaint(a_sep, self->text, self->area.width,
+            paint_canvas(self->text, a_sep, self->area.width,
                     ob_rr_theme->menu_sep_width +
                     2*ob_rr_theme->menu_sep_paddingy);
         }
@@ -591,12 +543,12 @@ static void menu_entry_frame_render(ObMenuEntryFrame *self)
     {
         RrAppearance *clear;
 
-        XMoveResizeWindow(obt_display, self->icon,
-                          PADDING, frame->item_margin.top,
-                          ITEM_HEIGHT - frame->item_margin.top
-                          - frame->item_margin.bottom,
-                          ITEM_HEIGHT - frame->item_margin.top
-                          - frame->item_margin.bottom);
+        paint_place(self->icon,
+                    PADDING, frame->item_margin.top,
+                    ITEM_HEIGHT - frame->item_margin.top
+                    - frame->item_margin.bottom,
+                    ITEM_HEIGHT - frame->item_margin.top
+                    - frame->item_margin.bottom);
 
         clear = ob_rr_theme->a_clear_tex;
         RrAppearanceClearTextures(clear);
@@ -608,24 +560,24 @@ static void menu_entry_frame_render(ObMenuEntryFrame *self)
         clear->surface.parent = item_a;
         clear->surface.parentx = PADDING;
         clear->surface.parenty = frame->item_margin.top;
-        RrPaint(clear, self->icon,
+        paint_canvas(self->icon, clear,
                 ITEM_HEIGHT - frame->item_margin.top
                 - frame->item_margin.bottom,
                 ITEM_HEIGHT - frame->item_margin.top
                 - frame->item_margin.bottom);
-        XMapWindow(obt_display, self->icon);
+        ob_backend->canvas_show(self->icon, TRUE);
     } else if (self->entry->type == OB_MENU_ENTRY_TYPE_NORMAL &&
                self->entry->data.normal.mask)
     {
         RrColor *c;
         RrAppearance *clear;
 
-        XMoveResizeWindow(obt_display, self->icon,
-                          PADDING, frame->item_margin.top,
-                          ITEM_HEIGHT - frame->item_margin.top
-                          - frame->item_margin.bottom,
-                          ITEM_HEIGHT - frame->item_margin.top
-                          - frame->item_margin.bottom);
+        paint_place(self->icon,
+                    PADDING, frame->item_margin.top,
+                    ITEM_HEIGHT - frame->item_margin.top
+                    - frame->item_margin.bottom,
+                    ITEM_HEIGHT - frame->item_margin.top
+                    - frame->item_margin.bottom);
 
         clear = ob_rr_theme->a_clear_tex;
         RrAppearanceClearTextures(clear);
@@ -648,22 +600,22 @@ static void menu_entry_frame_render(ObMenuEntryFrame *self)
         clear->surface.parent = item_a;
         clear->surface.parentx = PADDING;
         clear->surface.parenty = frame->item_margin.top;
-        RrPaint(clear, self->icon,
+        paint_canvas(self->icon, clear,
                 ITEM_HEIGHT - frame->item_margin.top
                 - frame->item_margin.bottom,
                 ITEM_HEIGHT - frame->item_margin.top
                 - frame->item_margin.bottom);
-        XMapWindow(obt_display, self->icon);
+        ob_backend->canvas_show(self->icon, TRUE);
     } else
-        XUnmapWindow(obt_display, self->icon);
+        ob_backend->canvas_show(self->icon, FALSE);
 
     if (self->entry->type == OB_MENU_ENTRY_TYPE_SUBMENU) {
         RrAppearance *bullet_a;
-        XMoveResizeWindow(obt_display, self->bullet,
-                          self->frame->text_x + self->frame->text_w -
-                          ITEM_HEIGHT + PADDING, PADDING,
-                          ITEM_HEIGHT - 2*PADDING,
-                          ITEM_HEIGHT - 2*PADDING);
+        paint_place(self->bullet,
+                    self->frame->text_x + self->frame->text_w -
+                    ITEM_HEIGHT + PADDING, PADDING,
+                    ITEM_HEIGHT - 2*PADDING,
+                    ITEM_HEIGHT - 2*PADDING);
         bullet_a = (self == self->frame->selected ?
                     ob_rr_theme->a_menu_bullet_selected :
                     ob_rr_theme->a_menu_bullet_normal);
@@ -671,14 +623,14 @@ static void menu_entry_frame_render(ObMenuEntryFrame *self)
         bullet_a->surface.parentx =
             self->frame->text_x + self->frame->text_w - ITEM_HEIGHT + PADDING;
         bullet_a->surface.parenty = PADDING;
-        RrPaint(bullet_a, self->bullet,
+        paint_canvas(self->bullet, bullet_a,
                 ITEM_HEIGHT - 2*PADDING,
                 ITEM_HEIGHT - 2*PADDING);
-        XMapWindow(obt_display, self->bullet);
+        ob_backend->canvas_show(self->bullet, TRUE);
     } else
-        XUnmapWindow(obt_display, self->bullet);
+        ob_backend->canvas_show(self->bullet, FALSE);
 
-    XFlush(obt_display);
+    ob_backend->flush(FALSE);
 }
 
 /*! this code is taken from the menu_frame_render. if that changes, this won't
@@ -727,39 +679,34 @@ static gint menu_entry_frame_get_height(ObMenuEntryFrame *self,
 }
 
 /* Cuts the corners of the whole frame (border included) to a quarter circle */
-static void round_corners(Window win, gint w, gint h, gint radius)
+static void round_corners(ObCanvasId c, gint w, gint h, gint radius)
 {
     gint r = MIN(radius, MIN(w, h) / 2);
-    XRectangle *rs;
-    gint i;
+    guint32 *px;
+    ObImage mask;
+    gint x, y;
 
     if (r <= 0) {
-        XShapeCombineMask(obt_display, win, ShapeBounding, 0, 0, None,
-                          ShapeSet);
+        ob_backend->canvas_set_outline(c, NULL);
         return;
     }
-    rs = g_new(XRectangle, r + 1);
-    for (i = 0; i < r; ++i) {
-        /* the rows of the corner, then the one rectangle for the rest;
-           the top and bottom corners are mirrored by the same inset */
-        gdouble dy = r - i - 0.5;
-        gint inset = r - (gint)floor(sqrt((gdouble)r * r - dy * dy) + 0.5);
-        rs[i].x = inset;
-        rs[i].y = i;
-        rs[i].width = w - 2 * inset;
-        rs[i].height = 1;
+    px = g_new0(guint32, w * h);
+    for (y = 0; y < h; ++y) {
+        /* the rows of the corners are inset, top and bottom mirrored */
+        gint i = y < r ? y : h - 1 - y, inset = 0;
+        if (i < r) {
+            gdouble dy = r - i - 0.5;
+            inset = r - (gint)floor(sqrt((gdouble)r * r - dy * dy) + 0.5);
+        }
+        for (x = inset; x < w - inset; ++x)
+            px[y * w + x] = 0xff000000u;
     }
-    rs[r].x = 0;
-    rs[r].y = r;
-    rs[r].width = w;
-    rs[r].height = MAX(h - 2 * r, 0);
-    XShapeCombineRectangles(obt_display, win, ShapeBounding, 0, 0, rs, r + 1,
-                            ShapeSet, Unsorted);
-    for (i = 0; i < r; ++i)
-        rs[i].y = h - 1 - i;
-    XShapeCombineRectangles(obt_display, win, ShapeBounding, 0, 0, rs, r,
-                            ShapeUnion, Unsorted);
-    g_free(rs);
+    mask.data = px;
+    mask.width = w;
+    mask.height = h;
+    mask.stride = w * 4;
+    ob_backend->canvas_set_outline(c, &mask);
+    g_free(px);
 }
 
 void menu_frame_render(ObMenuFrame *self)
@@ -834,18 +781,16 @@ void menu_frame_render(ObMenuFrame *self)
 
         RECT_SET_POINT(e->area, MARGIN, h+e->border);
         /* the border of an ARGB frame is painted inside the window */
-        XMoveWindow(obt_display, e->window,
-                    e->area.x - e->border + (self->argb ?
-                                             ob_rr_theme->mbwidth : 0) +
-                    self->shadow,
-                    e->area.y - e->border + (self->argb ?
-                                             ob_rr_theme->mbwidth : 0) +
-                    self->shadow);
-        if (!self->argb) {
-            XSetWindowBorderWidth(obt_display, e->window, e->border);
-            XSetWindowBorder(obt_display, e->window,
-                             RrColorPixel(ob_rr_theme->menu_border_color));
-        }
+        ob_backend->canvas_move(e->window,
+                                e->area.x - e->border + (self->argb ?
+                                    ob_rr_theme->mbwidth : 0) +
+                                self->shadow,
+                                e->area.y - e->border + (self->argb ?
+                                    ob_rr_theme->mbwidth : 0) +
+                                self->shadow);
+        if (!self->argb)
+            ob_backend->canvas_set_border(e->window, e->border,
+                paint_argb(ob_rr_theme->menu_border_color));
 
         text_a = (e->entry->type == OB_MENU_ENTRY_TYPE_NORMAL &&
                   !e->entry->data.normal.enabled ?
@@ -932,16 +877,17 @@ void menu_frame_render(ObMenuFrame *self)
     w += 2 * MARGIN;
     h += MARGIN;
     if (self->argb) {
-        Pixmap old = RrPaintPixmap(self->a_items, w, h);
         /* the entries take their background from a_items; the frame itself
            is drawn with cairo, border included */
-        if (old) XFreePixmap(obt_display, old);
-        XResizeWindow(obt_display, self->window,
-                      w + 2 * ob_rr_theme->mbwidth + 2 * self->shadow,
-                      h + 2 * ob_rr_theme->mbwidth + 2 * self->shadow);
+        RrPaintImage(self->a_items, w, h);
+        ob_backend->canvas_resize(self->window,
+                                  w + 2 * ob_rr_theme->mbwidth +
+                                  2 * self->shadow,
+                                  h + 2 * ob_rr_theme->mbwidth +
+                                  2 * self->shadow);
     } else {
-        XResizeWindow(obt_display, self->window, w, h);
-        RrPaint(self->a_items, self->window, w, h);
+        ob_backend->canvas_resize(self->window, w, h);
+        paint_canvas(self->window, self->a_items, w, h);
     }
 
     for (it = self->entries; it; it = g_list_next(it))
@@ -952,18 +898,16 @@ void menu_frame_render(ObMenuFrame *self)
 
     RECT_SET_SIZE(self->area, w, h);
     if (self->argb) {
-        Visual *vis;
-        XRectangle box = { self->shadow, self->shadow, w, h };
+        Rect box;
         /* the shadow lets the pointer through */
-        XShapeCombineRectangles(obt_display, self->window, ShapeInput, 0, 0,
-                                &box, 1, ShapeSet, Unsorted);
-        if (shelf_menu_argb(&vis, NULL))
-            shelf_menu_paint(self, vis);
+        RECT_SET(box, self->shadow, self->shadow, w, h);
+        ob_backend->canvas_set_input(self->window, &box, 1);
+        shelf_menu_paint(self);
     } else {
         round_corners(self->window, w, h, config_shelf_menu_radius);
     }
 
-    XFlush(obt_display);
+    ob_backend->flush(FALSE);
 }
 
 static void menu_frame_update(ObMenuFrame *self)
@@ -1137,7 +1081,7 @@ gboolean menu_frame_show_topmenu(ObMenuFrame *self, const GravityPoint *pos,
 
     menu_frame_move(self, x, y);
 
-    XMapWindow(obt_display, self->window);
+    ob_backend->canvas_show(self->window, TRUE);
 
     if (screen_pointer_pos(&px, &py)) {
         ObMenuEntryFrame *e = menu_entry_frame_under(px, py);
@@ -1194,7 +1138,7 @@ gboolean menu_frame_show_submenu(ObMenuFrame *self, ObMenuFrame *parent,
     }
     menu_frame_move(self, x + dx, y + dy);
 
-    XMapWindow(obt_display, self->window);
+    ob_backend->canvas_show(self->window, TRUE);
 
     if (screen_pointer_pos(&px, &py)) {
         ObMenuEntryFrame *e = menu_entry_frame_under(px, py);
@@ -1238,7 +1182,7 @@ static void menu_frame_hide(ObMenuFrame *self)
     }
 
     ignore_start = event_start_ignore_all_enters();
-    XUnmapWindow(obt_display, self->window);
+    ob_backend->canvas_show(self->window, FALSE);
     event_end_ignore_all_enters(ignore_start);
 
     menu_frame_free(self);
@@ -1372,11 +1316,8 @@ void menu_frame_select(ObMenuFrame *self, ObMenuEntryFrame *entry,
         }
     }
 
-    if (self->argb) {
-        Visual *vis;
-        if (shelf_menu_argb(&vis, NULL))
-            shelf_menu_paint(self, vis);
-    }
+    if (self->argb)
+        shelf_menu_paint(self);
 
     if (self->selected) {
         menu_entry_frame_render(self->selected);
