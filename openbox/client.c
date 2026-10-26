@@ -58,12 +58,6 @@
 #include <X11/Xutil.h>
 
 /*! The event mask to grab on client windows */
-#define CLIENT_EVENTMASK (PropertyChangeMask | StructureNotifyMask | \
-                          ColormapChangeMask)
-
-#define CLIENT_NOPROPAGATEMASK (ButtonPressMask | ButtonReleaseMask | \
-                                ButtonMotionMask)
-
 typedef struct
 {
     ObClientCallback func;
@@ -209,7 +203,6 @@ void client_set_list(void)
 void client_manage(Window window, ObPrompt *prompt)
 {
     ObClient *self;
-    XSetWindowAttributes attrib_set;
     gboolean try_activate = FALSE;
     gboolean do_activate;
     ObAppSettings *settings;
@@ -222,13 +215,9 @@ void client_manage(Window window, ObPrompt *prompt)
 
     ob_debug("Managing window: 0x%lx", window);
 
-    /* choose the events we want to receive on the CLIENT window
-       (ObPrompt windows can request events too) */
-    attrib_set.event_mask = CLIENT_EVENTMASK |
-        (prompt ? prompt->event_mask : 0);
-    attrib_set.do_not_propagate_mask = CLIENT_NOPROPAGATEMASK;
-    XChangeWindowAttributes(obt_display, window,
-                            CWEventMask|CWDontPropagate, &attrib_set);
+    /* hear about the window from now on, and keep it alive if we go away,
+       unless it is an internal ObPrompt window */
+    ob_backend->surface_adopt(window, prompt != NULL);
 
     /* create the ObClient struct, and populate it from the hints on the
        window */
@@ -269,12 +258,6 @@ void client_manage(Window window, ObPrompt *prompt)
        decorations of the window as it will be placed on screen.
     */
     client_setup_decor_undecorated(self);
-
-    /* specify that if we exit, the window should not be destroyed and
-       should be reparented back to root automatically, unless we are managing
-       an internal ObPrompt window  */
-    if (!self->prompt)
-        XChangeSaveSet(obt_display, window, SetModeInsert);
 
     /* create the decoration frame for the client window */
     self->frame = frame_new(self);
@@ -337,7 +320,7 @@ void client_manage(Window window, ObPrompt *prompt)
     }
 
     /* remove the client's border */
-    XSetWindowBorderWidth(obt_display, self->window, 0);
+    ob_backend->surface_set_border(self->window, 0);
 
     /* adjust the frame to the client's size before showing or placing
        the window */
@@ -597,7 +580,7 @@ void client_unmanage(ObClient *self)
 
     /* we dont want events no more. do this before hiding the frame so we
        don't generate more events */
-    XSelectInput(obt_display, self->window, NoEventMask);
+    ob_backend->surface_unwatch(self->window, self->prompt != NULL);
 
     /* ignore enter events from the unmap so it doesnt mess with the focus */
     if (!config_focus_under_mouse)
@@ -605,7 +588,7 @@ void client_unmanage(ObClient *self)
 
     frame_hide(self->frame);
     /* flush to send the hide to the server quickly */
-    XFlush(obt_display);
+    ob_backend->flush(FALSE);
 
     if (!config_focus_under_mouse)
         event_end_ignore_all_enters(ignore_start);
@@ -613,11 +596,6 @@ void client_unmanage(ObClient *self)
     mouse_grab_for_client(self, FALSE);
 
     self->managed = FALSE;
-
-    /* remove the window from our save set, unless we are managing an internal
-       ObPrompt window */
-    if (!self->prompt)
-        XChangeSaveSet(obt_display, self->window, SetModeDelete);
 
     /* update the focus lists */
     focus_order_remove(self);
@@ -688,7 +666,7 @@ void client_unmanage(ObClient *self)
         self->decorations = 0; /* unmanaged windows have no decor */
 
         /* give the client its border back */
-        XSetWindowBorderWidth(obt_display, self->window, self->border_width);
+        ob_backend->surface_set_border(self->window, self->border_width);
 
         client_move_resize(self, a.x, a.y, a.width, a.height);
     }
@@ -698,23 +676,9 @@ void client_unmanage(ObClient *self)
     frame_free(self->frame);
     self->frame = NULL;
 
-    if (ob_state() != OB_STATE_EXITING) {
-        /* these values should not be persisted across a window
-           unmapping/mapping */
-        OBT_PROP_ERASE(self->window, NET_WM_DESKTOP);
-        OBT_PROP_ERASE(self->window, NET_WM_STATE);
-        OBT_PROP_ERASE(self->window, WM_STATE);
-    } else {
-        /* if we're left in an unmapped state, the client wont be mapped.
-           this is bad, since we will no longer be managing the window on
-           restart */
-        XMapWindow(obt_display, self->window);
-    }
-
-    /* these should not be left on the window ever.  other window managers
-       don't necessarily use them and it will mess them up (like compiz) */
-    OBT_PROP_ERASE(self->window, NET_WM_VISIBLE_NAME);
-    OBT_PROP_ERASE(self->window, NET_WM_VISIBLE_ICON_NAME);
+    /* take back the states and titles we gave it, or leave it mapped for
+       the next window manager when we exit */
+    ob_backend->surface_release(self->window, ob_state() == OB_STATE_EXITING);
 
     /* update the list hints */
     client_set_list();
@@ -1034,8 +998,7 @@ static void client_restore_session_state(ObClient *self)
         self->area.width = self->session->w;
     if (self->session->h > 0)
         self->area.height = self->session->h;
-    XResizeWindow(obt_display, self->window,
-                  self->area.width, self->area.height);
+    ob_backend->surface_configure(self->window, &self->area);
 
     self->desktop = (self->session->desktop == DESKTOP_ALL ?
                      self->session->desktop :
@@ -1285,18 +1248,15 @@ static void client_get_startup_id(ObClient *self)
 
 static void client_get_area(ObClient *self)
 {
-    XWindowAttributes wattrib;
-    Status ret;
+    ObSurfaceInfo info = { 0 };
 
-    ret = XGetWindowAttributes(obt_display, self->window, &wattrib);
-    g_assert(ret != BadWindow);
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_GEOMETRY, &info);
+    self->area = info.area;
+    POINT_SET(self->root_pos, info.area.x, info.area.y);
+    self->border_width = info.border;
 
-    RECT_SET(self->area, wattrib.x, wattrib.y, wattrib.width, wattrib.height);
-    POINT_SET(self->root_pos, wattrib.x, wattrib.y);
-    self->border_width = wattrib.border_width;
-
-    ob_debug("client area: %d %d  %d %d  bw %d", wattrib.x, wattrib.y,
-             wattrib.width, wattrib.height, wattrib.border_width);
+    ob_debug("client area: %d %d  %d %d  bw %d", info.area.x, info.area.y,
+             info.area.width, info.area.height, info.border);
 }
 
 static void client_get_desktop(ObClient *self)
@@ -3000,9 +2960,11 @@ void client_configure(ObClient *self, gint x, gint y, gint w, gint h,
 
     /* if the client is enlarging, then resize the client before the frame */
     if (send_resize_client && (w > oldclient.width || h > oldclient.height)) {
-        XMoveResizeWindow(obt_display, self->window,
-                          self->frame->size.left, self->frame->size.top,
-                          MAX(w, oldclient.width), MAX(h, oldclient.height));
+        Rect r;
+
+        RECT_SET(r, self->frame->size.left, self->frame->size.top,
+                 MAX(w, oldclient.width), MAX(h, oldclient.height));
+        ob_backend->surface_configure(self->window, &r);
         frame_adjust_client_area(self->frame);
     }
 
@@ -3065,26 +3027,15 @@ void client_configure(ObClient *self, gint x, gint y, gint w, gint h,
     if ((!user && !resized && (rootmoved || force_reply)) ||
         (user && ((!resized && force_reply) || (final && rootmoved))))
     {
-        XEvent event;
-
-        event.type = ConfigureNotify;
-        event.xconfigure.display = obt_display;
-        event.xconfigure.event = self->window;
-        event.xconfigure.window = self->window;
+        Rect r;
 
         ob_debug("Sending ConfigureNotify to %s for %d,%d %dx%d",
                  self->title, self->root_pos.x, self->root_pos.y, w, h);
 
         /* root window real coords */
-        event.xconfigure.x = self->root_pos.x;
-        event.xconfigure.y = self->root_pos.y;
-        event.xconfigure.width = w;
-        event.xconfigure.height = h;
-        event.xconfigure.border_width = self->border_width;
-        event.xconfigure.above = None;
-        event.xconfigure.override_redirect = FALSE;
-        XSendEvent(event.xconfigure.display, event.xconfigure.window,
-                   FALSE, StructureNotifyMask, &event);
+        RECT_SET(r, self->root_pos.x, self->root_pos.y, w, h);
+        ob_backend->surface_send_geometry(self->window, &r,
+                                          self->border_width);
     }
 
     /* if the client is shrinking, then resize the frame before the client.
@@ -3094,12 +3045,14 @@ void client_configure(ObClient *self, gint x, gint y, gint w, gint h,
      */
     if (send_resize_client && (w <= oldclient.width || h <= oldclient.height))
     {
+        Rect r;
+
         frame_adjust_client_area(self->frame);
-        XMoveResizeWindow(obt_display, self->window,
-                          self->frame->size.left, self->frame->size.top, w, h);
+        RECT_SET(r, self->frame->size.left, self->frame->size.top, w, h);
+        ob_backend->surface_configure(self->window, &r);
     }
 
-    XFlush(obt_display);
+    ob_backend->flush(FALSE);
 
     /* if it moved between monitors, then this can affect the stacking
        layer of this window or others - for fullscreen windows.

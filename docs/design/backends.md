@@ -110,8 +110,13 @@ Every step is its own small PR, and the contract tests stay green on X11 through
    4. Stacking: `restack` replaces XRestackWindows (done). It keeps X's shape: a reference window and the
       windows to put below it, top first, so the core still restacks one layer at a time.
    5. Surfaces: `surface_*` replaces the XSetInputFocus, WM_PROTOCOLS and kill calls in `client.c` (done for
-      focus, close, kill, `_NET_WM_STATE` and ping). `surface_configure` and `surface_show` come with the frames,
-      which still reparent and map the client themselves. Focusing nothing is `surface_focus(OB_SURFACE_NONE)`,
+      focus, close, kill, `_NET_WM_STATE` and ping). The frame is a decoration canvas (`canvas_new(OB_CANVAS_DECOR,
+      client)`), placed and shown with `canvas_place` and `canvas_show`; the client goes in and out of it with
+      `surface_frame` and `surface_unframe`, is shown with `surface_show`, sized inside it with
+      `surface_configure` and told where it is with `surface_send_geometry` (done). `surface_adopt`,
+      `surface_unwatch` and `surface_release` start and end managing it (X11: its event mask, the save set, the
+      properties left behind), and `OB_SURFACE_INFO_GEOMETRY` says where it was. On X11 the frame is still a
+      window with the decorations as child windows, until they draw without Xlib (4). Focusing nothing is `surface_focus(OB_SURFACE_NONE)`,
       which on X11 gives the keyboard to the support window.
    6. Client info: property reading in `client.c` becomes `ObSurfaceInfo`, filled by the backend's `surface_info`
       for the fields asked for. Done for the titles, WM_PROTOCOLS, struts, the size hints (WM_NORMAL_HINTS, checked

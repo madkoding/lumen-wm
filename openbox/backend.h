@@ -160,7 +160,8 @@ typedef enum {
     OB_SURFACE_INFO_USER_TIME = 1 << 14,
     OB_SURFACE_INFO_SYNC     = 1 << 15, /*!< its resize sync counter */
     OB_SURFACE_INFO_OPACITY  = 1 << 16, /*!< how opaque it asks to be */
-    OB_SURFACE_INFO_ALL      = (1 << 17) - 1
+    OB_SURFACE_INFO_GEOMETRY = 1 << 17, /*!< where it is, as it came */
+    OB_SURFACE_INFO_ALL      = (1 << 18) - 1
 } ObSurfaceInfoFields;
 
 /*! One size of a client's icon. */
@@ -252,6 +253,11 @@ typedef struct _ObSurfaceInfo {
     guint32 sync_counter;
     gboolean has_opacity;   /*!< FALSE: it leaves that to the compositor */
     guint32 opacity;        /*!< 0 is clear, 0xffffffff opaque */
+    /*! where it is, in layout coordinates, and its border (X11), before
+      the window manager touches it */
+    Rect area;
+    gint border;
+    gboolean argb;          /*!< it draws with an alpha channel */
 
     ObIcon *icons;          /*!< every size it offers; NULL for none */
     guint n_icons;
@@ -366,9 +372,33 @@ struct _ObBackend {
 
     /* --- managed surfaces --- */
 
-    /*! Place the client's own area, in layout coordinates, and tell it its
-      size. The frame around it is placed with canvas_place(). */
+    /*! Start managing it: hear about what it changes, and keep it alive
+      if the window manager goes away (X11: the save set). internal: one
+      of the core's own windows (a prompt), which also takes its keys. */
+    void (*surface_adopt)(ObSurfaceId s, gboolean internal);
+    /*! Stop hearing about it, before it is hidden for the last time. */
+    void (*surface_unwatch)(ObSurfaceId s, gboolean internal);
+    /*! Put it in the decoration canvas made for it, at 0, 0. */
+    void (*surface_frame)(ObSurfaceId s, ObCanvasId frame);
+    /*! Take it out of its decoration, to area in layout coordinates,
+      unless the client already took itself out. */
+    void (*surface_unframe)(ObSurfaceId s, const Rect *area);
+    /*! Let go of it for good: take back what the window manager told it.
+      exiting: the window manager quits, and the next one must find the
+      surface where this one found it (X11: mapped). */
+    void (*surface_release)(ObSurfaceId s, gboolean exiting);
+    /*! Its border (X11 only): 0 while it is managed, and the one it came
+      with when it is let go. */
+    void (*surface_set_border)(ObSurfaceId s, gint width);
+    /*! Place the client's own area inside its decoration, relative to the
+      decoration, and tell it its size. The decoration is placed with
+      canvas_place(). */
     void (*surface_configure)(ObSurfaceId s, const Rect *area);
+    /*! Tell the client where it is on screen, in layout coordinates, when
+      only it can't tell (X11: a synthetic ConfigureNotify, with its
+      border). */
+    void (*surface_send_geometry)(ObSurfaceId s, const Rect *area,
+                                  gint border);
     void (*surface_show)(ObSurfaceId s, gboolean show);
     /*! Give it the keyboard. input: hand it the keyboard focus; take_focus:
       tell it to take the focus itself (ICCCM WM_TAKE_FOCUS, X11 only).
@@ -411,8 +441,9 @@ struct _ObBackend {
     /*! owner: the surface a decoration frames, or OB_SURFACE_NONE. */
     ObCanvasId (*canvas_new)(ObCanvasLayer layer, ObSurfaceId owner);
     void (*canvas_free)(ObCanvasId c);
-    /*! outer: the whole canvas. For a decoration, inner is the hole the
-      client shows through, relative to outer; NULL otherwise. */
+    /*! outer: the whole canvas, or NULL to leave it where it is. For a
+      decoration, inner is where the client shows through, relative to
+      outer, or NULL to leave the client where it is. */
     void (*canvas_place)(ObCanvasId c, const Rect *outer, const Rect *inner);
     void (*canvas_show)(ObCanvasId c, gboolean show);
     /*! Show this picture, scaled by the output's scale; damage, in canvas
@@ -427,8 +458,7 @@ struct _ObBackend {
     void (*canvas_set_strut)(ObCanvasId c, const StrutPartial *strut);
     /*! Show it, and the surface a decoration frames, this opaque (as
       ObSurfaceInfo's opacity); set FALSE leaves that to the compositor.
-      Until the frames are canvases, the core passes a frame's window, as
-      it does to restack. */
+      A decoration's id is the one restack takes for the frame. */
     void (*canvas_set_opacity)(ObCanvasId c, gboolean set, guint32 opacity);
 
     /* --- input --- */
@@ -468,9 +498,9 @@ struct _ObBackend {
     /*! Move the pointer there. swallow: drop the motion this makes, so the
       core doesn't take it for the user's. */
     void (*pointer_warp)(gint x, gint y, gboolean swallow);
-    /*! Send what the core asked for so far and wait until it is done
-      (X11 XSync), so the screen keeps up with the pointer. */
-    void (*flush)(void);
+    /*! Send what the core asked for so far; wait: and wait until it is
+      done (X11 XSync), so the screen keeps up with the pointer. */
+    void (*flush)(gboolean wait);
     void (*set_cursor)(ObCanvasId c, ObCursor cursor);
 
     /* --- state for pagers and taskbars --- */
@@ -495,6 +525,8 @@ struct _ObBackend {
                                    const gchar *icon);
     /*! One area per desktop. */
     void (*publish_workareas)(const Rect *areas, guint n);
+    /*! How much the decoration adds around it on each side. */
+    void (*publish_surface_extents)(ObSurfaceId s, const Strut *extents);
 };
 
 /*! What a backend tells the core. The core fills it in; the backend calls

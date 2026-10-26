@@ -247,6 +247,8 @@ openbox_lumen_wm_SOURCES = \
 	openbox/backend-events.c \
 	openbox/backend-x11.c \
 	openbox/backend-x11.h \
+	openbox/backend-x11-int.h \
+	openbox/backend-x11-surface.c \
 	openbox/client.c \
 	openbox/client.h \
 	openbox/client_list_menu.c \

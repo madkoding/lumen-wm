@@ -882,7 +882,7 @@ gboolean moveresize_event(const ObInputEvent *e)
             cur_x = start_cx + e->root_x - start_x;
             cur_y = start_cy + e->root_y - start_y;
             do_move(FALSE, 0);
-            (*ob_backend->flush)();
+            (*ob_backend->flush)(TRUE);
             do_edge_warp(e->root_x, e->root_y);
         } else {
             gint dw, dh;

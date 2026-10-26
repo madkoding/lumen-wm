@@ -33,9 +33,6 @@
 #include "obt/xqueue.h"
 #include "obt/prop.h"
 
-#define FRAME_EVENTMASK (EnterWindowMask | LeaveWindowMask | \
-                         ButtonPressMask | ButtonReleaseMask | \
-                         SubstructureRedirectMask | FocusChangeMask)
 #define ELEMENT_EVENTMASK (ButtonPressMask | ButtonReleaseMask | \
                            ButtonMotionMask | PointerMotionMask | \
                            EnterWindowMask | LeaveWindowMask)
@@ -54,33 +51,14 @@ static void free_theme_statics(ObFrame *self);
 static gboolean frame_animate_iconify(gpointer self);
 static void frame_adjust_cursors(ObFrame *self);
 
-static Window createWindow(Window parent, Visual *visual,
-                           gulong mask, XSetWindowAttributes *attrib)
+/* a decoration drawn into its own window, until they draw without Xlib */
+static Window createWindow(Window parent, gulong mask,
+                           XSetWindowAttributes *attrib)
 {
     return XCreateWindow(obt_display, parent, 0, 0, 1, 1, 0,
-                         (visual ? 32 : RrDepth(ob_rr_inst)), InputOutput,
-                         (visual ? visual : RrVisual(ob_rr_inst)),
-                         mask, attrib);
+                         RrDepth(ob_rr_inst), InputOutput,
+                         RrVisual(ob_rr_inst), mask, attrib);
 
-}
-
-static Visual *check_32bit_client(ObClient *c)
-{
-    XWindowAttributes wattrib;
-    Status ret;
-
-    /* we're already running at 32 bit depth, yay. we don't need to use their
-       visual */
-    if (RrDepth(ob_rr_inst) == 32)
-        return NULL;
-
-    ret = XGetWindowAttributes(obt_display, c->window, &wattrib);
-    g_assert(ret != BadDrawable);
-    g_assert(ret != BadWindow);
-
-    if (wattrib.depth == 32)
-        return wattrib.visual;
-    return NULL;
 }
 
 ObFrame *frame_new(ObClient *client)
@@ -88,93 +66,83 @@ ObFrame *frame_new(ObClient *client)
     XSetWindowAttributes attrib;
     gulong mask;
     ObFrame *self;
-    Visual *visual;
+    ObSurfaceInfo info = { 0 };
 
     self = g_slice_new0(ObFrame);
     self->client = client;
 
-    visual = check_32bit_client(client);
-
-    /* create the non-visible decor windows */
-
-    mask = 0;
-    if (visual) {
-        /* client has a 32-bit visual */
-        mask = CWColormap | CWBackPixel | CWBorderPixel;
-        /* create a colormap with the visual */
-        self->colormap = attrib.colormap =
-            XCreateColormap(obt_display, obt_root(ob_screen),
-                            visual, AllocNone);
-        attrib.background_pixel = BlackPixel(obt_display, ob_screen);
-        attrib.border_pixel = BlackPixel(obt_display, ob_screen);
-    }
-    self->window = createWindow(obt_root(ob_screen), visual,
-                                mask, &attrib);
+    /* the frame itself, which takes the client's visual */
+    self->window = (Window)ob_backend->canvas_new(OB_CANVAS_DECOR,
+                                                  client->window);
 
     /* create the visible decor windows */
 
     mask = 0;
-    if (visual) {
-        /* client has a 32-bit visual */
+    ob_backend->surface_info(client->window, OB_SURFACE_INFO_GEOMETRY,
+                             &info);
+    if (info.argb && RrDepth(ob_rr_inst) != 32) {
+        /* client has a 32-bit visual, and so has the frame */
         mask = CWColormap | CWBackPixel | CWBorderPixel;
         attrib.colormap = RrColormap(ob_rr_inst);
+        attrib.background_pixel = BlackPixel(obt_display, ob_screen);
+        attrib.border_pixel = BlackPixel(obt_display, ob_screen);
     }
 
-    self->backback = createWindow(self->window, NULL, mask, &attrib);
-    self->backfront = createWindow(self->backback, NULL, mask, &attrib);
+    self->backback = createWindow(self->window, mask, &attrib);
+    self->backfront = createWindow(self->backback, mask, &attrib);
 
     mask |= CWEventMask;
     attrib.event_mask = ELEMENT_EVENTMASK;
-    self->innerleft = createWindow(self->window, NULL, mask, &attrib);
-    self->innertop = createWindow(self->window, NULL, mask, &attrib);
-    self->innerright = createWindow(self->window, NULL, mask, &attrib);
-    self->innerbottom = createWindow(self->window, NULL, mask, &attrib);
+    self->innerleft = createWindow(self->window, mask, &attrib);
+    self->innertop = createWindow(self->window, mask, &attrib);
+    self->innerright = createWindow(self->window, mask, &attrib);
+    self->innerbottom = createWindow(self->window, mask, &attrib);
 
-    self->innerblb = createWindow(self->innerbottom, NULL, mask, &attrib);
-    self->innerbrb = createWindow(self->innerbottom, NULL, mask, &attrib);
-    self->innerbll = createWindow(self->innerleft, NULL, mask, &attrib);
-    self->innerbrr = createWindow(self->innerright, NULL, mask, &attrib);
+    self->innerblb = createWindow(self->innerbottom, mask, &attrib);
+    self->innerbrb = createWindow(self->innerbottom, mask, &attrib);
+    self->innerbll = createWindow(self->innerleft, mask, &attrib);
+    self->innerbrr = createWindow(self->innerright, mask, &attrib);
 
-    self->title = createWindow(self->window, NULL, mask, &attrib);
-    self->titleleft = createWindow(self->window, NULL, mask, &attrib);
-    self->titletop = createWindow(self->window, NULL, mask, &attrib);
-    self->titletopleft = createWindow(self->window, NULL, mask, &attrib);
-    self->titletopright = createWindow(self->window, NULL, mask, &attrib);
-    self->titleright = createWindow(self->window, NULL, mask, &attrib);
-    self->titlebottom = createWindow(self->window, NULL, mask, &attrib);
+    self->title = createWindow(self->window, mask, &attrib);
+    self->titleleft = createWindow(self->window, mask, &attrib);
+    self->titletop = createWindow(self->window, mask, &attrib);
+    self->titletopleft = createWindow(self->window, mask, &attrib);
+    self->titletopright = createWindow(self->window, mask, &attrib);
+    self->titleright = createWindow(self->window, mask, &attrib);
+    self->titlebottom = createWindow(self->window, mask, &attrib);
 
-    self->topresize = createWindow(self->title, NULL, mask, &attrib);
-    self->tltresize = createWindow(self->title, NULL, mask, &attrib);
-    self->tllresize = createWindow(self->title, NULL, mask, &attrib);
-    self->trtresize = createWindow(self->title, NULL, mask, &attrib);
-    self->trrresize = createWindow(self->title, NULL, mask, &attrib);
+    self->topresize = createWindow(self->title, mask, &attrib);
+    self->tltresize = createWindow(self->title, mask, &attrib);
+    self->tllresize = createWindow(self->title, mask, &attrib);
+    self->trtresize = createWindow(self->title, mask, &attrib);
+    self->trrresize = createWindow(self->title, mask, &attrib);
 
-    self->left = createWindow(self->window, NULL, mask, &attrib);
-    self->right = createWindow(self->window, NULL, mask, &attrib);
+    self->left = createWindow(self->window, mask, &attrib);
+    self->right = createWindow(self->window, mask, &attrib);
 
-    self->label = createWindow(self->title, NULL, mask, &attrib);
-    self->max = createWindow(self->title, NULL, mask, &attrib);
-    self->close = createWindow(self->title, NULL, mask, &attrib);
-    self->desk = createWindow(self->title, NULL, mask, &attrib);
-    self->shade = createWindow(self->title, NULL, mask, &attrib);
-    self->icon = createWindow(self->title, NULL, mask, &attrib);
-    self->iconify = createWindow(self->title, NULL, mask, &attrib);
+    self->label = createWindow(self->title, mask, &attrib);
+    self->max = createWindow(self->title, mask, &attrib);
+    self->close = createWindow(self->title, mask, &attrib);
+    self->desk = createWindow(self->title, mask, &attrib);
+    self->shade = createWindow(self->title, mask, &attrib);
+    self->icon = createWindow(self->title, mask, &attrib);
+    self->iconify = createWindow(self->title, mask, &attrib);
 
-    self->handle = createWindow(self->window, NULL, mask, &attrib);
-    self->lgrip = createWindow(self->handle, NULL, mask, &attrib);
-    self->rgrip = createWindow(self->handle, NULL, mask, &attrib);
+    self->handle = createWindow(self->window, mask, &attrib);
+    self->lgrip = createWindow(self->handle, mask, &attrib);
+    self->rgrip = createWindow(self->handle, mask, &attrib);
 
-    self->handleleft = createWindow(self->handle, NULL, mask, &attrib);
-    self->handleright = createWindow(self->handle, NULL, mask, &attrib);
+    self->handleleft = createWindow(self->handle, mask, &attrib);
+    self->handleright = createWindow(self->handle, mask, &attrib);
 
-    self->handletop = createWindow(self->window, NULL, mask, &attrib);
-    self->handlebottom = createWindow(self->window, NULL, mask, &attrib);
-    self->lgripleft = createWindow(self->window, NULL, mask, &attrib);
-    self->lgriptop = createWindow(self->window, NULL, mask, &attrib);
-    self->lgripbottom = createWindow(self->window, NULL, mask, &attrib);
-    self->rgripright = createWindow(self->window, NULL, mask, &attrib);
-    self->rgriptop = createWindow(self->window, NULL, mask, &attrib);
-    self->rgripbottom = createWindow(self->window, NULL, mask, &attrib);
+    self->handletop = createWindow(self->window, mask, &attrib);
+    self->handlebottom = createWindow(self->window, mask, &attrib);
+    self->lgripleft = createWindow(self->window, mask, &attrib);
+    self->lgriptop = createWindow(self->window, mask, &attrib);
+    self->lgripbottom = createWindow(self->window, mask, &attrib);
+    self->rgripright = createWindow(self->window, mask, &attrib);
+    self->rgriptop = createWindow(self->window, mask, &attrib);
+    self->rgripbottom = createWindow(self->window, mask, &attrib);
 
     self->focused = FALSE;
 
@@ -230,9 +198,7 @@ void frame_free(ObFrame *self)
 {
     free_theme_statics(self);
 
-    XDestroyWindow(obt_display, self->window);
-    if (self->colormap)
-        XFreeColormap(obt_display, self->colormap);
+    ob_backend->canvas_free(self->window);
 
     g_slice_free(ObFrame, self);
 }
@@ -246,8 +212,8 @@ void frame_show(ObFrame *self)
            the client gets its MapNotify, i.e. to make sure the client is
            _visible_ when it gets MapNotify. */
         grab_server(TRUE);
-        XMapWindow(obt_display, self->client->window);
-        XMapWindow(obt_display, self->window);
+        ob_backend->surface_show(self->client->window, TRUE);
+        ob_backend->canvas_show(self->window, TRUE);
         grab_server(FALSE);
     }
 }
@@ -257,10 +223,10 @@ void frame_hide(ObFrame *self)
     if (self->visible) {
         self->visible = FALSE;
         if (!frame_iconify_animating(self))
-            XUnmapWindow(obt_display, self->window);
+            ob_backend->canvas_show(self->window, FALSE);
         /* we unmap the client itself so that we can get MapRequest
            events, and because the ICCCM tells us to! */
-        XUnmapWindow(obt_display, self->client->window);
+        ob_backend->surface_show(self->client->window, FALSE);
         self->client->ignore_unmaps += 1;
     }
 }
@@ -835,25 +801,24 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
     }
 
     if (!fake) {
-        if (!frame_iconify_animating(self))
-            /* move and resize the top level frame.
-               shading can change without being moved or resized.
-
-               but don't do this during an iconify animation. it will be
-               reflected afterwards.
-            */
-            XMoveResizeWindow(obt_display, self->window,
-                              self->area.x,
-                              self->area.y,
-                              self->area.width,
-                              self->area.height);
+        Rect inner;
 
         /* when the client has StaticGravity, it likes to move around.
            also this correctly positions the client when it maps.
            this also needs to be run when the frame's decorations sizes change!
         */
-        XMoveWindow(obt_display, self->client->window,
-                    self->size.left, self->size.top);
+        RECT_SET(inner, self->size.left, self->size.top,
+                 self->client->area.width, self->client->area.height);
+
+        /* move and resize the top level frame.
+           shading can change without being moved or resized.
+
+           but don't do this during an iconify animation. it will be
+           reflected afterwards.
+        */
+        ob_backend->canvas_place(self->window,
+                                 frame_iconify_animating(self) ?
+                                 NULL : &self->area, &inner);
 
         if (resized) {
             self->need_render = TRUE;
@@ -862,15 +827,8 @@ void frame_adjust_area(ObFrame *self, gboolean moved,
         }
 
         if (!STRUT_EQUAL(self->size, self->oldsize)) {
-            gulong vals[4];
-            vals[0] = self->size.left;
-            vals[1] = self->size.right;
-            vals[2] = self->size.top;
-            vals[3] = self->size.bottom;
-            OBT_PROP_SETA32(self->client->window, NET_FRAME_EXTENTS,
-                            CARDINAL, vals, 4);
-            OBT_PROP_SETA32(self->client->window, KDE_NET_WM_FRAME_STRUT,
-                            CARDINAL, vals, 4);
+            ob_backend->publish_surface_extents(self->client->window,
+                                                &self->size);
             self->oldsize = self->size;
         }
 
@@ -974,7 +932,7 @@ void frame_adjust_focus(ObFrame *self, gboolean hilite)
     self->focused = hilite;
     self->need_render = TRUE;
     framerender_frame(self);
-    XFlush(obt_display);
+    ob_backend->flush(FALSE);
 }
 
 void frame_adjust_title(ObFrame *self)
@@ -997,7 +955,7 @@ void frame_grab_client(ObFrame *self)
     */
 
     /* reparent the client to the frame */
-    XReparentWindow(obt_display, self->client->window, self->window, 0, 0);
+    ob_backend->surface_frame(self->client->window, self->window);
 
     /*
       When reparenting the client window, it is usually not mapped yet, since
@@ -1007,10 +965,6 @@ void frame_grab_client(ObFrame *self)
     */
     if (ob_state() == OB_STATE_STARTING)
         ++self->client->ignore_unmaps;
-
-    /* select the event mask on the client's parent (to receive config/map
-       req's) the ButtonPress is to catch clicks on the client border */
-    XSelectInput(obt_display, self->window, FRAME_EVENTMASK);
 
     /* set all the windows for the frame in the window_map */
     window_add(&self->window, CLIENT_AS_WINDOW(self->client));
@@ -1060,29 +1014,15 @@ void frame_grab_client(ObFrame *self)
     window_add(&self->rgripbottom, CLIENT_AS_WINDOW(self->client));
 }
 
-static gboolean find_reparent(XEvent *e, gpointer data)
-{
-    const ObFrame *self = data;
-
-    /* Find ReparentNotify events for the window that aren't being reparented into the
-       frame, thus the client reparenting itself off the frame. */
-    return e->type == ReparentNotify && e->xreparent.window == self->client->window &&
-        e->xreparent.parent != self->window;
-}
-
 void frame_release_client(ObFrame *self)
 {
     /* if there was any animation going on, kill it */
     if (self->iconify_animation_timer)
         g_source_remove(self->iconify_animation_timer);
 
-    /* check if the app has already reparented its window away */
-    if (!xqueue_exists_local(find_reparent, self)) {
-        /* according to the ICCCM - if the client doesn't reparent itself,
-           then we will reparent the window to root for them */
-        XReparentWindow(obt_display, self->client->window, obt_root(ob_screen),
-                        self->client->area.x, self->client->area.y);
-    }
+    /* according to the ICCCM - if the client doesn't reparent itself,
+       then we will reparent the window to root for them */
+    ob_backend->surface_unframe(self->client->window, &self->client->area);
 
     /* remove all the windows for the frame from the window_map */
     window_remove(self->window);
@@ -1777,8 +1717,13 @@ static gboolean frame_animate_iconify(gpointer p)
         h = self->size.top; /* just the titlebar */
     }
 
-    XMoveResizeWindow(obt_display, self->window, x, y, w, h);
-    XFlush(obt_display);
+    {
+        Rect r;
+
+        RECT_SET(r, x, y, w, h);
+        ob_backend->canvas_place(self->window, &r, NULL);
+        ob_backend->flush(FALSE);
+    }
 
     return time > 0; /* repeat until we're out of time */
 }
@@ -1790,7 +1735,7 @@ void frame_end_iconify_animation(gpointer data)
     if (self->iconify_animation_going == 0) return;
 
     if (!self->visible)
-        XUnmapWindow(obt_display, self->window);
+        ob_backend->canvas_show(self->window, FALSE);
     else {
         /* Send a ConfigureNotify when the animation is done, this fixes
            KDE's pager showing the window in the wrong place.  since the
@@ -1804,12 +1749,10 @@ void frame_end_iconify_animation(gpointer data)
     self->iconify_animation_going = 0;
     self->iconify_animation_timer = 0;
 
-    XMoveResizeWindow(obt_display, self->window,
-                      self->area.x, self->area.y,
-                      self->area.width, self->area.height);
+    ob_backend->canvas_place(self->window, &self->area, NULL);
     /* we delay re-rendering until after we're done animating */
     framerender_frame(self);
-    XFlush(obt_display);
+    ob_backend->flush(FALSE);
 }
 
 void frame_begin_iconify_animation(ObFrame *self, gboolean iconifying)
@@ -1859,6 +1802,6 @@ void frame_begin_iconify_animation(ObFrame *self, gboolean iconifying)
 
         /* show it during the animation even if it is not "visible" */
         if (!self->visible)
-            XMapWindow(obt_display, self->window);
+            ob_backend->canvas_show(self->window, TRUE);
     }
 }

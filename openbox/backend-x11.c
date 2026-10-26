@@ -20,6 +20,7 @@
 
 #include "backend.h"
 #include "backend-x11.h"
+#include "backend-x11-int.h"
 #include "openbox.h"
 #include "debug.h"
 #include "screen.h"
@@ -1126,6 +1127,8 @@ static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
         if (info->has_opacity)
             info->opacity = o;
     }
+    if (fields & OB_SURFACE_INFO_GEOMETRY)
+        x11_get_geometry(s, info);
 }
 
 /* --- events --- */
@@ -1369,9 +1372,12 @@ static void x11_canvas_set_opacity(ObCanvasId c, gboolean set,
         OBT_PROP_ERASE((Window)c, NET_WM_WINDOW_OPACITY);
 }
 
-static void x11_flush(void)
+static void x11_flush(gboolean wait)
 {
-    XSync(obt_display, FALSE);
+    if (wait)
+        XSync(obt_display, FALSE);
+    else
+        XFlush(obt_display);
 }
 
 static void x11_restack(guintptr above, const guintptr *top_first, guint n)
@@ -1755,6 +1761,15 @@ const ObBackend ob_backend_x11 = {
     .output_count = x11_output_count,
     .output_area = x11_output_area,
 
+    .surface_adopt = x11_surface_adopt,
+    .surface_unwatch = x11_surface_unwatch,
+    .surface_frame = x11_surface_frame,
+    .surface_unframe = x11_surface_unframe,
+    .surface_release = x11_surface_release,
+    .surface_set_border = x11_surface_set_border,
+    .surface_configure = x11_surface_configure,
+    .surface_send_geometry = x11_surface_send_geometry,
+    .surface_show = x11_surface_show,
     .surface_focus = x11_surface_focus,
     .surface_close = x11_surface_close,
     .surface_kill = x11_surface_kill,
@@ -1768,6 +1783,10 @@ const ObBackend ob_backend_x11 = {
     .restack = x11_restack,
     .flush = x11_flush,
 
+    .canvas_new = x11_canvas_new,
+    .canvas_free = x11_canvas_free,
+    .canvas_place = x11_canvas_place,
+    .canvas_show = x11_canvas_show,
     .canvas_set_opacity = x11_canvas_set_opacity,
 
     .grab_pointer = x11_grab_pointer,
@@ -1791,6 +1810,7 @@ const ObBackend ob_backend_x11 = {
     .publish_surface_icon = x11_publish_surface_icon,
     .publish_surface_titles = x11_publish_surface_titles,
     .publish_workareas = x11_publish_workareas,
+    .publish_surface_extents = x11_publish_surface_extents,
 };
 
 void backend_x11_map_event(const XEvent *e)
