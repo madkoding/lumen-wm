@@ -142,8 +142,11 @@ static WlrCanvas *canvas_make(struct wlr_scene_tree *parent,
 ObCanvasId lw_canvas_new(ObCanvasLayer layer, ObSurfaceId owner,
                           ObCanvasFlags flags)
 {
-    WlrCanvas *c = canvas_make(lw_layers[lw_canvas_layer(layer)], layer,
-                               flags);
+    WlrCanvas *c;
+
+    /* a client's frame hears the pointer come and go, as on X11 */
+    if (layer == OB_CANVAS_DECOR) flags |= OB_CANVAS_INPUT_CROSSING;
+    c = canvas_make(lw_layers[lw_canvas_layer(layer)], layer, flags);
 
     if (owner)
         c->owner = (WlrSurface*)owner;

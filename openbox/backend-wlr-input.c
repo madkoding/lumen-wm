@@ -535,33 +535,65 @@ static gboolean is_inside(guintptr outer, guintptr inner)
     return FALSE;
 }
 
-static void crossing(guintptr from, guintptr to, guint32 time,
-                     ObCrossingMode mode)
+/*! What holds it, for crossings: a client's decoration, a canvas's parent
+  that asks for them. */
+static guintptr crossing_parent(guintptr id)
+{
+    WlrNodeData *d = (WlrNodeData*)id;
+    WlrCanvas *c;
+
+    if (d->kind == WLR_NODE_SURFACE)
+        c = ((WlrSurface*)id)->frame;
+    else
+        c = ((WlrCanvas*)id)->parent;
+    return (guintptr)taker(c, OB_CANVAS_INPUT_CROSSING);
+}
+
+static void crossing_event(ObInputType type, guintptr over,
+                           guintptr other, gboolean inferior, guint32 time,
+                           ObCrossingMode mode)
 {
     ObInputEvent e;
 
+    memset(&e, 0, sizeof(e));
+    e.type = type;
+    e.time = time;
+    e.mods = mods_now();
+    e.crossing = mode;
+    e.inferior = inferior;
+    if (type == OB_INPUT_LEAVE) e.next_over = other;
+    event_at(&e, over, FALSE);
+    deliver(&e);
+}
+
+/*! As X does: from and what holds it up to what holds both hear the pointer
+  leave, then what holds to down from there, and to, hear it come. */
+static void crossing(guintptr from, guintptr to, guint32 time,
+                     ObCrossingMode mode)
+{
+    GSList *up = NULL, *down = NULL, *it;
+    guintptr p;
+
     if (from == to) return;
-    if (from) {
-        memset(&e, 0, sizeof(e));
-        e.type = OB_INPUT_LEAVE;
-        e.time = time;
-        e.mods = mods_now();
-        e.crossing = mode;
-        e.inferior = is_inside(from, to);
-        e.next_over = to;
-        event_at(&e, from, FALSE);
-        deliver(&e);
+    for (p = from; p; p = crossing_parent(p))
+        up = g_slist_append(up, (gpointer)p);
+    for (p = to; p && !g_slist_find(up, (gpointer)p); p = crossing_parent(p))
+        down = g_slist_prepend(down, (gpointer)p);
+
+    for (it = up; it && (guintptr)it->data != p; it = it->next) {
+        guintptr x = (guintptr)it->data;
+        crossing_event(OB_INPUT_LEAVE, x, to, x == from && is_inside(x, to),
+                       time, mode);
     }
-    if (to) {
-        memset(&e, 0, sizeof(e));
-        e.type = OB_INPUT_ENTER;
-        e.time = time;
-        e.mods = mods_now();
-        e.crossing = mode;
-        e.inferior = is_inside(to, from);
-        event_at(&e, to, FALSE);
-        deliver(&e);
+    /* inferior: the pointer went into something from holds, or came out
+       of something to holds */
+    for (it = down; it; it = it->next) {
+        guintptr x = (guintptr)it->data;
+        crossing_event(OB_INPUT_ENTER, x, from,
+                       x == to && is_inside(x, from), time, mode);
     }
+    g_slist_free(up);
+    g_slist_free(down);
 }
 
 static void show_cursor(ObCursor c);
