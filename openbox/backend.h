@@ -666,6 +666,7 @@ struct _ObBackendEvents {
                             guint32 time);
     /*! The client hid itself (X11 unmap, a null buffer on Wayland). */
     void (*surface_withdrawn)(ObSurfaceId s);
+    /*! It answered surface_ping(). */
     void (*pong)(ObSurfaceId s, guint32 serial);
     /*! It drew the size sync_request() asked about. */
     void (*surface_synced)(ObSurfaceId s);
@@ -699,7 +700,24 @@ struct _ObBackendEvents {
       button: the one held down, or 0 for the keyboard. */
     void (*request_move_resize)(ObSurfaceId s, ObMoveResize edge, gint x,
                                 gint y, guint button);
+    /*! A pager switches desktops. time: when the user asked, or 0 when it
+      doesn't say. */
     void (*request_desktop)(guint desktop, guint32 time);
+    /*! A pager asks for count desktops. */
+    void (*request_desktop_count)(guint count);
+    /*! A pager shows the desktop, or stops showing it. */
+    void (*request_show_desktop)(gboolean show);
+    /*! Pagers changed the desktop names or layout; ask desktop_names() or
+      desktop_layout(). */
+    void (*desktop_names_changed)(void);
+    void (*desktop_layout_changed)(void);
+    /*! Another instance asked this one to reconfigure (1), restart (2) or
+      exit (3) (request_running()). */
+    void (*running_requested)(guint what);
+    /*! Another window manager takes over the screen (X11: --replace). */
+    void (*replaced)(void);
+    /*! The keyboard map changed; key bindings are looked up again. */
+    void (*keymap_changed)(void);
     /*! desktop is DESKTOP_ALL for every desktop; it may be out of range. */
     void (*request_surface_desktop)(ObSurfaceId s, guint desktop);
 
@@ -717,6 +735,8 @@ struct _ObBackendEvents {
     void (*input)(const ObInputEvent *e);
     /*! A canvas needs drawing again (X11: Expose). */
     void (*canvas_exposed)(ObCanvasId c);
+    /*! Monitors came, went or changed; ask output_count() and
+      output_area() again. */
     void (*outputs_changed)(void);
 };
 

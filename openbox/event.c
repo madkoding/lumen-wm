@@ -590,10 +590,8 @@ static void event_process(const XEvent *ec, gpointer data)
            modifier map, and rebind all the key bindings as appropriate */
         if (config_keyboard_rebind_on_mapping_notify) {
             ob_debug("Keyboard map changed. Reloading keyboard bindings.");
-            ob_set_state(OB_STATE_RECONFIGURING);
             obt_keyboard_reload();
-            keyboard_rebind();
-            ob_set_state(OB_STATE_RUNNING);
+            ob_backend_events.keymap_changed();
         }
     }
     else if (e->type == ClientMessage) {
@@ -662,8 +660,7 @@ static void event_handle_root(XEvent *e)
 
     switch(e->type) {
     case SelectionClear:
-        ob_debug("Another WM has requested to replace us. Exiting.");
-        ob_exit_replace();
+        ob_backend_events.replaced();
         break;
 
     case ClientMessage:
@@ -671,53 +668,38 @@ static void event_handle_root(XEvent *e)
 
         msgtype = e->xclient.message_type;
         if (msgtype == OBT_PROP_ATOM(NET_CURRENT_DESKTOP)) {
-            guint d = e->xclient.data.l[0];
-            if (d < screen_num_desktops) {
-                if (e->xclient.data.l[1] == 0)
-                    ob_debug_type(OB_DEBUG_APP_BUGS,
-                                  "_NET_CURRENT_DESKTOP message is missing "
-                                  "a timestamp");
-                else
-                    event_sourcetime = e->xclient.data.l[1];
-                screen_set_desktop(d, TRUE);
-            }
+            if (e->xclient.data.l[1] == 0)
+                ob_debug_type(OB_DEBUG_APP_BUGS,
+                              "_NET_CURRENT_DESKTOP message is missing "
+                              "a timestamp");
+            ob_backend_events.request_desktop(e->xclient.data.l[0],
+                                              e->xclient.data.l[1]);
         } else if (msgtype == OBT_PROP_ATOM(NET_NUMBER_OF_DESKTOPS)) {
-            guint d = e->xclient.data.l[0];
-            if (d > 0 && d <= 1000)
-                screen_set_num_desktops(d);
+            ob_backend_events.request_desktop_count(e->xclient.data.l[0]);
         } else if (msgtype == OBT_PROP_ATOM(NET_SHOWING_DESKTOP)) {
-            ObScreenShowDestopMode show_mode;
-            if (e->xclient.data.l[0] != 0)
-                show_mode = SCREEN_SHOW_DESKTOP_UNTIL_WINDOW;
-            else
-                show_mode = SCREEN_SHOW_DESKTOP_NO;
-            screen_show_desktop(show_mode, NULL);
+            ob_backend_events.request_show_desktop(e->xclient.data.l[0] != 0);
         } else if (msgtype == OBT_PROP_ATOM(OB_CONTROL)) {
             ob_debug("OB_CONTROL: %d", e->xclient.data.l[0]);
-            if (e->xclient.data.l[0] == 1)
-                ob_reconfigure();
-            else if (e->xclient.data.l[0] == 2)
-                ob_restart();
-            else if (e->xclient.data.l[0] == 3)
-                ob_exit(0);
+            ob_backend_events.running_requested(e->xclient.data.l[0]);
         } else if (msgtype == OBT_PROP_ATOM(WM_PROTOCOLS)) {
             if ((Atom)e->xclient.data.l[0] == OBT_PROP_ATOM(NET_WM_PING))
-                ping_got_pong(e->xclient.data.l[1]);
+                ob_backend_events.pong((ObSurfaceId)e->xclient.data.l[2],
+                                       e->xclient.data.l[1]);
         }
         break;
     case PropertyNotify:
         if (e->xproperty.atom == OBT_PROP_ATOM(NET_DESKTOP_NAMES)) {
             ob_debug("UPDATE DESKTOP NAMES");
-            screen_update_desktop_names();
+            ob_backend_events.desktop_names_changed();
         }
         else if (e->xproperty.atom == OBT_PROP_ATOM(NET_DESKTOP_LAYOUT))
-            screen_update_layout();
+            ob_backend_events.desktop_layout_changed();
         break;
     case ConfigureNotify:
 #ifdef XRANDR
         XRRUpdateConfiguration(e);
 #endif
-        screen_resize();
+        ob_backend_events.outputs_changed();
         break;
     default:
         ;

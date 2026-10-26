@@ -31,6 +31,9 @@
 #include "stacking.h"
 #include "moveresize.h"
 #include "shelf.h"
+#include "openbox.h"
+#include "keyboard.h"
+#include "ping.h"
 
 static ObClient *client_of(ObSurfaceId s)
 {
@@ -610,6 +613,55 @@ static void request_move_resize(ObSurfaceId s, ObMoveResize edge, gint x,
         moveresize_end(TRUE);
 }
 
+static void pong(ObSurfaceId s, guint32 serial)
+{
+    ping_got_pong(serial);
+}
+
+static void request_desktop(guint desktop, guint32 time)
+{
+    if (desktop >= screen_num_desktops) return;
+
+    if (time)
+        event_set_source_time(time);
+    screen_set_desktop(desktop, TRUE);
+}
+
+static void request_desktop_count(guint count)
+{
+    if (count > 0 && count <= 1000)
+        screen_set_num_desktops(count);
+}
+
+static void request_show_desktop(gboolean show)
+{
+    screen_show_desktop(show ? SCREEN_SHOW_DESKTOP_UNTIL_WINDOW
+                             : SCREEN_SHOW_DESKTOP_NO, NULL);
+}
+
+static void running_requested(guint what)
+{
+    if (what == 1)
+        ob_reconfigure();
+    else if (what == 2)
+        ob_restart();
+    else if (what == 3)
+        ob_exit(0);
+}
+
+static void replaced(void)
+{
+    ob_debug("Another WM has requested to replace us. Exiting.");
+    ob_exit_replace();
+}
+
+static void keymap_changed(void)
+{
+    ob_set_state(OB_STATE_RECONFIGURING);
+    keyboard_rebind();
+    ob_set_state(OB_STATE_RUNNING);
+}
+
 static void canvas_exposed(ObCanvasId c)
 {
     shelf_exposed(c);
@@ -633,6 +685,16 @@ const ObBackendEvents ob_backend_events = {
     .focus_changed = focus_changed,
     .focus_left = focus_left,
     .focus_lost = focus_lost,
+    .pong = pong,
+    .request_desktop = request_desktop,
+    .request_desktop_count = request_desktop_count,
+    .request_show_desktop = request_show_desktop,
+    .desktop_names_changed = screen_update_desktop_names,
+    .desktop_layout_changed = screen_update_layout,
+    .running_requested = running_requested,
+    .replaced = replaced,
+    .keymap_changed = keymap_changed,
+    .outputs_changed = screen_resize,
     .input = event_input,
     .canvas_exposed = canvas_exposed,
 };
