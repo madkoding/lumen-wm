@@ -114,6 +114,8 @@ struct _WlrSurface {
     ObSurfaceStates states;
     /* states it asked for before it first showed */
     ObSurfaceStates initial_states;
+    /* the size limits the core last heard of */
+    gint min_width, min_height, max_width, max_height;
 
     struct wl_listener map, unmap, commit, destroy;
     struct wl_listener request_move, request_resize, request_maximize;

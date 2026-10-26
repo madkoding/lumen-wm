@@ -147,6 +147,7 @@ static void surface_commit(struct wl_listener *l, void *data)
 {
     WlrSurface *s = wl_container_of(l, s, commit);
     struct wlr_xdg_surface *x = s->toplevel->base;
+    struct wlr_box g;
 
     if (x->initial_commit) {
         /* the client picks its size until the core decides */
@@ -166,9 +167,23 @@ static void surface_commit(struct wl_listener *l, void *data)
     }
     if (!s->managed || !x->surface->mapped) return;
 
-    /* a size it picked itself, not the one it was told */
-    if (x->current.geometry.width != s->width ||
-        x->current.geometry.height != s->height)
+    /* new size limits, which the size may have to follow */
+    if (s->toplevel->current.min_width != s->min_width ||
+        s->toplevel->current.min_height != s->min_height ||
+        s->toplevel->current.max_width != s->max_width ||
+        s->toplevel->current.max_height != s->max_height)
+    {
+        s->min_width = s->toplevel->current.min_width;
+        s->min_height = s->toplevel->current.min_height;
+        s->max_width = s->toplevel->current.max_width;
+        s->max_height = s->toplevel->current.max_height;
+        emit_changed(s, OB_SURFACE_INFO_SIZE);
+    }
+
+    /* a size it picked itself, not the one it was told (the whole surface,
+       for a client that never sets its geometry) */
+    wlr_xdg_surface_get_geometry(x, &g);
+    if (g.width != s->width || g.height != s->height)
     {
         if (x->current.configure_serial == x->scheduled_serial ||
             !x->configure_idle)
@@ -177,8 +192,8 @@ static void surface_commit(struct wl_listener *l, void *data)
 
             memset(&req, 0, sizeof(req));
             req.fields = OB_CONFIGURE_WIDTH | OB_CONFIGURE_HEIGHT;
-            req.want.width = x->current.geometry.width;
-            req.want.height = x->current.geometry.height;
+            req.want.width = g.width;
+            req.want.height = g.height;
             if (req.want.width > 0 && req.want.height > 0) {
                 lw_begin(0);
                 lw_events->request_configure(id_of(s), &req);
@@ -200,7 +215,12 @@ void lw_surface_mapped(WlrSurface *s)
 static void surface_map(struct wl_listener *l, void *data)
 {
     WlrSurface *s = wl_container_of(l, s, map);
+    struct wlr_box g;
 
+    /* the size it shows with, until the core configures another */
+    wlr_xdg_surface_get_geometry(s->toplevel->base, &g);
+    s->width = g.width;
+    s->height = g.height;
     lw_surface_mapped(s);
 }
 
@@ -963,13 +983,14 @@ void lw_surface_info(ObSurfaceId id, ObSurfaceInfoFields fields,
         info->parent_is_group = FALSE;
     }
     if (fields & OB_SURFACE_INFO_SIZE) {
-        const struct wlr_box *g = &t->base->current.geometry;
+        struct wlr_box g;
         gint minw = t->current.min_width, minh = t->current.min_height;
         gint maxw = t->current.max_width, maxh = t->current.max_height;
 
+        wlr_xdg_surface_get_geometry(t->base, &g);
         info->size_hints = TRUE;
-        info->has_size = g->width > 0 && g->height > 0;
-        RECT_SET(info->want, 0, 0, g->width, g->height);
+        info->has_size = g.width > 0 && g.height > 0;
+        RECT_SET(info->want, 0, 0, g.width, g.height);
         SIZE_SET(info->min, MAX(minw, 0), MAX(minh, 0));
         SIZE_SET(info->max, maxw > 0 ? maxw : G_MAXINT,
                  maxh > 0 ? maxh : G_MAXINT);
@@ -989,9 +1010,10 @@ void lw_surface_info(ObSurfaceId id, ObSurfaceInfoFields fields,
     if (fields & OB_SURFACE_INFO_STATES)
         info->states = s->initial_states;
     if (fields & OB_SURFACE_INFO_GEOMETRY) {
-        const struct wlr_box *g = &t->base->current.geometry;
+        struct wlr_box g;
+        wlr_xdg_surface_get_geometry(t->base, &g);
         info->has_area = s->mapped;
-        RECT_SET(info->area, 0, 0, MAX(g->width, 1), MAX(g->height, 1));
+        RECT_SET(info->area, 0, 0, MAX(g.width, 1), MAX(g.height, 1));
         info->border = 0;
         info->argb = TRUE;
     }
