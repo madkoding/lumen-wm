@@ -111,6 +111,7 @@ obrender_libobrender_la_SOURCES = \
 	obrender/instance.c \
 	obrender/mask.h \
 	obrender/mask.c \
+	obrender/pixels.h \
 	obrender/render.h \
 	obrender/render.c \
 	obrender/theme.h \

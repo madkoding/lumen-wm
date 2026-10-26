@@ -19,6 +19,7 @@
 
 #include "render.h"
 #include "instance.h"
+#include <string.h>
 
 static RrInstance *definst = NULL;
 
@@ -55,6 +56,70 @@ void print_refs(gint id)
 }
 #endif
 
+/* Text is drawn with cairo into images, so take the font settings X
+   clients share (Xft resources) the way Xft does. Xft measured a font's
+   ascent and descent unhinted, and laid out text hinted: hint_metrics
+   picks which. */
+static PangoContext *font_context(Display *display, gint screen,
+                                  gboolean hint_metrics)
+{
+    PangoContext *ctx;
+    cairo_font_options_t *opts;
+    const gchar *v;
+    gdouble dpi = 0;
+
+    ctx = pango_font_map_create_context(pango_cairo_font_map_get_default());
+
+    if ((v = XGetDefault(display, "Xft", "dpi")))
+        dpi = g_ascii_strtod(v, NULL);
+    if (dpi <= 0 && DisplayHeightMM(display, screen) > 0)
+        dpi = DisplayHeight(display, screen) * 25.4 /
+            DisplayHeightMM(display, screen);
+    if (dpi > 0)
+        pango_cairo_context_set_resolution(ctx, dpi);
+
+    opts = cairo_font_options_create();
+    cairo_font_options_set_hint_metrics(opts, hint_metrics ?
+                                        CAIRO_HINT_METRICS_ON :
+                                        CAIRO_HINT_METRICS_OFF);
+    if ((v = XGetDefault(display, "Xft", "antialias")))
+        cairo_font_options_set_antialias(
+            opts, (!g_ascii_strcasecmp(v, "false") || !strcmp(v, "0") ||
+                   !g_ascii_strcasecmp(v, "off")) ?
+            CAIRO_ANTIALIAS_NONE : CAIRO_ANTIALIAS_GRAY);
+    if ((v = XGetDefault(display, "Xft", "hinting")) &&
+        (!g_ascii_strcasecmp(v, "false") || !strcmp(v, "0") ||
+         !g_ascii_strcasecmp(v, "off")))
+        cairo_font_options_set_hint_style(opts, CAIRO_HINT_STYLE_NONE);
+    else if ((v = XGetDefault(display, "Xft", "hintstyle"))) {
+        if (!strcmp(v, "hintnone"))
+            cairo_font_options_set_hint_style(opts, CAIRO_HINT_STYLE_NONE);
+        else if (!strcmp(v, "hintslight"))
+            cairo_font_options_set_hint_style(opts, CAIRO_HINT_STYLE_SLIGHT);
+        else if (!strcmp(v, "hintmedium"))
+            cairo_font_options_set_hint_style(opts, CAIRO_HINT_STYLE_MEDIUM);
+        else if (!strcmp(v, "hintfull"))
+            cairo_font_options_set_hint_style(opts, CAIRO_HINT_STYLE_FULL);
+    }
+    if ((v = XGetDefault(display, "Xft", "rgba"))) {
+        if (!strcmp(v, "rgb"))
+            cairo_font_options_set_subpixel_order(opts,
+                                                  CAIRO_SUBPIXEL_ORDER_RGB);
+        else if (!strcmp(v, "bgr"))
+            cairo_font_options_set_subpixel_order(opts,
+                                                  CAIRO_SUBPIXEL_ORDER_BGR);
+        else if (!strcmp(v, "vrgb"))
+            cairo_font_options_set_subpixel_order(opts,
+                                                  CAIRO_SUBPIXEL_ORDER_VRGB);
+        else if (!strcmp(v, "vbgr"))
+            cairo_font_options_set_subpixel_order(opts,
+                                                  CAIRO_SUBPIXEL_ORDER_VBGR);
+    }
+    pango_cairo_context_set_font_options(ctx, opts);
+    cairo_font_options_destroy(opts);
+    return ctx;
+}
+
 RrInstance* RrInstanceNew (Display *display, gint screen)
 {
     definst = g_slice_new(RrInstance);
@@ -64,7 +129,8 @@ RrInstance* RrInstanceNew (Display *display, gint screen)
     definst->depth = DefaultDepth(display, screen);
     definst->visual = DefaultVisual(display, screen);
     definst->colormap = DefaultColormap(display, screen);
-    definst->pango = pango_xft_get_context(display, screen);
+    definst->pango = font_context(display, screen, TRUE);
+    definst->pango_metrics = font_context(display, screen, FALSE);
 
     definst->pseudo_colors = NULL;
 
@@ -212,6 +278,7 @@ void RrInstanceFree (RrInstance *inst)
         g_free(inst->pseudo_colors);
         g_hash_table_destroy(inst->color_hash);
         g_object_unref(inst->pango);
+        g_object_unref(inst->pango_metrics);
         g_slice_free(RrInstance, inst);
     }
 }

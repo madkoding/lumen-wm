@@ -19,6 +19,7 @@
 */
 
 #include "render.h"
+#include "pixels.h"
 #include "gradient.h"
 #include "font.h"
 #include "mask.h"
@@ -29,7 +30,6 @@
 #include <glib.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
-#include <X11/Xft/Xft.h>
 
 #ifdef HAVE_STDLIB_H
 #  include <stdlib.h>
@@ -38,47 +38,41 @@
 static void pixel_data_to_pixmap(RrAppearance *l,
                                  gint x, gint y, gint w, gint h);
 
-Pixmap RrPaintPixmap(RrAppearance *a, gint w, gint h)
+gboolean RrPaintImage(RrAppearance *a, gint w, gint h)
 {
-    gint i, transferred = 0, force_transfer = 0;
-    Pixmap oldp = None;
+    gint i, force_transfer = 0, stride;
     RrRect tarea; /* area in which to draw textures */
+    RrPixel32 *out, *in;
+    cairo_t *cr = NULL;
     gboolean resized;
 
-    if (w <= 0 || h <= 0) return None;
+    if (w <= 0 || h <= 0) return FALSE;
 
     if (a->surface.parentx < 0 || a->surface.parenty < 0) {
         /* ob_debug("Invalid parent co-ordinates\n"); */
-        return None;
+        return FALSE;
     }
 
     if (a->surface.grad == RR_SURFACE_PARENTREL &&
         (a->surface.parentx >= a->surface.parent->w ||
          a->surface.parenty >= a->surface.parent->h))
     {
-        return None;
+        return FALSE;
     }
 
     resized = (a->w != w || a->h != h);
-
-    oldp = a->pixmap; /* save to free after changing the visible pixmap */
-    a->pixmap = XCreatePixmap(RrDisplay(a->inst),
-                              RrRootWindow(a->inst),
-                              w, h, RrDepth(a->inst));
-
-    g_assert(a->pixmap != None);
     a->w = w;
     a->h = h;
-
-    if (a->xftdraw != NULL)
-        XftDrawDestroy(a->xftdraw);
-    a->xftdraw = XftDrawCreate(RrDisplay(a->inst), a->pixmap,
-                               RrVisual(a->inst), RrColormap(a->inst));
-    g_assert(a->xftdraw != NULL);
 
     if (resized) {
         g_free(a->surface.pixel_data);
         a->surface.pixel_data = g_new(RrPixel32, w * h);
+    }
+    if (!a->image || cairo_image_surface_get_width(a->image) != w ||
+        cairo_image_surface_get_height(a->image) != h)
+    {
+        if (a->image) cairo_surface_destroy(a->image);
+        a->image = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
     }
 
     RrRender(a, w, h);
@@ -89,101 +83,109 @@ Pixmap RrPaintPixmap(RrAppearance *a, gint w, gint h)
         RECT_SET(tarea, l, t, w - l - r, h - t - b);
     }
 
+    /* pictures go into the pixels, where parent-relative children see
+       them */
+    for (i = 0; i < a->textures; i++) {
+        RrRect narea = tarea;
+
+        if (a->texture[i].type == RR_TEXTURE_IMAGE) {
+            RrTextureImage *img = &a->texture[i].data.image;
+            narea.x += img->tx;
+            narea.width -= img->tx;
+            narea.y += img->ty;
+            narea.height -= img->ty;
+            if (img->twidth)
+                narea.width = MIN(narea.width, img->twidth);
+            if (img->theight)
+                narea.height = MIN(narea.height, img->theight);
+            RrImageDrawImage(a->surface.pixel_data, img, a->w, a->h, &narea);
+            force_transfer = 1;
+        }
+        else if (a->texture[i].type == RR_TEXTURE_RGBA) {
+            RrTextureRGBA *rgb = &a->texture[i].data.rgba;
+            narea.x += rgb->tx;
+            narea.width -= rgb->tx;
+            narea.y += rgb->ty;
+            narea.height -= rgb->ty;
+            if (rgb->twidth)
+                narea.width = MIN(narea.width, rgb->twidth);
+            if (rgb->theight)
+                narea.height = MIN(narea.height, rgb->theight);
+            RrImageDrawRGBA(a->surface.pixel_data, rgb, a->w, a->h, &narea);
+            force_transfer = 1;
+        }
+    }
+
+    /* the picture shown is the pixels, opaque */
+    cairo_surface_flush(a->image);
+    out = (RrPixel32*)cairo_image_surface_get_data(a->image);
+    stride = cairo_image_surface_get_stride(a->image) / sizeof(RrPixel32);
+    in = a->surface.pixel_data;
+    for (i = 0; i < h; ++i) {
+        gint x;
+        for (x = 0; x < w; ++x)
+            out[i * stride + x] = in[i * w + x] |
+                (0xffu << RrDefaultAlphaOffset);
+    }
+    g_assert(stride == w);
+
+    /* a solid surface's bevel was drawn with lines, unless a picture
+       covered it */
+    if (!force_transfer)
+        RrRenderSolidRelief(a, out, w, h);
+
+    /* text, lines and masks go on top */
     for (i = 0; i < a->textures; i++) {
         switch (a->texture[i].type) {
-        case RR_TEXTURE_NONE:
-            break;
         case RR_TEXTURE_TEXT:
-            if (!transferred) {
-                transferred = 1;
-                if ((a->surface.grad != RR_SURFACE_SOLID)
-                    || (a->surface.interlaced))
-                    pixel_data_to_pixmap(a, 0, 0, w, h);
+            if (!cr) {
+                cairo_surface_mark_dirty(a->image);
+                cr = cairo_create(a->image);
             }
-            if (a->xftdraw == NULL) {
-                a->xftdraw = XftDrawCreate(RrDisplay(a->inst), a->pixmap,
-                                           RrVisual(a->inst),
-                                           RrColormap(a->inst));
-            }
-            RrFontDraw(a->xftdraw, &a->texture[i].data.text, &tarea);
+            RrFontDraw(cr, &a->texture[i].data.text, &tarea);
             break;
         case RR_TEXTURE_LINE_ART:
-            if (!transferred) {
-                transferred = 1;
-                if ((a->surface.grad != RR_SURFACE_SOLID)
-                    || (a->surface.interlaced))
-                    pixel_data_to_pixmap(a, 0, 0, w, h);
-            }
-            XDrawLine(RrDisplay(a->inst), a->pixmap,
-                      RrColorGC(a->texture[i].data.lineart.color),
-                      a->texture[i].data.lineart.x1,
-                      a->texture[i].data.lineart.y1,
-                      a->texture[i].data.lineart.x2,
-                      a->texture[i].data.lineart.y2);
+        {
+            RrPixels p = { out, w, h };
+            if (cr) cairo_surface_flush(a->image);
+            RrPixelLine(&p, a->texture[i].data.lineart.x1,
+                        a->texture[i].data.lineart.y1,
+                        a->texture[i].data.lineart.x2,
+                        a->texture[i].data.lineart.y2,
+                        RrPixelOf(a->texture[i].data.lineart.color));
+            if (cr) cairo_surface_mark_dirty(a->image);
             break;
+        }
         case RR_TEXTURE_MASK:
-            if (!transferred) {
-                transferred = 1;
-                if ((a->surface.grad != RR_SURFACE_SOLID)
-                    || (a->surface.interlaced))
-                    pixel_data_to_pixmap(a, 0, 0, w, h);
-            }
-            RrPixmapMaskDraw(a->pixmap, &a->texture[i].data.mask, &tarea);
+            if (cr) cairo_surface_flush(a->image);
+            RrPixmapMaskDraw(out, w, h, &a->texture[i].data.mask, &tarea);
+            if (cr) cairo_surface_mark_dirty(a->image);
             break;
+        case RR_TEXTURE_NONE:
         case RR_TEXTURE_IMAGE:
-            g_assert(!transferred);
-            {
-                RrRect narea = tarea;
-                RrTextureImage *img = &a->texture[i].data.image;
-                narea.x += img->tx;
-                narea.width -= img->tx;
-                narea.y += img->ty;
-                narea.height -= img->ty;
-                if (img->twidth)
-                    narea.width = MIN(narea.width, img->twidth);
-                if (img->theight)
-                    narea.height = MIN(narea.height, img->theight);
-                RrImageDrawImage(a->surface.pixel_data,
-                                 &a->texture[i].data.image,
-                                 a->w, a->h,
-                                 &narea);
-            }
-            force_transfer = 1;
-            break;
         case RR_TEXTURE_RGBA:
-            g_assert(!transferred);
-            {
-                RrRect narea = tarea;
-                RrTextureRGBA *rgb = &a->texture[i].data.rgba;
-                narea.x += rgb->tx;
-                narea.width -= rgb->tx;
-                narea.y += rgb->ty;
-                narea.height -= rgb->ty;
-                if (rgb->twidth)
-                    narea.width = MIN(narea.width, rgb->twidth);
-                if (rgb->theight)
-                    narea.height = MIN(narea.height, rgb->theight);
-                RrImageDrawRGBA(a->surface.pixel_data,
-                                &a->texture[i].data.rgba,
-                                a->w, a->h,
-                                &narea);
-            }
-            force_transfer = 1;
-        break;
+            break;
         case RR_TEXTURE_NUM_TYPES:
             g_assert_not_reached();
         }
     }
+    if (cr) cairo_destroy(cr);
+    cairo_surface_mark_dirty(a->image);
+    return TRUE;
+}
 
-    if (!transferred) {
-        transferred = 1;
-        if ((a->surface.grad != RR_SURFACE_SOLID) || (a->surface.interlaced) ||
-            force_transfer)
-        {
-            pixel_data_to_pixmap(a, 0, 0, w, h);
-        }
-    }
+Pixmap RrPaintPixmap(RrAppearance *a, gint w, gint h)
+{
+    Pixmap oldp;
 
+    if (!RrPaintImage(a, w, h)) return None;
+
+    oldp = a->pixmap; /* save to free after changing the visible pixmap */
+    a->pixmap = XCreatePixmap(RrDisplay(a->inst),
+                              RrRootWindow(a->inst),
+                              w, h, RrDepth(a->inst));
+    g_assert(a->pixmap != None);
+    pixel_data_to_pixmap(a, 0, 0, w, h);
     return oldp;
 }
 
@@ -313,7 +315,7 @@ RrAppearance *RrAppearanceCopy(RrAppearance *orig)
     copy->texture = g_memdup(orig->texture,
                              orig->textures * sizeof(RrTexture));
     copy->pixmap = None;
-    copy->xftdraw = NULL;
+    copy->image = NULL;
     copy->w = copy->h = 0;
     return copy;
 }
@@ -324,7 +326,7 @@ void RrAppearanceFree(RrAppearance *a)
     if (a) {
         RrSurface *p;
         if (a->pixmap != None) XFreePixmap(RrDisplay(a->inst), a->pixmap);
-        if (a->xftdraw != NULL) XftDrawDestroy(a->xftdraw);
+        if (a->image) cairo_surface_destroy(a->image);
         if (a->textures)
             g_free(a->texture);
         p = &a->surface;
@@ -352,7 +354,7 @@ static void pixel_data_to_pixmap(RrAppearance *l,
                       ZPixmap, 0, NULL, w, h, 32, 0);
     g_assert(im != NULL);
 
-    in = l->surface.pixel_data;
+    in = (RrPixel32*)cairo_image_surface_get_data(l->image);
     out = l->pixmap;
 
 /* this malloc is a complete waste of time on normal 32bpp

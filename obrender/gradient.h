@@ -23,5 +23,8 @@
 #include "render.h"
 
 void RrRender(RrAppearance *a, gint w, gint h);
+/*! A solid surface's bevel or border, drawn over out (the rendered pixels)
+  with the bevel colors rather than the per-pixel highlight, as X drew it. */
+void RrRenderSolidRelief(RrAppearance *a, RrPixel32 *out, gint w, gint h);
 
 #endif /* __gradient_h */

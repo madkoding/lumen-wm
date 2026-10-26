@@ -21,7 +21,7 @@
 
 #include <X11/Xlib.h>
 #include <glib.h>
-#include <pango/pangoxft.h>
+#include <pango/pangocairo.h>
 
 struct _RrInstance {
     Display *display;
@@ -31,6 +31,8 @@ struct _RrInstance {
     gint depth;
     Colormap colormap;
     PangoContext *pango;
+    /*! for fonts' ascent and descent, unhinted */
+    PangoContext *pango_metrics;
 
     gint red_offset;
     gint green_offset;

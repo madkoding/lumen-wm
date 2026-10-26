@@ -20,6 +20,7 @@
 #include "render.h"
 #include "color.h"
 #include "mask.h"
+#include "pixels.h"
 
 RrPixmapMask *RrPixmapMaskNew(const RrInstance *inst,
                               gint w, gint h, const gchar *data)
@@ -30,42 +31,39 @@ RrPixmapMask *RrPixmapMaskNew(const RrInstance *inst,
     m->height = h;
     /* round up to nearest byte */
     m->data = g_memdup(data, (w + 7) / 8 * h);
-    m->mask = XCreateBitmapFromData(RrDisplay(inst), RrRootWindow(inst),
-                                    data, w, h);
     return m;
 }
 
 void RrPixmapMaskFree(RrPixmapMask *m)
 {
     if (m) {
-        XFreePixmap(RrDisplay(m->inst), m->mask);
         g_free(m->data);
         g_slice_free(RrPixmapMask, m);
     }
 }
 
-void RrPixmapMaskDraw(Pixmap p, const RrTextureMask *m, const RrRect *area)
+void RrPixmapMaskDraw(RrPixel32 *out, gint w, gint h,
+                      const RrTextureMask *m, const RrRect *area)
 {
-    gint x, y;
+    RrPixels p = { out, w, h };
+    RrPixel32 c;
+    gint x, y, i, j, stride;
+
     if (m->mask == NULL) return; /* no mask given */
 
-    /* set the clip region */
     x = area->x + (area->width - m->mask->width) / 2;
     y = area->y + (area->height - m->mask->height) / 2;
 
     if (x < 0) x = 0;
     if (y < 0) y = 0;
 
-    XSetClipMask(RrDisplay(m->mask->inst), RrColorGC(m->color), m->mask->mask);
-    XSetClipOrigin(RrDisplay(m->mask->inst), RrColorGC(m->color), x, y);
-
-    /* fill in the clipped region */
-    XFillRectangle(RrDisplay(m->mask->inst), p, RrColorGC(m->color), x, y,
-                   x + m->mask->width, y + m->mask->height);
-
-    /* unset the clip region */
-    XSetClipMask(RrDisplay(m->mask->inst), RrColorGC(m->color), None);
-    XSetClipOrigin(RrDisplay(m->mask->inst), RrColorGC(m->color), 0, 0);
+    /* the bitmap's rows are whole bytes, least significant bit first */
+    c = RrPixelOf(m->color);
+    stride = (m->mask->width + 7) / 8;
+    for (j = 0; j < m->mask->height; ++j)
+        for (i = 0; i < m->mask->width; ++i)
+            if (m->mask->data[j * stride + i / 8] & (1 << (i % 8)))
+                RrPixelPut(&p, x + i, y + j, c);
 }
 
 RrPixmapMask *RrPixmapMaskCopy(const RrPixmapMask *src)
@@ -76,7 +74,5 @@ RrPixmapMask *RrPixmapMaskCopy(const RrPixmapMask *src)
     m->height = src->height;
     /* round up to nearest byte */
     m->data = g_memdup(src->data, (src->width + 7) / 8 * src->height);
-    m->mask = XCreateBitmapFromData(RrDisplay(m->inst), RrRootWindow(m->inst),
-                                    m->data, m->width, m->height);
     return m;
 }

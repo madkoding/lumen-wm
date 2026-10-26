@@ -27,6 +27,9 @@ RrPixmapMask *RrPixmapMaskNew(const RrInstance *inst,
                               gint w, gint h, const gchar *data);
 void RrPixmapMaskFree(RrPixmapMask *m);
 RrPixmapMask *RrPixmapMaskCopy(const RrPixmapMask *src);
-void RrPixmapMaskDraw(Pixmap p, const RrTextureMask *m, const RrRect *area);
+/*! Fill the mask's bits with its color, centered in area, into out (an
+  opaque ARGB image w by h). */
+void RrPixmapMaskDraw(RrPixel32 *out, gint w, gint h,
+                      const RrTextureMask *m, const RrRect *area);
 
 #endif

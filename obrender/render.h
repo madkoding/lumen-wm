@@ -21,8 +21,9 @@
 #ifndef __render_h
 #define __render_h
 
-#include <X11/Xlib.h> /* some platforms dont include this as needed for Xft */
-#include <pango/pangoxft.h>
+#include <X11/Xlib.h>
+#include <pango/pango.h>
+#include <cairo.h>
 #include <glib.h>
 
 G_BEGIN_DECLS
@@ -162,7 +163,6 @@ struct _RrTextureText {
 
 struct _RrPixmapMask {
     const RrInstance *inst;
-    Pixmap mask;
     gint width;
     gint height;
     gchar *data;
@@ -227,7 +227,8 @@ struct _RrAppearance {
     gint textures;
     RrTexture *texture;
     Pixmap pixmap;
-    XftDraw *xftdraw;
+    /*! what RrPaintImage drew: opaque ARGB32, w by h */
+    cairo_surface_t *image;
 
     /* cached for internal use */
     gint w, h;
@@ -400,6 +401,10 @@ gint    RrFontMaxCharWidth  (const RrFont *f);
 /*! Select a font from a pango description string */
 void    RrFontDescriptionFromString(RrFont *font, gchar *description);
 
+/*! Draw the appearance into its image (a->image), w by h. FALSE when there
+  is nothing to draw (no size, or a parent-relative one outside its
+  parent). */
+gboolean RrPaintImage(RrAppearance *a, gint w, gint h);
 /* Paint into the appearance. The old pixmap is returned (if there was one). It
    is the responsibility of the caller to call XFreePixmap on the return when
    it is non-null. */
