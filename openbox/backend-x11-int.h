@@ -37,6 +37,9 @@ ObCanvasId x11_canvas_new(ObCanvasLayer layer, ObSurfaceId owner);
 void x11_canvas_free(ObCanvasId c);
 void x11_canvas_place(ObCanvasId c, const Rect *outer, const Rect *inner);
 void x11_canvas_show(ObCanvasId c, gboolean show);
+void x11_canvas_set_shape(ObCanvasId c, const Rect *inner, gboolean bounding,
+                          gboolean input, const Rect *rects, guint n);
+void x11_get_shape(ObSurfaceId s, ObSurfaceInfo *info);
 void x11_publish_surface_extents(ObSurfaceId s, const Strut *extents);
 
 #endif

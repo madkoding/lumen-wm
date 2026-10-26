@@ -145,6 +145,8 @@ static void surface_changed(ObSurfaceId s, ObSurfaceInfoFields changed,
     }
     if (changed & OB_SURFACE_INFO_OPACITY)
         client_update_opacity(client);
+    if (changed & OB_SURFACE_INFO_SHAPE)
+        client_update_shape(client);
     if (changed & OB_SURFACE_INFO_USER_TIME && client == focus_client) {
         ObSurfaceInfo info = { 0 };
 

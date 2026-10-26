@@ -161,7 +161,8 @@ typedef enum {
     OB_SURFACE_INFO_SYNC     = 1 << 15, /*!< its resize sync counter */
     OB_SURFACE_INFO_OPACITY  = 1 << 16, /*!< how opaque it asks to be */
     OB_SURFACE_INFO_GEOMETRY = 1 << 17, /*!< where it is, as it came */
-    OB_SURFACE_INFO_ALL      = (1 << 18) - 1
+    OB_SURFACE_INFO_SHAPE    = 1 << 18, /*!< its outline (X11 Shape) */
+    OB_SURFACE_INFO_ALL      = (1 << 19) - 1
 } ObSurfaceInfoFields;
 
 /*! One size of a client's icon. */
@@ -258,6 +259,9 @@ typedef struct _ObSurfaceInfo {
     Rect area;
     gint border;
     gboolean argb;          /*!< it draws with an alpha channel */
+    /*! it is not a rectangle, and takes input only in part of itself
+      (X11 Shape) */
+    gboolean shaped, shaped_input;
 
     ObIcon *icons;          /*!< every size it offers; NULL for none */
     guint n_icons;
@@ -456,6 +460,13 @@ struct _ObBackend {
     /*! Reserve an edge of the output, as a strut or a layer-shell
       exclusive zone. */
     void (*canvas_set_strut)(ObCanvasId c, const StrutPartial *strut);
+    /*! Cut a decoration to its client's outline (X11 Shape): where the
+      client sits (inner, relative to the canvas) plus rects, the
+      decorations around it. bounding and input: follow the client's
+      outline and its input shape; FALSE makes that one whole again. */
+    void (*canvas_set_shape)(ObCanvasId c, const Rect *inner,
+                             gboolean bounding, gboolean input,
+                             const Rect *rects, guint n);
     /*! Show it, and the surface a decoration frames, this opaque (as
       ObSurfaceInfo's opacity); set FALSE leaves that to the compositor.
       A decoration's id is the one restack takes for the frame. */

@@ -26,6 +26,10 @@
 #include "obt/prop.h"
 #include "obt/xqueue.h"
 
+#ifdef SHAPE
+#include <X11/extensions/shape.h>
+#endif
+
 #define CLIENT_EVENTMASK (PropertyChangeMask | StructureNotifyMask | \
                           ColormapChangeMask)
 #define CLIENT_NOPROPAGATEMASK (ButtonPressMask | ButtonReleaseMask | \
@@ -57,6 +61,11 @@ void x11_surface_adopt(ObSurfaceId s, gboolean internal)
        ours */
     if (!internal)
         XChangeSaveSet(obt_display, (Window)s, SetModeInsert);
+
+#ifdef SHAPE
+    if (obt_display_extension_shape)
+        XShapeSelectInput(obt_display, (Window)s, ShapeNotifyMask);
+#endif
 }
 
 void x11_surface_unwatch(ObSurfaceId s, gboolean internal)
@@ -266,4 +275,89 @@ void x11_publish_surface_extents(ObSurfaceId s, const Strut *extents)
     vals[3] = extents->bottom;
     OBT_PROP_SETA32((Window)s, NET_FRAME_EXTENTS, CARDINAL, vals, 4);
     OBT_PROP_SETA32((Window)s, KDE_NET_WM_FRAME_STRUT, CARDINAL, vals, 4);
+}
+
+void x11_get_shape(ObSurfaceId s, ObSurfaceInfo *info)
+{
+    info->shaped = FALSE;
+    info->shaped_input = FALSE;
+#ifdef SHAPE
+    if (obt_display_extension_shape) {
+        gint foo;
+        guint ufoo;
+        gint b;
+
+        XShapeQueryExtents(obt_display, (Window)s, &b, &foo,
+                           &foo, &ufoo, &ufoo, &foo, &foo, &foo, &ufoo,
+                           &ufoo);
+        info->shaped = !!b;
+#ifdef ShapeInput
+        { /* when some smart people added ShapeInput they forgot to update XShapeQueryExtents or
+             add a new one for input shapes, so we get to do this instead, yay! */
+            int nrects, ordering;
+            Window root;
+            gint x, y;
+            guint w = 0, h = 0, bw, depth;
+            XRectangle *input_rect;
+
+            XGetGeometry(obt_display, (Window)s, &root, &x, &y, &w, &h,
+                         &bw, &depth);
+            input_rect = XShapeGetRectangles(obt_display, (Window)s,
+                                             ShapeInput, &nrects, &ordering);
+            if (nrects == 1 && input_rect->width == w &&
+                               input_rect->height == h &&
+                               /* openbox sets the border width of client windows to 0 */
+                               input_rect->x == 0 && input_rect->y == 0) {
+                info->shaped_input = FALSE;
+            } else {
+                info->shaped_input = TRUE;
+            }
+            XFree(input_rect);
+        }
+#endif
+    }
+#endif
+}
+
+void x11_canvas_set_shape(ObCanvasId c, const Rect *inner, gboolean bounding,
+                          gboolean input, const Rect *rects, guint n)
+{
+#ifdef SHAPE
+    Window w = (Window)c;
+    Decor *d = decor_frames ? g_hash_table_lookup(decor_frames, &w) : NULL;
+    const int kinds[] = {
+        ShapeBounding,
+#ifdef ShapeInput
+        ShapeInput,
+#endif
+    };
+    guint k, i;
+
+    if (!d) return;
+
+    for (k = 0; k < G_N_ELEMENTS(kinds); ++k) {
+        if (!(kinds[k] == ShapeBounding ? bounding : input)) {
+            /* clear the shape on the frame window */
+            XShapeCombineMask(obt_display, w, kinds[k], inner->x, inner->y,
+                              None, ShapeSet);
+        } else {
+            XRectangle *xrect = g_new(XRectangle, n);
+
+            /* make the frame's shape match the clients */
+            XShapeCombineShape(obt_display, w, kinds[k], inner->x, inner->y,
+                               d->owner, kinds[k], ShapeSet);
+            for (i = 0; i < n; ++i) {
+                xrect[i].x = rects[i].x;
+                xrect[i].y = rects[i].y;
+                xrect[i].width = rects[i].width;
+                xrect[i].height = rects[i].height;
+            }
+            XShapeCombineRectangles(obt_display, w, kinds[k], 0, 0, xrect, n,
+                                    ShapeUnion, Unsorted);
+            g_free(xrect);
+        }
+    }
+#else
+    (void)c; (void)inner; (void)bounding; (void)input; (void)rects; (void)n;
+#endif
 }

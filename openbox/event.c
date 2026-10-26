@@ -1152,32 +1152,9 @@ static void event_handle_client(ObClient *client, XEvent *e)
         client_update_colormap(client, e->xcolormap.colormap);
         break;
     default:
-        ;
-#ifdef SHAPE
-        {
-            int kind;
-            if (obt_display_extension_shape &&
-                e->type == obt_display_extension_shape_basep)
-            {
-                switch (((XShapeEvent*)e)->kind) {
-                    case ShapeBounding:
-                    case ShapeClip:
-                        client->shaped = ((XShapeEvent*)e)->shaped;
-                        kind = ShapeBounding;
-                        break;
-#ifdef ShapeInput
-                    case ShapeInput:
-                        client->shaped_input = ((XShapeEvent*)e)->shaped;
-                        kind = ShapeInput;
-                        break;
-#endif
-                    default:
-                        g_assert_not_reached();
-                }
-                frame_adjust_shape_kind(client->frame, kind);
-            }
-        }
-#endif
+        /* the client changed its outline */
+        backend_x11_shape_notify(e);
+        break;
     }
 }
 

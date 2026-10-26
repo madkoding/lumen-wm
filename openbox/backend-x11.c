@@ -34,6 +34,9 @@
 #include "obt/keyboard.h"
 
 #include <X11/Xatom.h>
+#ifdef SHAPE
+#include <X11/extensions/shape.h>
+#endif
 #ifdef SYNC
 #include <X11/extensions/sync.h>
 #endif
@@ -1129,6 +1132,8 @@ static void x11_surface_info(ObSurfaceId s, ObSurfaceInfoFields fields,
     }
     if (fields & OB_SURFACE_INFO_GEOMETRY)
         x11_get_geometry(s, info);
+    if (fields & OB_SURFACE_INFO_SHAPE)
+        x11_get_shape(s, info);
 }
 
 /* --- events --- */
@@ -1787,6 +1792,7 @@ const ObBackend ob_backend_x11 = {
     .canvas_free = x11_canvas_free,
     .canvas_place = x11_canvas_place,
     .canvas_show = x11_canvas_show,
+    .canvas_set_shape = x11_canvas_set_shape,
     .canvas_set_opacity = x11_canvas_set_opacity,
 
     .grab_pointer = x11_grab_pointer,
@@ -1812,6 +1818,22 @@ const ObBackend ob_backend_x11 = {
     .publish_workareas = x11_publish_workareas,
     .publish_surface_extents = x11_publish_surface_extents,
 };
+
+gboolean backend_x11_shape_notify(const XEvent *e)
+{
+#ifdef SHAPE
+    if (obt_display_extension_shape &&
+        e->type == obt_display_extension_shape_basep)
+    {
+        const XShapeEvent *se = (const XShapeEvent*)e;
+
+        events->surface_changed((ObSurfaceId)se->window,
+                                OB_SURFACE_INFO_SHAPE, se->time);
+        return TRUE;
+    }
+#endif
+    return FALSE;
+}
 
 void backend_x11_map_event(const XEvent *e)
 {

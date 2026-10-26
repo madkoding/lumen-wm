@@ -1339,39 +1339,17 @@ static void client_get_state(ObClient *self)
 
 static void client_get_shaped(ObClient *self)
 {
-    self->shaped = FALSE;
-    self->shaped_input = FALSE;
-#ifdef SHAPE
-    if (obt_display_extension_shape) {
-        gint foo;
-        guint ufoo;
-        gint s;
+    ObSurfaceInfo info = { 0 };
 
-        XShapeSelectInput(obt_display, self->window, ShapeNotifyMask);
+    ob_backend->surface_info(self->window, OB_SURFACE_INFO_SHAPE, &info);
+    self->shaped = info.shaped;
+    self->shaped_input = info.shaped_input;
+}
 
-        XShapeQueryExtents(obt_display, self->window, &s, &foo,
-                           &foo, &ufoo, &ufoo, &foo, &foo, &foo, &ufoo,
-                           &ufoo);
-        self->shaped = !!s;
-#ifdef ShapeInput
-        { /* when some smart people added ShapeInput they forgot to update XShapeQueryExtents or
-             add a new one for input shapes, so we get to do this instead, yay! */
-            int nrects, ordering;
-            XRectangle *input_rect = XShapeGetRectangles(obt_display, self->window,
-                                                         ShapeInput, &nrects, &ordering);
-            if (nrects == 1 && input_rect->width == self->area.width &&
-                               input_rect->height == self->area.height &&
-                               /* openbox sets the border width of client windows to 0 */
-                               input_rect->x == 0 && input_rect->y == 0) {
-                self->shaped_input = FALSE;
-            } else {
-                self->shaped_input = TRUE;
-            }
-            XFree(input_rect);
-        }
-#endif
-    }
-#endif
+void client_update_shape(ObClient *self)
+{
+    client_get_shaped(self);
+    frame_adjust_shape(self->frame);
 }
 
 void client_update_transient_for(ObClient *self)

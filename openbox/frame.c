@@ -237,67 +237,31 @@ void frame_adjust_theme(ObFrame *self)
     set_theme_statics(self);
 }
 
-#ifdef SHAPE
-void frame_adjust_shape_kind(ObFrame *self, int kind)
-{
-    gint num;
-    XRectangle xrect[2];
-    gboolean shaped;
-
-    shaped = (kind == ShapeBounding && self->client->shaped);
-#ifdef ShapeInput
-    shaped |= (kind == ShapeInput && self->client->shaped_input);
-#endif
-
-    if (!shaped) {
-        /* clear the shape on the frame window */
-        XShapeCombineMask(obt_display, self->window, kind,
-                          self->size.left,
-                          self->size.top,
-                          None, ShapeSet);
-    } else {
-        /* make the frame's shape match the clients */
-        XShapeCombineShape(obt_display, self->window, kind,
-                           self->size.left,
-                           self->size.top,
-                           self->client->window,
-                           kind, ShapeSet);
-
-        num = 0;
-        if (self->decorations & OB_FRAME_DECOR_TITLEBAR) {
-            xrect[0].x = 0;
-            xrect[0].y = 0;
-            xrect[0].width = self->area.width;
-            xrect[0].height = self->size.top;
-            ++num;
-        }
-
-        if (self->decorations & OB_FRAME_DECOR_HANDLE &&
-            ob_rr_theme->handle_height > 0)
-        {
-            xrect[1].x = 0;
-            xrect[1].y = FRAME_HANDLE_Y(self);
-            xrect[1].width = self->area.width;
-            xrect[1].height = ob_rr_theme->handle_height +
-                self->bwidth * 2;
-            ++num;
-        }
-
-        XShapeCombineRectangles(obt_display, self->window,
-                                kind, 0, 0, xrect, num,
-                                ShapeUnion, Unsorted);
-    }
-}
-#endif
-
 void frame_adjust_shape(ObFrame *self)
 {
-#ifdef SHAPE
-  frame_adjust_shape_kind(self, ShapeBounding);
-#ifdef ShapeInput
-  frame_adjust_shape_kind(self, ShapeInput);
-#endif
-#endif
+    Rect inner, rects[2];
+    guint num = 0;
+
+    RECT_SET(inner, self->size.left, self->size.top,
+             self->client->area.width, self->client->area.height);
+
+    if (self->decorations & OB_FRAME_DECOR_TITLEBAR) {
+        RECT_SET(rects[num], 0, 0, self->area.width, self->size.top);
+        ++num;
+    }
+
+    if (self->decorations & OB_FRAME_DECOR_HANDLE &&
+        ob_rr_theme->handle_height > 0)
+    {
+        RECT_SET(rects[num], 0, FRAME_HANDLE_Y(self), self->area.width,
+                 ob_rr_theme->handle_height + self->bwidth * 2);
+        ++num;
+    }
+
+    /* make the frame's shape match the clients */
+    ob_backend->canvas_set_shape(self->window, &inner,
+                                 self->client->shaped,
+                                 self->client->shaped_input, rects, num);
 }
 
 void frame_adjust_area(ObFrame *self, gboolean moved,
