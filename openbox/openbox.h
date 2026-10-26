@@ -57,6 +57,8 @@ void ob_set_state(ObState state);
 
 void ob_restart_other(const gchar *path);
 void ob_restart(void);
+/*! Reap a child started with G_SPAWN_DO_NOT_REAP_CHILD when it exits. */
+void ob_watch_child(GPid pid);
 void ob_exit(gint code);
 void ob_exit_replace(void);
 

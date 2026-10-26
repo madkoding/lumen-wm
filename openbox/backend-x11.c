@@ -1970,7 +1970,8 @@ const ObBackend ob_backend_x11 = {
             OB_BACKEND_CAP_DECOR_HINTS |
             OB_BACKEND_CAP_ROOT_STATE |
             OB_BACKEND_CAP_DOCKAPPS |
-            OB_BACKEND_CAP_SYNC_RESIZE,
+            OB_BACKEND_CAP_SYNC_RESIZE |
+            OB_BACKEND_CAP_REAP_CHILDREN,
 
     .startup = x11_startup,
     .shutdown = x11_shutdown,

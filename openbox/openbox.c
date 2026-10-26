@@ -165,7 +165,8 @@ gint main(gint argc, gchar **argv)
     obt_signal_add_callback(SIGINT,  signal_handler, NULL);
     obt_signal_add_callback(SIGHUP,  signal_handler, NULL);
     obt_signal_add_callback(SIGPIPE, signal_handler, NULL);
-    obt_signal_add_callback(SIGCHLD, signal_handler, NULL);
+    if (ob_backend->caps & OB_BACKEND_CAP_REAP_CHILDREN)
+        obt_signal_add_callback(SIGCHLD, signal_handler, NULL);
     obt_signal_add_callback(SIGTTIN, signal_handler, NULL);
     obt_signal_add_callback(SIGTTOU, signal_handler, NULL);
 
@@ -457,6 +458,18 @@ gint main(gint argc, gchar **argv)
     return exitcode;
 }
 
+static void child_exited(GPid pid, gint status, gpointer data)
+{
+    g_spawn_close_pid(pid);
+}
+
+void ob_watch_child(GPid pid)
+{
+    /* otherwise the SIGCHLD handler reaps every child */
+    if (!(ob_backend->caps & OB_BACKEND_CAP_REAP_CHILDREN))
+        g_child_watch_add(pid, child_exited, NULL);
+}
+
 static void signal_handler(gint signal, gpointer data)
 {
     switch (signal) {
@@ -536,6 +549,7 @@ static void run_startup_cmd(void)
 {
     gchar **argv = NULL;
     GError *e = NULL;
+    GPid pid;
     gboolean ok;
 
     if (!g_shell_parse_argv(startup_cmd, NULL, &argv, &e)) {
@@ -547,8 +561,10 @@ static void run_startup_cmd(void)
     ok = g_spawn_async(NULL, argv, NULL,
                        G_SPAWN_SEARCH_PATH |
                        G_SPAWN_DO_NOT_REAP_CHILD,
-                       NULL, NULL, NULL, &e);
-    if (!ok) {
+                       NULL, NULL, &pid, &e);
+    if (ok)
+        ob_watch_child(pid);
+    else {
         g_message("Error launching startup command: %s",
                   e->message);
         g_error_free(e);

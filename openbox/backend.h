@@ -89,6 +89,10 @@ typedef enum {
     OB_BACKEND_CAP_DOCKAPPS        = 1 << 3,
     /*! XSync-style counters to pace interactive resizes */
     OB_BACKEND_CAP_SYNC_RESIZE     = 1 << 4,
+    /*! the core may reap any child that exits (waitpid(-1) on SIGCHLD);
+      not when the backend waits for children of its own, as wlroots does
+      for Xwayland */
+    OB_BACKEND_CAP_REAP_CHILDREN   = 1 << 5,
 } ObBackendCaps;
 
 typedef enum {
