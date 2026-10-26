@@ -15,7 +15,10 @@ volume and power controls. It looks like a modern desktop and keeps the speed of
 > `openbox` command and reads `~/.config/openbox` when `~/.config/lumen` is missing, so your Openbox setup keeps
 > working.
 
-![The shelf: dock with pinned apps, music player, weather and clock](docs/screenshots/shelf-desktop.png)
+![Lumen on Wayland: a terminal and an editor in front of the shelf, with its dock, music player, weather and clock](docs/screenshots/lumen-wayland.png)
+
+*Lumen running as a Wayland compositor, with the Onyx theme, Sansation and Papirus icons: foot with Lumen's
+frame, Mousepad and the shelf. The same setup runs on X11.*
 
 The shelf is **off by default**. Until you turn it on, Lumen behaves like plain [Openbox](http://openbox.org).
 
@@ -254,7 +257,8 @@ Sun|67°|cloud
 
 - **The shelf doesn't show up.** Check that `<enabled>yes</enabled>` is inside `<shelf>` and run
   `lumen-wm --reconfigure`. It also hides itself while a window is fullscreen.
-- **The menus have rough corners and no shadow.** Start a compositor, such as `picom`.
+- **The menus have rough corners and no shadow.** On X11, start a compositor, such as `picom`. On Wayland Lumen
+  is the compositor and draws them round already.
 - **A pin shows a letter instead of an icon.** That icon name doesn't exist in your `<iconTheme>`. Try another
   name, or give the path to an image.
 - **The player or weather is missing.** Run its command in a terminal. If it prints nothing, the shelf hides
