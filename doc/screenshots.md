@@ -32,7 +32,7 @@ user names, host names, Wi-Fi names and notifications.
 ## What to shoot
 
 Take every shot at the native resolution of one monitor (1920x1080 or more),
-PNG, no scaling, with `scrot`, `maim` or `import -window root`.
+PNG, no scaling, with `scrot`, `maim` or `import -window root` on X11, or `grim` on Wayland.
 
 1. **Cover**: the shelf (dock, music player, weather, clock) with two
    applications open, for example a terminal running `fastfetch` and a file
