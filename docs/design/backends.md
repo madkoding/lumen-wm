@@ -7,6 +7,7 @@ shelf and menus, running either as an X11 window manager or as a Wayland composi
 This document covers what goes where, how the code gets there without breaking X11, and what each backend has to
 provide. The interface is [`openbox/backend.h`](../../openbox/backend.h). The behaviour that must not change is
 pinned by the contract tests in [`tests/contract`](../../tests/contract).
+Progress and what is left: [roadmap.md](roadmap.md).
 
 ## Where things are now
 
