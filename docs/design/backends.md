@@ -199,8 +199,9 @@ which carries the most behaviour, for after the smaller seams have shaped the in
 
 ## Open questions
 
-- **Build:** autotools today. A wlroots backend is much easier with meson (wayland-scanner, wlroots' own
-  pkg-config). The switch could happen before step 5, without changing behaviour.
+- **Build:** decided: meson (the first step of phase 5), which brings wayland-scanner and wlroots' pkg-config
+  with it. Autotools is gone.
 - **One binary or two:** `lumen-wm` could pick its backend at runtime (`WAYLAND_DISPLAY` unset and `DISPLAY` set
   → X11), or ship as `lumen-wm` and `lumen-wl`. Runtime choice needs both sets of libraries installed.
-- **wlroots version:** the API changes between releases. The backend targets one version, pinned in the build.
+- **wlroots version:** the API changes between releases. The backend targets one version, pinned in the build:
+  0.17 first, the one Ubuntu 24.04 (CI) ships; moving to a newer one is a step of its own.

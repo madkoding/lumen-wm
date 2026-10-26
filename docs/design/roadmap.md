@@ -9,9 +9,9 @@ much is left. The contract tests (`tests/contract`, 42 cases) stay green on X11 
 | 2. Backend design (`backend.h`) | done | 1 | 0 |
 | 3. Core onto the interface | done | 29 | 0 |
 | 4. Render without Xlib, windows as canvases | done | 1 | 0 |
-| 5. Wayland backend (wlroots) | pending | 0 | 3–5, one per milestone |
+| 5. Wayland backend (wlroots) | in progress | 0 | 1 |
 
-Phase 3 ended with one PR for all that was left; from here each phase (in phase 5, each milestone) is one PR,
+Phase 3 ended with one PR for all that was left; from here each phase is one PR,
 with a semantic commit per step inside it. Phase 4 moved the frames' and the
 internal windows' X windows too, since making them canvases and drawing them through `canvas_present` is one
 change.
@@ -81,10 +81,10 @@ Found on the way, to fix with a contract case first: since phase 3 a window with
 placed by the user whether it set the user or the program bit, and a size hint never counts as the user's (`ObClientRequested`
 keeps that behaviour for now).
 
-## 5. Wayland backend (pending, one PR per milestone)
+## 5. Wayland backend (in progress, one PR)
 
-- [ ] Decide the build (autotools or meson) and whether to ship one binary or two (see the open questions in
-  [backends.md](backends.md)).
+- [x] Build with meson instead of autotools; it installs the same tree.
+- [ ] Decide whether to ship one binary or two (see the open questions in [backends.md](backends.md)).
 - [ ] `backend-wlroots` skeleton: outputs, the scene graph, the seat, keyboard bindings through xkbcommon.
 - [ ] Windows through xdg-shell, with server-side decorations through xdg-decoration.
 - [ ] Shelf and popups as scene nodes; layer-shell for external panels.
