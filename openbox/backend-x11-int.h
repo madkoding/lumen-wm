@@ -30,6 +30,7 @@ void x11_surface_unwatch(ObSurfaceId s, gboolean internal);
 void x11_surface_frame(ObSurfaceId s, ObCanvasId frame);
 void x11_surface_unframe(ObSurfaceId s, const Rect *area);
 void x11_surface_release(ObSurfaceId s, gboolean exiting);
+gboolean x11_surface_alive(ObSurfaceId s, gint ignore_hides);
 void x11_surface_set_border(ObSurfaceId s, gint width);
 void x11_surface_configure(ObSurfaceId s, const Rect *area);
 void x11_surface_send_geometry(ObSurfaceId s, const Rect *area, gint border);

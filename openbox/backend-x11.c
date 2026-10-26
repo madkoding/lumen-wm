@@ -1771,6 +1771,7 @@ const ObBackend ob_backend_x11 = {
     .surface_frame = x11_surface_frame,
     .surface_unframe = x11_surface_unframe,
     .surface_release = x11_surface_release,
+    .surface_alive = x11_surface_alive,
     .surface_set_border = x11_surface_set_border,
     .surface_configure = x11_surface_configure,
     .surface_send_geometry = x11_surface_send_geometry,

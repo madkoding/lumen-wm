@@ -149,6 +149,33 @@ void x11_surface_release(ObSurfaceId s, gboolean exiting)
     OBT_PROP_ERASE(w, NET_WM_VISIBLE_ICON_NAME);
 }
 
+struct find_destroy_unmap {
+    Window window;
+    gint ignore_unmaps;
+};
+
+static gboolean find_destroy_unmap(XEvent *e, gpointer data)
+{
+    struct find_destroy_unmap *find = data;
+    if (e->type == DestroyNotify)
+        return e->xdestroywindow.window == find->window;
+    if (e->type == UnmapNotify && e->xunmap.window == find->window)
+        /* ignore the first $find->ignore_unmaps$ many unmap events */
+        return --find->ignore_unmaps < 0;
+    return FALSE;
+}
+
+gboolean x11_surface_alive(ObSurfaceId s, gint ignore_hides)
+{
+    struct find_destroy_unmap find;
+
+    XSync(obt_display, FALSE); /* get all events on the server */
+
+    find.window = (Window)s;
+    find.ignore_unmaps = ignore_hides;
+    return !xqueue_exists_local(find_destroy_unmap, &find);
+}
+
 void x11_surface_set_border(ObSurfaceId s, gint width)
 {
     XSetWindowBorderWidth(obt_display, (Window)s, width);

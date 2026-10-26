@@ -416,6 +416,10 @@ struct _ObBackend {
       exiting: the window manager quits, and the next one must find the
       surface where this one found it (X11: mapped). */
     void (*surface_release)(ObSurfaceId s, gboolean exiting);
+    /*! Whether it is still there: the client hasn't destroyed or hidden it
+      in what the backend has yet to report. ignore_hides: how many hides
+      the core caused itself and still expects. */
+    gboolean (*surface_alive)(ObSurfaceId s, gint ignore_hides);
     /*! Its border (X11 only): 0 while it is managed, and the one it came
       with when it is let go. */
     void (*surface_set_border)(ObSurfaceId s, gint width);

@@ -42,9 +42,6 @@
 #include "mouse.h"
 #include "obrender/render.h"
 #include "gettext.h"
-#include "obt/display.h"
-#include "obt/xqueue.h"
-#include "obt/prop.h"
 
 #ifdef HAVE_UNISTD_H
 #  include <unistd.h>
@@ -55,7 +52,6 @@
 #endif
 
 #include <glib.h>
-#include <X11/Xutil.h>
 
 /*! The event mask to grab on client windows */
 typedef struct
@@ -3505,34 +3501,9 @@ ObClient *client_search_modal_child(ObClient *self)
     return NULL;
 }
 
-struct ObClientFindDestroyUnmap {
-    Window window;
-    gint ignore_unmaps;
-};
-
-static gboolean find_destroy_unmap(XEvent *e, gpointer data)
-{
-    struct ObClientFindDestroyUnmap *find = data;
-    if (e->type == DestroyNotify)
-        return e->xdestroywindow.window == find->window;
-    if (e->type == UnmapNotify && e->xunmap.window == find->window)
-        /* ignore the first $find->ignore_unmaps$ many unmap events */
-        return --find->ignore_unmaps < 0;
-    return FALSE;
-}
-
 gboolean client_validate(ObClient *self)
 {
-    struct ObClientFindDestroyUnmap find;
-
-    XSync(obt_display, FALSE); /* get all events on the server */
-
-    find.window = self->window;
-    find.ignore_unmaps = self->ignore_unmaps;
-    if (xqueue_exists_local(find_destroy_unmap, &find))
-        return FALSE;
-
-    return TRUE;
+    return ob_backend->surface_alive(self->window, self->ignore_unmaps);
 }
 
 void client_set_wm_state(ObClient *self, gboolean hidden)
