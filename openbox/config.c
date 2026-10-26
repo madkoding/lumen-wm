@@ -1093,6 +1093,13 @@ static gchar *shelf_string(xmlNodePtr node, const gchar *name)
     return n ? obt_xml_node_string(n) : NULL;
 }
 
+/* the levels the shelf shows when rc.xml leaves them out */
+#define SHELF_NETWORK_LIST "nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID dev wifi"
+#define SHELF_VOLUME_SET "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@"
+#define SHELF_VOLUME_LEVEL \
+    "wpctl get-volume @DEFAULT_AUDIO_SINK@ | " \
+    "awk '{ printf \"%d\", $2 * 100 + 0.5 }'"
+
 static void parse_shelf_system(xmlNodePtr node)
 {
     xmlNodePtr n;
@@ -1105,6 +1112,13 @@ static void parse_shelf_system(xmlNodePtr node)
         w->password = shelf_string(n->children, "password");
         if (w->list) config_shelf_network = w;
         else { g_free(w->connect); g_slice_free(ObShelfNetwork, w); }
+    } else if (config_shelf_enabled) {
+        /* with the shelf on, wifi, volume and battery show their levels
+           unless the config says otherwise; a missing tool shows none */
+        ObShelfNetwork *w = g_slice_new0(ObShelfNetwork);
+        w->list = g_strdup(SHELF_NETWORK_LIST);
+        w->connect = g_strdup("nmcli dev wifi connect %s");
+        config_shelf_network = w;
     }
     if ((n = obt_xml_find_node(node, "volume"))) {
         ObShelfVolume *v = g_slice_new0(ObShelfVolume);
@@ -1112,6 +1126,13 @@ static void parse_shelf_system(xmlNodePtr node)
         v->down = shelf_string(n->children, "down");
         v->toggle = shelf_string(n->children, "toggle");
         v->level = shelf_string(n->children, "level");
+        config_shelf_volume = v;
+    } else if (config_shelf_enabled) {
+        ObShelfVolume *v = g_slice_new0(ObShelfVolume);
+        v->up = g_strdup(SHELF_VOLUME_SET " 5%+");
+        v->down = g_strdup(SHELF_VOLUME_SET " 5%-");
+        v->toggle = g_strdup("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle");
+        v->level = g_strdup(SHELF_VOLUME_LEVEL);
         config_shelf_volume = v;
     }
     if ((n = obt_xml_find_node(node, "power"))) {
@@ -1130,6 +1151,8 @@ static void parse_shelf_system(xmlNodePtr node)
     }
     if ((n = obt_xml_find_node(node, "battery")))
         config_shelf_battery = obt_xml_node_bool(n);
+    else
+        config_shelf_battery = config_shelf_enabled;
     /* rounded, airy menus come with the shelf; without it the menus stay
        as upstream draws them unless asked */
     if ((n = obt_xml_find_node(node, "menuRadius")))

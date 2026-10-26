@@ -9,7 +9,8 @@ better.
 - **Dock island**: an applications tile (opens `root-menu`), a rule, then one
   40 px tile per window. Left click activates or minimises, right click opens
   the client menu. A bar under the tile marks the focused window.
-- **Status island**: time, date, and wifi, volume and power glyphs.
+- **Status island**: time, date, and wifi, volume and power glyphs. Wifi, volume
+  and battery show a percentage by default (`nmcli`, `wpctl`, sysfs).
 
 Enable it in `rc.xml`:
 
