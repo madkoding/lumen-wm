@@ -143,7 +143,8 @@ gint main(gint argc, gchar **argv)
         session_startup(argc, argv);
 
     if (!backend_startup(NULL, (ob_replace_wm ? OB_STARTUP_REPLACE : 0) |
-                               (xsync ? OB_STARTUP_SYNC : 0)))
+                               (xsync ? OB_STARTUP_SYNC : 0) |
+                               (remote_control ? OB_STARTUP_REMOTE : 0)))
         ob_exit_with_error(_("Failed to open the display from the DISPLAY environment variable."));
 
     if (remote_control) {
@@ -715,6 +716,12 @@ void ob_restart_other(const gchar *path)
 
 void ob_restart(void)
 {
+    if (!(ob_backend->caps & OB_BACKEND_CAP_RESTART)) {
+        /* a new compositor would start without the windows */
+        g_message(_("Restarting reloads the configuration on Wayland"));
+        ob_reconfigure();
+        return;
+    }
     restart = TRUE;
     ob_exit(0);
 }

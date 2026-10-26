@@ -21,7 +21,10 @@
 
 #include "backend-wlr-int.h"
 
+#include <errno.h>
+#include <signal.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <time.h>
 
 #include <wlr/backend.h>
@@ -49,6 +52,7 @@ struct wlr_compositor *lw_compositor;
 static struct wlr_scene_output_layout *scene_layout;
 static struct wl_listener new_output;
 static gboolean started = FALSE;
+static gchar *running_pid_file;  /* for --reconfigure and --exit */
 static gulong serial = 1;
 
 typedef struct {
@@ -209,6 +213,18 @@ static void log_glib(enum wlr_log_importance level, const char *fmt,
     g_free(s);
 }
 
+/*! Where the instance running on a Wayland socket keeps its pid. */
+static gchar *pid_file(const gchar *socket)
+{
+    gchar *base = g_path_get_basename(socket);
+    gchar *name = g_strdup_printf("lumen-%s.pid", base);
+    gchar *path = g_build_filename(g_get_user_runtime_dir(), name, NULL);
+
+    g_free(base);
+    g_free(name);
+    return path;
+}
+
 static gboolean lw_startup(const gchar *display, ObStartupFlags flags,
                             const ObBackendEvents *events)
 {
@@ -217,6 +233,8 @@ static gboolean lw_startup(const gchar *display, ObStartupFlags flags,
     gint i;
 
     lw_events = events;
+    /* --reconfigure and --exit only signal the running instance */
+    if (flags & OB_STARTUP_REMOTE) return TRUE;
     wlr_log_init(g_getenv("LUMEN_WLR_DEBUG") ? WLR_DEBUG : WLR_ERROR,
                  log_glib);
 
@@ -268,6 +286,12 @@ static gboolean lw_startup(const gchar *display, ObStartupFlags flags,
     /* what Lumen starts (autostart, actions) runs on this display */
     g_setenv("WAYLAND_DISPLAY", socket, TRUE);
     g_message("Running on WAYLAND_DISPLAY=%s", socket);
+    {
+        gchar *pid = g_strdup_printf("%d\n", (gint)getpid());
+        running_pid_file = pid_file(socket);
+        g_file_set_contents(running_pid_file, pid, -1, NULL);
+        g_free(pid);
+    }
 
     /* let the outputs come before the core asks about them */
     wl_event_loop_dispatch(wl_display_get_event_loop(lw_display), 0);
@@ -277,6 +301,11 @@ static gboolean lw_startup(const gchar *display, ObStartupFlags flags,
 static void lw_shutdown(void)
 {
     if (!lw_display) return;
+    if (running_pid_file) {
+        unlink(running_pid_file);
+        g_free(running_pid_file);
+        running_pid_file = NULL;
+    }
     wl_display_destroy_clients(lw_display);
     lw_input_shutdown();
     lw_xwayland_shutdown();
@@ -350,8 +379,22 @@ static GSource *lw_event_source(void)
 
 static void lw_request_running(guint what)
 {
-    g_message("--reconfigure, --restart and --exit work only on X11 so far; "
-              "send SIGUSR2 (reconfigure) or SIGTERM to Lumen instead");
+    const gchar *socket = g_getenv("WAYLAND_DISPLAY");
+    gchar *path, *text = NULL;
+    gint pid = 0;
+
+    if (!socket) socket = "wayland-0";
+    path = pid_file(socket);
+    if (g_file_get_contents(path, &text, NULL, NULL))
+        pid = atoi(text);
+    if (pid <= 0)
+        g_message("No Lumen runs on WAYLAND_DISPLAY=%s", socket);
+    /* restarting reconfigures here: the windows live in this compositor */
+    else if (kill(pid, what == 3 ? SIGTERM : SIGUSR2) < 0)
+        g_message("Could not reach Lumen (pid %d): %s", pid,
+                  g_strerror(errno));
+    g_free(text);
+    g_free(path);
 }
 
 static void lw_previous_state(ObPreviousState *state)

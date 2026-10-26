@@ -93,6 +93,9 @@ typedef enum {
       not when the backend waits for children of its own, as wlroots does
       for Xwayland */
     OB_BACKEND_CAP_REAP_CHILDREN   = 1 << 5,
+    /*! a new instance can take the clients over (X11); on Wayland the
+      compositor holds them, so restarting there reconfigures instead */
+    OB_BACKEND_CAP_RESTART         = 1 << 6,
 } ObBackendCaps;
 
 typedef enum {
@@ -132,7 +135,9 @@ typedef enum {
     OB_STARTUP_REPLACE = 1 << 0,
     /*! for debugging: report errors where they happen (X11 synchronous
       requests) */
-    OB_STARTUP_SYNC    = 1 << 1
+    OB_STARTUP_SYNC    = 1 << 1,
+    /*! only to talk to the instance already running (request_running) */
+    OB_STARTUP_REMOTE  = 1 << 2
 } ObStartupFlags;
 
 /*! What the window manager before this one left, to carry on from it
