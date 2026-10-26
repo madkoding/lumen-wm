@@ -43,6 +43,9 @@ static WlrSurface *focused;
 /* telling the core where the focus went */
 static struct wl_event_source *focus_report;
 static ObSurfaceId focus_from, focus_to;
+/* telling the core the focused window went away */
+static struct wl_event_source *revert_report;
+static void focus_reverted(WlrSurface *s);
 
 static WlrSurface *surface(ObSurfaceId id)
 {
@@ -233,6 +236,7 @@ void lw_surface_unmapped(WlrSurface *s)
         lw_events->surface_withdrawn(id_of(s));
         lw_end();
     }
+    focus_reverted(s);
 }
 
 static void surface_unmap(struct wl_listener *l, void *data)
@@ -259,7 +263,7 @@ void lw_surface_free(WlrSurface *s)
         lw_end();
     }
     lw_input_forget((guintptr)s);
-    if (focused == s) focused = NULL;
+    focus_reverted(s);
     mapped = g_list_remove(mapped, s);
     if (s->ping_check) wl_event_source_remove(s->ping_check);
     g_hash_table_remove(alive, s);
@@ -517,6 +521,8 @@ void lw_surfaces_shutdown(void)
     wl_list_remove(&new_decoration.link);
     if (focus_report) wl_event_source_remove(focus_report);
     focus_report = NULL;
+    if (revert_report) wl_event_source_remove(revert_report);
+    revert_report = NULL;
     g_list_free(mapped);
     mapped = NULL;
     g_hash_table_unref(alive);
@@ -584,7 +590,7 @@ WlrSurface *lw_surface_new_dialog(WlrCanvas *c)
 
 void lw_surface_free_dialog(WlrSurface *s)
 {
-    if (focused == s) focused = NULL;
+    focus_reverted(s);
     if (s->managed) {
         lw_begin(0);
         lw_events->surface_gone(id_of(s));
@@ -732,6 +738,8 @@ void lw_surface_show(ObSurfaceId id, gboolean show)
     s->shown = show;
     if ((t = tree_of(s)))
         wlr_scene_node_set_enabled(&t->node, show);
+    /* a hidden window loses the focus, as an unmapped one does on X11 */
+    if (!show) focus_reverted(s);
     if (s->toplevel && s->toplevel->base->initialized &&
         wl_resource_get_version(s->toplevel->resource) >=
         XDG_TOPLEVEL_STATE_SUSPENDED_SINCE_VERSION)
@@ -756,6 +764,28 @@ static void report_focus(void *data)
     lw_events->focus_changed(surface(focus_to) ? focus_to : OB_SURFACE_NONE);
     lw_end();
     focus_from = focus_to;
+}
+
+static void report_revert(void *data)
+{
+    revert_report = NULL;
+    /* unless the core gave it to another meanwhile */
+    if (focused) return;
+    lw_begin(0);
+    lw_events->focus_lost(FALSE);
+    lw_end();
+}
+
+/*! The focused window went away. On X11 the focus reverts to the root and
+  the core hears it from FocusOut; here it hears it the same way, once the
+  window is let go. */
+static void focus_reverted(WlrSurface *s)
+{
+    if (focused != s) return;
+    focused = NULL;
+    if (!revert_report && lw_display)
+        revert_report = wl_event_loop_add_idle(
+            wl_display_get_event_loop(lw_display), report_revert, NULL);
 }
 
 gboolean lw_surface_focus(ObSurfaceId id, guint32 time, gboolean input,
