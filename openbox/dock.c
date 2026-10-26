@@ -539,16 +539,12 @@ void dock_app_configure(ObDockApp *app, gint w, gint h)
     dock_configure();
 }
 
-void dock_app_drag(ObDockApp *app, XMotionEvent *e)
+void dock_app_drag(ObDockApp *app, gint x, gint y)
 {
     ObDockApp *over = NULL;
     GList *it;
-    gint x, y;
     gboolean after;
     gboolean stop;
-
-    x = e->x_root;
-    y = e->y_root;
 
     /* are we on top of the dock? */
     if (!(x >= dock->area.x &&

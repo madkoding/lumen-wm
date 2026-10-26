@@ -315,12 +315,12 @@ static gboolean find_enter(XEvent *e, gpointer data)
     return TRUE;
 }
 
-gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
-                                 ObInputEvent *out)
+gboolean backend_x11_input_event(const XEvent *e, ObInputEvent *out)
 {
     out->crossing = OB_CROSSING_NORMAL;
     out->inferior = FALSE;
     out->next_over = 0;
+    out->under = 0;
 
     switch (e->type) {
     case KeyPress:
@@ -331,8 +331,8 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         out->mods = e->xkey.state;
         out->keycode = e->xkey.keycode;
         out->keysym = e->type == KeyPress ?
-            obt_keyboard_keypress_to_keysym(e) : NoSymbol;
-        out->key_mod = obt_keyboard_keyevent_to_modmask(e);
+            obt_keyboard_keypress_to_keysym((XEvent*)e) : NoSymbol;
+        out->key_mod = obt_keyboard_keyevent_to_modmask((XEvent*)e);
         out->text = 0;
         out->button = 0;
         out->root_x = e->xkey.x_root;
@@ -356,6 +356,8 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         out->root_x = e->xbutton.x_root;
         out->root_y = e->xbutton.y_root;
         out->over = e->xbutton.window;
+        out->under = e->xbutton.window == root() ?
+            e->xbutton.subwindow : None;
         out->x = e->xbutton.x;
         out->y = e->xbutton.y;
         {
@@ -373,19 +375,6 @@ gboolean backend_x11_input_event(XEvent *e, gboolean latest_motion,
         }
         return TRUE;
     case MotionNotify:
-        if (latest_motion) {
-            XEvent ce;
-            ObtXQueueWindowType wt;
-
-            wt.window = e->xmotion.window;
-            wt.type = MotionNotify;
-            while (xqueue_remove_local(&ce, xqueue_match_window_type, &wt)) {
-                e->xmotion.x = ce.xmotion.x;
-                e->xmotion.y = ce.xmotion.y;
-                e->xmotion.x_root = ce.xmotion.x_root;
-                e->xmotion.y_root = ce.xmotion.y_root;
-            }
-        }
         out->type = OB_INPUT_MOTION;
         out->time = e->xmotion.time;
         out->mods = e->xmotion.state;

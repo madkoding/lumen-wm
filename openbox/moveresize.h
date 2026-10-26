@@ -46,7 +46,5 @@ void moveresize_end(gboolean cancel);
 void moveresize_synced(void);
 
 gboolean moveresize_event(const ObInputEvent *e);
-/*! Whether only the last of the queued pointer motions matters. */
-gboolean moveresize_latest_motion(void);
 
 #endif

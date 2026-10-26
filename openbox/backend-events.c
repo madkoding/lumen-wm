@@ -30,6 +30,7 @@
 #include "frame.h"
 #include "stacking.h"
 #include "moveresize.h"
+#include "shelf.h"
 
 static ObClient *client_of(ObSurfaceId s)
 {
@@ -609,6 +610,11 @@ static void request_move_resize(ObSurfaceId s, ObMoveResize edge, gint x,
         moveresize_end(TRUE);
 }
 
+static void canvas_exposed(ObCanvasId c)
+{
+    shelf_exposed(c);
+}
+
 const ObBackendEvents ob_backend_events = {
     .surface_new = surface_new,
     .surface_synced = surface_synced,
@@ -627,4 +633,6 @@ const ObBackendEvents ob_backend_events = {
     .focus_changed = focus_changed,
     .focus_left = focus_left,
     .focus_lost = focus_lost,
+    .input = event_input,
+    .canvas_exposed = canvas_exposed,
 };

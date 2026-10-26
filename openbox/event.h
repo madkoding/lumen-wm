@@ -23,6 +23,7 @@
 #include <glib.h>
 
 struct _ObClient;
+struct _ObInputEvent;
 
 /*! The amount of time before a window appears that is checked for user input
     to determine if the user is working in another window */
@@ -33,6 +34,10 @@ extern Time event_last_user_time;
 
 void event_startup(gboolean reconfig);
 void event_shutdown(gboolean reconfig);
+
+/*! What the user did: the pointer over a frame, a menu or the dock, and
+  bindings, menus, prompts and move/resize. */
+void event_input(const struct _ObInputEvent *e);
 
 /*! Make as if the mouse just entered the client, use only when using focus
     follows mouse */

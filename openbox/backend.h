@@ -355,8 +355,7 @@ typedef enum {
 } ObCrossingMode;
 
 /*! Something the user did, as the core's input handlers (move/resize,
-  bindings, menus) see it. The backend's key, button and motion events
-  carry the same. */
+  bindings, menus) see it, from the backend's input event. */
 typedef struct _ObInputEvent {
     ObInputType type;
     guint32 time;
@@ -387,6 +386,10 @@ typedef struct _ObInputEvent {
     /*! leaves: what the pointer enters next, when the backend already
       knows (X11: an EnterNotify waiting in the queue); 0 otherwise */
     guintptr next_over;
+    /*! button presses over the desktop: the window the pointer is really
+      on (X11: the event's subwindow, a press that got to the root through
+      it), 0 when it is the desktop itself */
+    guintptr under;
 } ObInputEvent;
 
 /*! A picture the core drew, in premultiplied ARGB32 (cairo's
@@ -710,13 +713,10 @@ struct _ObBackendEvents {
       that isn't managed); the core gives it to a window. refocus: the one
       that had it may get it back. */
     void (*focus_lost)(gboolean refocus);
-    void (*key)(guint32 keysym, guint mods, gboolean press, guint32 time);
-    /*! over: the canvas or surface under the pointer, x and y relative to
-      it. */
-    void (*button)(guintptr over, gint x, gint y, guint button, guint mods,
-                   gboolean press, guint32 time);
-    void (*motion)(guintptr over, gint x, gint y, guint mods, guint32 time);
-    void (*enter)(guintptr over, gboolean entered, guint32 time);
+    /*! A key, button, motion or crossing. */
+    void (*input)(const ObInputEvent *e);
+    /*! A canvas needs drawing again (X11: Expose). */
+    void (*canvas_exposed)(ObCanvasId c);
     void (*outputs_changed)(void);
 };
 

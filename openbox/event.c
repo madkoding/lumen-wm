@@ -86,11 +86,12 @@ static void event_process(const XEvent *e, gpointer data);
 static void event_handle_root(XEvent *e);
 static gboolean event_handle_menu_input(const ObInputEvent *e);
 static void event_handle_menu(ObMenuFrame *frame, const ObInputEvent *e);
-static gboolean event_handle_prompt(ObPrompt *p, XEvent *e);
+static gboolean event_handle_prompt(ObPrompt *p, const ObInputEvent *e);
 static void event_handle_dock(ObDock *s, const ObInputEvent *e);
 static void event_handle_dockapp(ObDockApp *app, XEvent *e);
 static void event_handle_client(ObClient *c, XEvent *e);
-static gboolean event_handle_user_input(ObClient *client, XEvent *e);
+static gboolean event_handle_user_input(ObClient *client,
+                                        const ObInputEvent *e);
 static gboolean is_enter_focus_event_ignored(gulong serial);
 static void event_ignore_enter_range(gulong start, gulong end);
 
@@ -419,42 +420,20 @@ static void event_process(const XEvent *ec, gpointer data)
     XEvent ee, *e;
     Window window;
     ObClient *client = NULL;
-    ObDock *dock = NULL;
     ObDockApp *dockapp = NULL;
     ObWindow *obwin = NULL;
-    ObMenuFrame *menu = NULL;
-    ObPrompt *prompt = NULL;
-    gboolean used;
+    ObInputEvent input;
 
     /* make a copy we can mangle */
     ee = *ec;
     e = &ee;
 
     window = event_get_window(e);
-    if (shelf_event(e))
-        return;
     if (window == obt_root(ob_screen))
         /* don't do any lookups, waste of cpu */;
     else if ((obwin = window_find(window))) {
-        switch (obwin->type) {
-        case OB_WINDOW_CLASS_DOCK:
-            dock = WINDOW_AS_DOCK(obwin);
-            break;
-        case OB_WINDOW_CLASS_CLIENT:
+        if (WINDOW_IS_CLIENT(obwin))
             client = WINDOW_AS_CLIENT(obwin);
-            /* events on clients can be events on prompt windows too */
-            prompt = client->prompt;
-            break;
-        case OB_WINDOW_CLASS_MENUFRAME:
-            menu = WINDOW_AS_MENUFRAME(obwin);
-            break;
-        case OB_WINDOW_CLASS_INTERNAL:
-            /* we don't do anything with events directly on these windows */
-            break;
-        case OB_WINDOW_CLASS_PROMPT:
-            prompt = WINDOW_AS_PROMPT(obwin);
-            break;
-        }
     }
     else
         dockapp = dock_find_dockapp(window);
@@ -586,23 +565,22 @@ static void event_process(const XEvent *ec, gpointer data)
         if (client)
             ob_backend_events.focus_left((ObSurfaceId)client->window);
     }
+    else if (e->type == Expose) {
+        if (!e->xexpose.count)
+            ob_backend_events.canvas_exposed((ObCanvasId)window);
+    }
+    else if (backend_x11_input_event(e, &input)) {
+        /* what the user does is the same on any backend */
+        if (input.type == OB_INPUT_KEY_PRESS &&
+            e->xkey.window == screen_support_win)
+            input.text = obt_keyboard_keypress_to_unichar(
+                backend_x11_grab_input_context(), e);
+        ob_backend_events.input(&input);
+    }
     else if (client)
         event_handle_client(client, e);
     else if (dockapp)
         event_handle_dockapp(dockapp, e);
-    else if ((dock || menu) &&
-             (e->type == EnterNotify || e->type == LeaveNotify ||
-              e->type == MotionNotify))
-    {
-        ObInputEvent input;
-
-        if (backend_x11_input_event(e, FALSE, &input)) {
-            if (dock)
-                event_handle_dock(dock, &input);
-            else
-                event_handle_menu(menu, &input);
-        }
-    }
     else if (window == obt_root(ob_screen))
         event_handle_root(e);
     else if (e->type == MapRequest)
@@ -668,48 +646,6 @@ static void event_process(const XEvent *ec, gpointer data)
         backend_x11_sync_alarm(e);
     }
 #endif
-
-    if (e->type == ButtonPress || e->type == ButtonRelease) {
-        ObWindow *w;
-        static guint pressed = 0;
-
-        event_sourcetime = event_curtime;
-
-        /* If the button press was on some non-root window, or was physically
-           on the root window... */
-        if (window != obt_root(ob_screen) ||
-            e->xbutton.subwindow == None ||
-            /* ...or if it is related to the last button press we handled... */
-            pressed == e->xbutton.button ||
-            /* ...or it if it was physically on an openbox
-               internal window... */
-            ((w = window_find(e->xbutton.subwindow)) &&
-             (WINDOW_IS_INTERNAL(w) || WINDOW_IS_DOCK(w))))
-            /* ...then process the event, otherwise ignore it */
-        {
-            used = event_handle_user_input(client, e);
-
-            if (prompt && !used)
-                used = event_handle_prompt(prompt, e);
-
-            if (e->type == ButtonPress)
-                pressed = e->xbutton.button;
-            /* We ignored the release event so make sure we don't think
-               the button is still pressed */
-            else if (e->type == ButtonRelease)
-                button = 0;
-        }
-    }
-    else if (e->type == KeyPress || e->type == KeyRelease ||
-             e->type == MotionNotify)
-    {
-        event_sourcetime = event_curtime;
-
-        used = event_handle_user_input(client, e);
-
-        if (prompt && !used)
-            used = event_handle_prompt(prompt, e);
-    }
 
     /* show any debug prompts that are queued */
     ob_debug_show_prompts();
@@ -1100,18 +1036,6 @@ static void event_handle_frame_pointer(ObClient *client,
 static void event_handle_client(ObClient *client, XEvent *e)
 {
     switch (e->type) {
-    case ButtonPress:
-    case ButtonRelease:
-    case MotionNotify:
-    case EnterNotify:
-    case LeaveNotify:
-    {
-        ObInputEvent input;
-
-        backend_x11_input_event(e, FALSE, &input);
-        event_handle_frame_pointer(client, &input);
-        break;
-    }
     case ConfigureRequest:
         backend_x11_configure_request(&e->xconfigurerequest);
         break;
@@ -1175,9 +1099,6 @@ static void event_handle_dock(ObDock *s, const ObInputEvent *e)
 static void event_handle_dockapp(ObDockApp *app, XEvent *e)
 {
     switch (e->type) {
-    case MotionNotify:
-        dock_app_drag(app, &e->xmotion);
-        break;
     case UnmapNotify:
         if (app->ignore_unmaps) {
             app->ignore_unmaps--;
@@ -1219,19 +1140,15 @@ static ObMenuFrame* find_active_or_last_menu(void)
     return ret;
 }
 
-static gboolean event_handle_prompt(ObPrompt *p, XEvent *e)
+static gboolean event_handle_prompt(ObPrompt *p, const ObInputEvent *e)
 {
-    ObInputEvent input;
-
-    if (!backend_x11_input_event(e, FALSE, &input))
-        return FALSE;
-    switch (input.type) {
+    switch (e->type) {
     case OB_INPUT_BUTTON_PRESS:
     case OB_INPUT_BUTTON_RELEASE:
     case OB_INPUT_MOTION:
-        return prompt_mouse_event(p, &input);
+        return prompt_mouse_event(p, e);
     case OB_INPUT_KEY_PRESS:
-        return prompt_key_event(p, &input);
+        return prompt_key_event(p, e);
     default:
         return FALSE;
     }
@@ -1466,33 +1383,19 @@ static void event_handle_menu(ObMenuFrame *frame, const ObInputEvent *ev)
     }
 }
 
-static gboolean event_handle_user_input(ObClient *client, XEvent *e)
+static gboolean event_handle_user_input(ObClient *client,
+                                        const ObInputEvent *e)
 {
-    ObInputEvent input;
-
-    g_assert(e->type == ButtonPress || e->type == ButtonRelease ||
-             e->type == MotionNotify || e->type == KeyPress ||
-             e->type == KeyRelease);
-
-    backend_x11_input_event(e, moveresize_latest_motion(), &input);
-
-    if (menu_frame_visible) {
-        /* menus have keyboard accelerators: ask what the key types
-           (menus are always used through a grab, so use its input
-           context) */
-        if (e->type == KeyPress)
-            input.text = obt_keyboard_keypress_to_unichar(
-                backend_x11_grab_input_context(), e);
-        if (event_handle_menu_input(&input))
+    if (menu_frame_visible)
+        if (event_handle_menu_input(e))
             /* don't use the event if the menu used it, but if the menu
                didn't use it and it's a keypress that is bound, it will
                close the menu and be used */
             return TRUE;
-    }
 
     /* if the keyboard interactive action uses the event then dont
        use it for bindings. likewise is moveresize uses the event. */
-    if (actions_interactive_input_event(&input) || moveresize_event(&input))
+    if (actions_interactive_input_event(e) || moveresize_event(e))
         return TRUE;
 
     if (moveresize_in_progress)
@@ -1500,19 +1403,120 @@ static gboolean event_handle_user_input(ObClient *client, XEvent *e)
            moved/resized */
         client = moveresize_client;
 
-    if (e->type == ButtonPress ||
-        e->type == ButtonRelease ||
-        e->type == MotionNotify)
+    if (e->type == OB_INPUT_BUTTON_PRESS ||
+        e->type == OB_INPUT_BUTTON_RELEASE ||
+        e->type == OB_INPUT_MOTION)
     {
         /* the frame may not be "visible" but they can still click on it
            in the case where it is animating before disappearing */
         if (!client || !frame_iconify_animating(client->frame))
-            return mouse_event(client, &input);
+            return mouse_event(client, e);
     } else
         return keyboard_event((focus_cycle_target ? focus_cycle_target :
-                               (client ? client : focus_client)), &input);
+                               (client ? client : focus_client)), e);
 
     return FALSE;
+}
+
+void event_input(const ObInputEvent *e)
+{
+    ObWindow *obwin;
+    ObClient *client = NULL;
+    ObDock *dock = NULL;
+    ObDockApp *dockapp = NULL;
+    ObMenuFrame *menu = NULL;
+    ObPrompt *prompt = NULL;
+    gboolean used;
+
+    if (shelf_input(e))
+        return;
+
+    if ((obwin = window_find((Window)e->over))) {
+        switch (obwin->type) {
+        case OB_WINDOW_CLASS_DOCK:
+            dock = WINDOW_AS_DOCK(obwin);
+            break;
+        case OB_WINDOW_CLASS_CLIENT:
+            client = WINDOW_AS_CLIENT(obwin);
+            /* events on clients can be events on prompt windows too */
+            prompt = client->prompt;
+            break;
+        case OB_WINDOW_CLASS_MENUFRAME:
+            menu = WINDOW_AS_MENUFRAME(obwin);
+            break;
+        case OB_WINDOW_CLASS_INTERNAL:
+            /* we don't do anything with events directly on these windows */
+            break;
+        case OB_WINDOW_CLASS_PROMPT:
+            prompt = WINDOW_AS_PROMPT(obwin);
+            break;
+        }
+    }
+    else
+        dockapp = dock_find_dockapp((Window)e->over);
+
+    if (client) {
+        if (e->type != OB_INPUT_KEY_PRESS && e->type != OB_INPUT_KEY_RELEASE)
+            event_handle_frame_pointer(client, e);
+    }
+    else if (dockapp) {
+        if (e->type == OB_INPUT_MOTION)
+            dock_app_drag(dockapp, e->root_x, e->root_y);
+    }
+    else if (dock || menu) {
+        if (e->type == OB_INPUT_ENTER || e->type == OB_INPUT_LEAVE ||
+            e->type == OB_INPUT_MOTION)
+        {
+            if (dock)
+                event_handle_dock(dock, e);
+            else
+                event_handle_menu(menu, e);
+        }
+    }
+
+    if (e->type == OB_INPUT_BUTTON_PRESS ||
+        e->type == OB_INPUT_BUTTON_RELEASE)
+    {
+        ObWindow *w;
+        static guint pressed = 0;
+
+        event_sourcetime = event_curtime;
+
+        /* If the button press was not physically on some window over the
+           desktop... */
+        if (!e->under ||
+            /* ...or if it is related to the last button press we handled... */
+            pressed == e->button ||
+            /* ...or it if it was physically on an openbox
+               internal window... */
+            ((w = window_find((Window)e->under)) &&
+             (WINDOW_IS_INTERNAL(w) || WINDOW_IS_DOCK(w))))
+            /* ...then process the event, otherwise ignore it */
+        {
+            used = event_handle_user_input(client, e);
+
+            if (prompt && !used)
+                used = event_handle_prompt(prompt, e);
+
+            if (e->type == OB_INPUT_BUTTON_PRESS)
+                pressed = e->button;
+            /* We ignored the release event so make sure we don't think
+               the button is still pressed */
+            else
+                button = 0;
+        }
+    }
+    else if (e->type == OB_INPUT_KEY_PRESS ||
+             e->type == OB_INPUT_KEY_RELEASE ||
+             e->type == OB_INPUT_MOTION)
+    {
+        event_sourcetime = event_curtime;
+
+        used = event_handle_user_input(client, e);
+
+        if (prompt && !used)
+            used = event_handle_prompt(prompt, e);
+    }
 }
 
 static void focus_delay_dest(gpointer data)

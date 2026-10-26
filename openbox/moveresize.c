@@ -1019,9 +1019,3 @@ gboolean moveresize_event(const ObInputEvent *e)
 
     return used;
 }
-
-gboolean moveresize_latest_motion(void)
-{
-    /* a move only needs where the pointer is now */
-    return moveresize_in_progress && moving;
-}
