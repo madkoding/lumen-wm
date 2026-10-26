@@ -1,21 +1,20 @@
 # Roadmap: X11 and Wayland
 
 The plan behind each step is in [backends.md](backends.md). This page tracks where the work stands and roughly how
-much is left. Every step is one or more small PRs, and the contract tests (`tests/contract`, 41 cases) stay green
-on X11 throughout.
-
-Sizes count PRs and are estimates: a step can split once its code is open.
+much is left. The contract tests (`tests/contract`, 42 cases) stay green on X11 throughout.
 
 | Phase | State | PRs done | PRs left (est.) |
 | --- | --- | --- | --- |
 | 1. Contract tests | done | 1 | 0 |
 | 2. Backend design (`backend.h`) | done | 1 | 0 |
-| 3. Core onto the interface | in progress | 28 | 10–14 |
-| 4. Render without Xlib | pending | 0 | 5–8 |
-| 5. Wayland backend (wlroots) | pending | 0 | 10–15 |
+| 3. Core onto the interface | done | 29 | 0 |
+| 4. Render without Xlib, windows as canvases | pending | 0 | 1 |
+| 5. Wayland backend (wlroots) | pending | 0 | 3–5, one per milestone |
 
-Of about 55–65 PRs in total, 30 are merged (#15–#44). Phases 4 and 5 are bigger per PR than phase 3, so by
-effort the work is about a third done.
+Phase 3 ended with one PR for all that was left; from here each phase (in phase 5, each milestone) is one PR,
+with a semantic commit per step inside it. Phase 4 grew: the frames' and the
+internal windows' X windows move there, since making them canvases and drawing them through `canvas_present` is
+one change.
 
 ## 1. Contract tests (done)
 
@@ -26,7 +25,7 @@ effort the work is about a third done.
 
 - [x] `docs/design/backends.md` and `openbox/backend.h`, with no change in behaviour (#16).
 
-## 3. Move the core onto the interface (in progress)
+## 3. Move the core onto the interface (done)
 
 Done:
 
@@ -48,32 +47,34 @@ Done:
 - [x] Input as `ObInputEvent`: move/resize (#42), bindings and window cycling (#43), menus and prompts (#44).
 - [x] A bug found on the way: a stale `_NET_ACTIVE_WINDOW` after closing the last window (#39).
 
-Left:
+- [x] Pointer crossings (enter/leave): title bar button hover, focus follows mouse, menu item selection, dock
+  auto-hide. The contract tests can run cases under another configuration (`configs/*.sed`), starting with focus
+  following the mouse.
+- [x] Frames through the backend: reparenting, frame extents, shapes, colormaps, borders and geometry
+  (`surface_frame`, `canvas_set_shape`, `surface_configure`...). `client.c` has no Xlib left.
+- [x] Leftovers: the window map (`window.c`), the root's state (`screen.c`), the support window (`stacking.c`,
+  `grab.c`), startup and `--replace` (`openbox.c`), dock apps (`dock.c`).
+- [x] The backend reads the event queue: one input entry point for the core (`event_input`), the root's
+  messages, FocusIn/FocusOut bookkeeping and dock apps all come through `ObBackendEvents`
+  (`backend-x11-event.c`). `event.c` reads no XEvent.
 
-- [x] **Pointer crossings** (enter/leave): title bar button hover, focus follows mouse, menu item selection,
-  dock auto-hide. The contract tests can now run cases under another configuration (`configs/*.sed`), starting
-  with focus following the mouse.
-- [ ] **Frames as canvases**, 3–5 PRs, the largest step left. `frame.c` holds most of the Xlib still in the core
-  (about 220 calls). Reparenting and the frame's subwindows go into the backend; the core finds the part of the
-  frame under the pointer from coordinates instead of from which subwindow got the event. This brings
-  `surface_configure` and `surface_show`, and with them the client geometry, shape and colormap still read in
-  `client.c`.
-- [ ] **Internal windows as canvases**, 2–3 PRs: menus, the shelf, the window cycling popup and indicator,
-  prompts, other popups, the dock.
-- [ ] **Leftovers**, 1–2 PRs: the support window still used by `stacking.c`, `grab.c` and `event.c`; the window
-  map in `window.c`; the rest of `screen.c` and `openbox.c`.
-- [ ] **The backend reads the event queue**, 2–3 PRs: the X11 half of `event.c` moves into `backend-x11.c`,
-  FocusIn/FocusOut bookkeeping included. Phase 3 is done when no core file includes an X11 header.
+What still calls Xlib in the core is the windows the core draws, which phase 4 turns into canvases: the frames'
+decoration windows (`frame.c`, `framerender.c`), menus, the shelf, the window cycling popup and indicator,
+prompts, other popups and the dock's own window. `startupnotify.c` keeps feeding libsn from the X queue until
+phase 5 decides what launch feedback is on Wayland.
 
-## 4. Render without Xlib (pending, 5–8 PRs)
+## 4. Render without Xlib, windows as canvases (pending, one PR)
 
 - [ ] obrender draws into cairo image surfaces instead of Xlib pixmaps, and fonts go through cairo/pango
   instead of Xft.
 - [ ] `canvas_present` in the X11 backend puts the image on screen.
-- [ ] Frames, menus, the shelf and popups switch over one at a time.
+- [ ] Frames become one canvas each: the core finds the part under the pointer from coordinates instead of from
+  which decoration window got the event.
+- [ ] Menus, the shelf, popups, prompts and the dock become canvases, one at a time.
+- [ ] Core headers stop using X types (`Window`, `Time`, `Atom`); no core file includes an X11 header.
 - [ ] Themes stay as they are; `tools/shelf-themes.sh` checks each switch.
 
-## 5. Wayland backend (pending, 10–15 PRs)
+## 5. Wayland backend (pending, one PR per milestone)
 
 - [ ] Decide the build (autotools or meson) and whether to ship one binary or two (see the open questions in
   [backends.md](backends.md)).

@@ -172,7 +172,8 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       reads the counter id) and the core only counts the pending request and its timeouts. A Wayland
       backend maps the same calls onto configure and ack_configure.
 4. **Render without Xlib**: obrender, frames, the shelf, menus and popups draw into cairo image surfaces and hand
-   them to `canvas_present`. Themes are unchanged, and `tools/shelf-themes.sh` checks that they still read.
+   them to `canvas_present`. Their X windows become canvases at the same time: a frame is one canvas, and the
+   core finds the part under the pointer from coordinates. Themes are unchanged, and `tools/shelf-themes.sh` checks that they still read.
 5. **backend-wlroots**: a compositor on wlroots' scene graph with xdg-shell, xdg-decoration, layer-shell,
    foreign-toplevel, ext-workspace and XWayland. The contract tests get a Wayland driver that runs on wlroots'
    headless backend, and both drivers run in CI.
