@@ -73,7 +73,7 @@ ObFrame *frame_new(ObClient *client)
 
     /* the frame itself, which takes the client's visual */
     self->window = (Window)ob_backend->canvas_new(OB_CANVAS_DECOR,
-                                                  client->window);
+                                                  client->window, 0);
 
     /* create the visible decor windows */
 

@@ -54,6 +54,19 @@ struct _ObtIC *x11_grab_input_context(void);
 /*! An XSync alarm went off. */
 void x11_sync_alarm(const XEvent *e);
 
+/* backend-x11-canvas.c: what the core draws */
+ObCanvasId x11_canvas_new(ObCanvasLayer layer, ObSurfaceId owner,
+                          ObCanvasFlags flags);
+ObCanvasId x11_canvas_new_child(ObCanvasId parent, ObCanvasFlags flags);
+void x11_canvas_free(ObCanvasId c);
+gboolean x11_canvas_has_alpha(ObCanvasId c);
+void x11_canvas_present(ObCanvasId c, const ObImage *img, const Rect *damage);
+void x11_canvas_fill(ObCanvasId c, guint32 argb);
+void x11_canvas_set_border(ObCanvasId c, gint width, guint32 argb);
+void x11_canvas_set_outline(ObCanvasId c, const ObImage *mask);
+/*! The pixel for argb in the default visual. */
+gulong x11_pixel(guint32 argb);
+
 /* backend-x11-event.c: reading the event queue */
 void x11_events_listen(void);
 void x11_events_stop(void);
@@ -82,8 +95,10 @@ void x11_surface_configure(ObSurfaceId s, const Rect *area);
 void x11_surface_send_geometry(ObSurfaceId s, const Rect *area, gint border);
 void x11_surface_show(ObSurfaceId s, gboolean show);
 void x11_get_geometry(ObSurfaceId s, ObSurfaceInfo *info);
-ObCanvasId x11_canvas_new(ObCanvasLayer layer, ObSurfaceId owner);
-void x11_canvas_free(ObCanvasId c);
+/*! A frame for owner, with the owner's visual when it has alpha. */
+Window x11_decor_new(ObSurfaceId owner);
+/*! Forget w if it is a frame; the window is destroyed by the caller. */
+void x11_decor_free(Window w);
 void x11_canvas_place(ObCanvasId c, const Rect *outer, const Rect *inner);
 void x11_canvas_show(ObCanvasId c, gboolean show);
 void x11_canvas_set_shape(ObCanvasId c, const Rect *inner, gboolean bounding,

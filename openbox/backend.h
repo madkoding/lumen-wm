@@ -331,10 +331,34 @@ typedef struct _ObSurfaceInfo {
 /*! Where on screen a canvas lives; this is its stacking layer. */
 typedef enum {
     OB_CANVAS_DECOR,        /*!< a frame: below and around its client */
-    OB_CANVAS_PANEL,        /*!< the shelf; may reserve an edge */
-    OB_CANVAS_POPUP,        /*!< menus, focus cycling, prompts */
-    OB_CANVAS_OVERLAY       /*!< above everything: move/resize outlines */
+    OB_CANVAS_PANEL,        /*!< the shelf and the dock; may reserve an
+                              edge */
+    OB_CANVAS_POPUP,        /*!< focus cycling, popups */
+    OB_CANVAS_MENU,         /*!< menus (X11: not override-redirect, as
+                              they always were) */
+    OB_CANVAS_OVERLAY       /*!< above everything: move/resize outlines,
+                              the focus indicator */
 } ObCanvasLayer;
+
+/*! What a canvas takes from the pointer and the keyboard, and how it
+  shows. What a canvas doesn't take goes to its parent (X11: event
+  propagation). */
+typedef enum {
+    OB_CANVAS_INPUT_BUTTONS  = 1 << 0,  /*!< presses and releases */
+    OB_CANVAS_INPUT_CROSSING = 1 << 1,  /*!< the pointer coming and going */
+    OB_CANVAS_INPUT_MOTION   = 1 << 2,  /*!< every pointer motion */
+    OB_CANVAS_INPUT_DRAG     = 1 << 3,  /*!< motion with a button held */
+    /*! it shows nothing, and only takes input (X11 InputOnly) */
+    OB_CANVAS_INVISIBLE      = 1 << 4,
+    /*! it draws with transparency where the screen can show it (X11: a
+      32-bit visual while a compositor runs); canvas_has_alpha() says */
+    OB_CANVAS_ALPHA          = 1 << 5
+} ObCanvasFlags;
+
+#define OB_CANVAS_INPUT_POINTER (OB_CANVAS_INPUT_BUTTONS | \
+                                 OB_CANVAS_INPUT_CROSSING | \
+                                 OB_CANVAS_INPUT_MOTION | \
+                                 OB_CANVAS_INPUT_DRAG)
 
 typedef enum {
     OB_INPUT_KEY_PRESS,
@@ -537,17 +561,38 @@ struct _ObBackend {
     /* --- canvases: what the core draws --- */
 
     /*! owner: the surface a decoration frames, or OB_SURFACE_NONE. */
-    ObCanvasId (*canvas_new)(ObCanvasLayer layer, ObSurfaceId owner);
+    ObCanvasId (*canvas_new)(ObCanvasLayer layer, ObSurfaceId owner,
+                             ObCanvasFlags flags);
+    /*! A part of parent, placed relative to it and clipped by it, above
+      the parts made before it (X11: a subwindow; wlroots: a scene node).
+      Input over it reports it as over. */
+    ObCanvasId (*canvas_new_child)(ObCanvasId parent, ObCanvasFlags flags);
+    /*! Frees its children too. */
     void (*canvas_free)(ObCanvasId c);
+    /*! Whether it shows transparency (it asked with OB_CANVAS_ALPHA and
+      got it). */
+    gboolean (*canvas_has_alpha)(ObCanvasId c);
     /*! outer: the whole canvas, or NULL to leave it where it is. For a
       decoration, inner is where the client shows through, relative to
       outer, or NULL to leave the client where it is. */
     void (*canvas_place)(ObCanvasId c, const Rect *outer, const Rect *inner);
     void (*canvas_show)(ObCanvasId c, gboolean show);
     /*! Show this picture, scaled by the output's scale; damage, in canvas
-      coordinates, says what changed (NULL for all of it). */
+      coordinates, says what changed (NULL for all of it). It stays until
+      the next one, whatever the canvas's size. */
     void (*canvas_present)(ObCanvasId c, const ObImage *img,
                            const Rect *damage);
+    /*! Show one color all over it instead of a picture. argb: as ObImage's
+      pixels. */
+    void (*canvas_fill)(ObCanvasId c, guint32 argb);
+    /*! A line of width pixels around the outside of it (X11: the window
+      border), or none for 0. */
+    void (*canvas_set_border)(ObCanvasId c, gint width, guint32 argb);
+    /*! Cut it to an outline: mask, in ObImage's layout, shows the canvas
+      where its pixels' alpha is not 0; NULL makes it whole again (X11
+      Shape). For a canvas without alpha, such as a menu with round
+      corners when no compositor runs. */
+    void (*canvas_set_outline)(ObCanvasId c, const ObImage *mask);
     /*! Where it takes input, relative to it; NULL for all of it, n = 0 for
       nowhere (click-through). */
     void (*canvas_set_input)(ObCanvasId c, const Rect *rects, guint n);

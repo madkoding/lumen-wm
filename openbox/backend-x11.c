@@ -2000,11 +2000,17 @@ const ObBackend ob_backend_x11 = {
     .request_serial_bump = x11_request_serial_bump,
 
     .canvas_new = x11_canvas_new,
+    .canvas_new_child = x11_canvas_new_child,
+    .canvas_has_alpha = x11_canvas_has_alpha,
     .canvas_free = x11_canvas_free,
     .canvas_place = x11_canvas_place,
     .canvas_show = x11_canvas_show,
     .canvas_set_shape = x11_canvas_set_shape,
     .canvas_set_opacity = x11_canvas_set_opacity,
+    .canvas_present = x11_canvas_present,
+    .canvas_fill = x11_canvas_fill,
+    .canvas_set_border = x11_canvas_set_border,
+    .canvas_set_outline = x11_canvas_set_outline,
 
     .grab_pointer = x11_grab_pointer,
     .grab_keyboard = x11_grab_keyboard,
