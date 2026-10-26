@@ -1,0 +1,12 @@
+option('startup-notification', type: 'feature', value: 'auto',
+       description: 'launch feedback through libstartup-notification')
+option('xcursor', type: 'feature', value: 'auto',
+       description: 'themed cursors through libXcursor')
+option('imlib2', type: 'feature', value: 'auto',
+       description: 'load icons with Imlib2')
+option('librsvg', type: 'feature', value: 'auto',
+       description: 'load SVG icons with librsvg')
+option('session', type: 'feature', value: 'auto',
+       description: 'X session management (libSM/libICE)')
+option('nls', type: 'boolean', value: true,
+       description: 'install translations')
