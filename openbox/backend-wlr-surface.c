@@ -74,16 +74,40 @@ static void emit_changed(WlrSurface *s, ObSurfaceInfoFields fields)
     lw_end();
 }
 
-struct wlr_surface *lw_surface_wl(WlrSurface *s)
+WlrSurface *lw_surface_lookup(ObSurfaceId id)
 {
-    return s && s->toplevel ? s->toplevel->base->surface : NULL;
+    return surface(id);
 }
 
-struct wlr_xdg_toplevel *lw_surface_toplevel(ObSurfaceId id)
+ObSurfaceId lw_surface_id(WlrSurface *s)
+{
+    return id_of(s);
+}
+
+void lw_surface_changed(WlrSurface *s, ObSurfaceInfoFields fields)
+{
+    emit_changed(s, fields);
+}
+
+struct wlr_surface *lw_surface_wl(WlrSurface *s)
+{
+    if (s && s->toplevel) return s->toplevel->base->surface;
+    if (s && s->xw) return lw_xw_wl(s);
+    return NULL;
+}
+
+gboolean lw_surface_names(ObSurfaceId id, const gchar **title,
+                          const gchar **app_id)
 {
     WlrSurface *s = surface(id);
 
-    return s ? s->toplevel : NULL;
+    if (s && s->toplevel) {
+        *title = s->toplevel->title;
+        *app_id = s->toplevel->app_id;
+        return TRUE;
+    }
+    if (s && s->xw) return lw_xw_names(s, title, app_id);
+    return FALSE;
 }
 
 struct wlr_output *lw_surface_output(ObSurfaceId id)
@@ -101,7 +125,9 @@ struct wlr_output *lw_surface_output(ObSurfaceId id)
 WlrSurface *lw_surface_of(struct wlr_surface *ws)
 {
     struct wlr_xdg_surface *x;
+    WlrSurface *s;
 
+    if (ws && (s = lw_xw_surface_of(ws))) return s;
     while (ws) {
         ws = wlr_surface_get_root_surface(ws);
         x = wlr_xdg_surface_try_from_wlr_surface(ws);
@@ -162,10 +188,8 @@ static void surface_commit(struct wl_listener *l, void *data)
     }
 }
 
-static void surface_map(struct wl_listener *l, void *data)
+void lw_surface_mapped(WlrSurface *s)
 {
-    WlrSurface *s = wl_container_of(l, s, map);
-
     s->mapped = TRUE;
     mapped = g_list_append(mapped, s);
     lw_begin(0);
@@ -173,10 +197,15 @@ static void surface_map(struct wl_listener *l, void *data)
     lw_end();
 }
 
-static void surface_unmap(struct wl_listener *l, void *data)
+static void surface_map(struct wl_listener *l, void *data)
 {
-    WlrSurface *s = wl_container_of(l, s, unmap);
+    WlrSurface *s = wl_container_of(l, s, map);
 
+    lw_surface_mapped(s);
+}
+
+void lw_surface_unmapped(WlrSurface *s)
+{
     s->mapped = FALSE;
     mapped = g_list_remove(mapped, s);
     if (s->managed) {
@@ -186,10 +215,24 @@ static void surface_unmap(struct wl_listener *l, void *data)
     }
 }
 
-static void surface_destroy(struct wl_listener *l, void *data)
+static void surface_unmap(struct wl_listener *l, void *data)
 {
-    WlrSurface *s = wl_container_of(l, s, destroy);
+    WlrSurface *s = wl_container_of(l, s, unmap);
 
+    lw_surface_unmapped(s);
+}
+
+WlrSurface *lw_surface_new(void)
+{
+    WlrSurface *s = g_new0(WlrSurface, 1);
+
+    s->node.kind = WLR_NODE_SURFACE;
+    g_hash_table_add(alive, s);
+    return s;
+}
+
+void lw_surface_free(WlrSurface *s)
+{
     if (s->managed) {
         lw_begin(0);
         lw_events->surface_gone(id_of(s));
@@ -198,6 +241,16 @@ static void surface_destroy(struct wl_listener *l, void *data)
     lw_input_forget((guintptr)s);
     if (focused == s) focused = NULL;
     mapped = g_list_remove(mapped, s);
+    if (s->ping_check) wl_event_source_remove(s->ping_check);
+    g_hash_table_remove(alive, s);
+    s->node.kind = 0;
+    g_free(s);
+}
+
+static void surface_destroy(struct wl_listener *l, void *data)
+{
+    WlrSurface *s = wl_container_of(l, s, destroy);
+
     wl_list_remove(&s->map.link);
     wl_list_remove(&s->unmap.link);
     wl_list_remove(&s->commit.link);
@@ -210,15 +263,11 @@ static void surface_destroy(struct wl_listener *l, void *data)
     wl_list_remove(&s->set_title.link);
     wl_list_remove(&s->set_app_id.link);
     wl_list_remove(&s->set_parent.link);
-    if (s->ping_check) wl_event_source_remove(s->ping_check);
-    g_hash_table_remove(alive, s);
-    s->node.kind = 0;
-    g_free(s);
+    lw_surface_free(s);
 }
 
-static void request_move(struct wl_listener *l, void *data)
+void lw_surface_request_move(WlrSurface *s)
 {
-    WlrSurface *s = wl_container_of(l, s, request_move);
     gint x, y;
 
     if (!s->managed) return;
@@ -229,15 +278,20 @@ static void request_move(struct wl_listener *l, void *data)
     lw_end();
 }
 
-static void request_resize(struct wl_listener *l, void *data)
+static void request_move(struct wl_listener *l, void *data)
 {
-    WlrSurface *s = wl_container_of(l, s, request_resize);
-    const struct wlr_xdg_toplevel_resize_event *e = data;
+    WlrSurface *s = wl_container_of(l, s, request_move);
+
+    lw_surface_request_move(s);
+}
+
+void lw_surface_request_resize(WlrSurface *s, guint32 edges)
+{
     ObMoveResize edge;
     gint x, y;
 
     if (!s->managed) return;
-    switch (e->edges) {
+    switch (edges) {
     case WLR_EDGE_TOP: edge = OB_MOVERESIZE_SIZE_TOP; break;
     case WLR_EDGE_BOTTOM: edge = OB_MOVERESIZE_SIZE_BOTTOM; break;
     case WLR_EDGE_LEFT: edge = OB_MOVERESIZE_SIZE_LEFT; break;
@@ -256,13 +310,20 @@ static void request_resize(struct wl_listener *l, void *data)
     lw_end();
 }
 
-/*! first and second: one state each, as the core takes them */
-static void request_states(WlrSurface *s, ObSurfaceStates first,
-                           ObSurfaceStates second, gboolean on)
+static void request_resize(struct wl_listener *l, void *data)
+{
+    WlrSurface *s = wl_container_of(l, s, request_resize);
+    const struct wlr_xdg_toplevel_resize_event *e = data;
+
+    lw_surface_request_resize(s, e->edges);
+}
+
+void lw_surface_request_states(WlrSurface *s, ObSurfaceStates first,
+                               ObSurfaceStates second, gboolean on)
 {
     if (!s->managed) {
         /* xdg-shell wants an answer to every state request */
-        if (s->toplevel->base->initialized)
+        if (s->toplevel && s->toplevel->base->initialized)
             wlr_xdg_surface_schedule_configure(s->toplevel->base);
         return;
     }
@@ -280,7 +341,7 @@ static void request_maximize(struct wl_listener *l, void *data)
 {
     WlrSurface *s = wl_container_of(l, s, request_maximize);
 
-    request_states(s, OB_SURFACE_STATE_MAXIMIZED_HORZ,
+    lw_surface_request_states(s, OB_SURFACE_STATE_MAXIMIZED_HORZ,
                    OB_SURFACE_STATE_MAXIMIZED_VERT,
                    s->toplevel->requested.maximized);
 }
@@ -289,7 +350,7 @@ static void request_fullscreen(struct wl_listener *l, void *data)
 {
     WlrSurface *s = wl_container_of(l, s, request_fullscreen);
 
-    request_states(s, OB_SURFACE_STATE_FULLSCREEN, 0,
+    lw_surface_request_states(s, OB_SURFACE_STATE_FULLSCREEN, 0,
                    s->toplevel->requested.fullscreen);
 }
 
@@ -298,7 +359,7 @@ static void request_minimize(struct wl_listener *l, void *data)
     WlrSurface *s = wl_container_of(l, s, request_minimize);
 
     if (!s->managed) {
-        request_states(s, 0, 0, FALSE);
+        lw_surface_request_states(s, 0, 0, FALSE);
         return;
     }
     lw_begin(0);
@@ -338,13 +399,11 @@ static void tree_destroyed(struct wl_listener *l, void *data)
 
 static void new_toplevel(struct wlr_xdg_toplevel *t)
 {
-    WlrSurface *s = g_new0(WlrSurface, 1);
+    WlrSurface *s = lw_surface_new();
     struct wlr_surface *ws = t->base->surface;
 
-    s->node.kind = WLR_NODE_SURFACE;
     s->toplevel = t;
     t->base->data = s;
-    g_hash_table_add(alive, s);
 
     /* it shows once the core frames it */
     s->tree = wlr_scene_xdg_surface_create(lw_layers[WLR_LAYER_WINDOWS],
@@ -497,11 +556,9 @@ static void decoration_new(struct wl_listener *l, void *data)
 
 WlrSurface *lw_surface_new_dialog(WlrCanvas *c)
 {
-    WlrSurface *s = g_new0(WlrSurface, 1);
+    WlrSurface *s = lw_surface_new();
 
-    s->node.kind = WLR_NODE_SURFACE;
     s->dialog = c;
-    g_hash_table_add(alive, s);
     return s;
 }
 
@@ -533,7 +590,7 @@ ObSurfaceKind lw_surface_kind(ObSurfaceId id, ObSurfaceId *icon)
 
     *icon = OB_SURFACE_NONE;
     if (!s) return OB_SURFACE_KIND_GONE;
-    if (s->toplevel && !s->mapped) return OB_SURFACE_KIND_GONE;
+    if ((s->toplevel || s->xw) && !s->mapped) return OB_SURFACE_KIND_GONE;
     return OB_SURFACE_KIND_CLIENT;
 }
 
@@ -597,6 +654,7 @@ void lw_surface_release(ObSurfaceId id, gboolean exiting)
     s->managed = FALSE;
     if (s->toplevel && s->toplevel->base->initialized)
         wlr_xdg_toplevel_set_activated(s->toplevel, FALSE);
+    if (s->xw) lw_xw_activate(s, FALSE);
 }
 
 gboolean lw_surface_alive(ObSurfaceId id, gint ignore_hides)
@@ -604,7 +662,7 @@ gboolean lw_surface_alive(ObSurfaceId id, gint ignore_hides)
     WlrSurface *s = surface(id);
 
     if (!s) return FALSE;
-    return !s->toplevel || s->mapped;
+    return !(s->toplevel || s->xw) || s->mapped;
 }
 
 void lw_surface_configure(ObSurfaceId id, const Rect *area)
@@ -632,7 +690,17 @@ void lw_surface_configure(ObSurfaceId id, const Rect *area)
        any shadows it draws around it */
     if ((t = tree_of(s)))
         wlr_scene_node_set_position(&t->node, s->x, s->y);
+    /* X11 clients hear where they are too */
+    if (s->xw) lw_xw_configure(s);
     lw_pointer_refresh(0);
+}
+
+void lw_surface_send_geometry(ObSurfaceId id, const Rect *area, gint border)
+{
+    WlrSurface *s = surface(id);
+
+    /* where the core says it is, which X11 clients want to know */
+    if (s && s->xw) lw_xw_configure(s);
 }
 
 void lw_surface_show(ObSurfaceId id, gboolean show)
@@ -676,6 +744,9 @@ gboolean lw_surface_focus(ObSurfaceId id, guint32 time, gboolean input,
     WlrSurface *s = surface(id);
 
     if (id && !s) return FALSE;
+    if (focused && focused != s && focused->xw)
+        lw_xw_activate(focused, FALSE);
+    if (s && s->xw) lw_xw_activate(s, TRUE);
     focused = s;
     /* the core's own dialogs take their keys through the core */
     lw_keyboard_focus(s && input ? lw_surface_wl(s) : NULL);
@@ -692,6 +763,8 @@ void lw_surface_close(ObSurfaceId id, guint32 time)
 
     if (s && s->toplevel)
         wlr_xdg_toplevel_send_close(s->toplevel);
+    else if (s && s->xw)
+        lw_xw_close(s);
 }
 
 void lw_surface_kill(ObSurfaceId id)
@@ -700,6 +773,8 @@ void lw_surface_kill(ObSurfaceId id)
 
     if (s && s->toplevel)
         wl_client_destroy(wl_resource_get_client(s->toplevel->resource));
+    else if (s && s->xw)
+        lw_xw_kill(s);
 }
 
 void lw_surface_set_states(ObSurfaceId id, ObSurfaceStates states)
@@ -710,6 +785,7 @@ void lw_surface_set_states(ObSurfaceId id, ObSurfaceStates states)
     if (!s) return;
     s->states = states;
     lw_toplevel_states(id, states);
+    if (s->xw) lw_xw_set_states(s, states);
     if (!(t = s->toplevel) || !t->base->initialized) return;
     wlr_xdg_toplevel_set_maximized(t,
         (states & OB_SURFACE_STATE_MAXIMIZED_HORZ) &&
@@ -746,7 +822,8 @@ void lw_surface_ping(ObSurfaceId id, guint32 serial)
 
     if (!s) return;
     if (!s->toplevel) {
-        /* the core's own dialogs always answer */
+        /* the core's own dialogs always answer, and X11 clients are
+           pinged by Xwayland's window manager */
         lw_begin(0);
         lw_events->pong(id, serial);
         lw_end();
@@ -858,6 +935,10 @@ void lw_surface_info(ObSurfaceId id, ObSurfaceInfoFields fields,
     if (!s) return;
     if (s->dialog) {
         info_dialog(s, fields, info);
+        return;
+    }
+    if (s->xw) {
+        lw_xw_info(s, fields, info);
         return;
     }
     t = s->toplevel;

@@ -24,7 +24,6 @@
 
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_output_layout.h>
-#include <wlr/types/wlr_xdg_shell.h>
 
 typedef struct {
     ObSurfaceId id;
@@ -105,15 +104,15 @@ static void update_output(Handle *h)
     h->output = o;
 }
 
-static Handle *handle_new(ObSurfaceId id, struct wlr_xdg_toplevel *t)
+static Handle *handle_new(ObSurfaceId id, const gchar *title,
+                          const gchar *app_id)
 {
     Handle *h = g_new0(Handle, 1);
 
     h->id = id;
     h->wlr = wlr_foreign_toplevel_handle_v1_create(manager);
-    if (t->title) wlr_foreign_toplevel_handle_v1_set_title(h->wlr, t->title);
-    if (t->app_id)
-        wlr_foreign_toplevel_handle_v1_set_app_id(h->wlr, t->app_id);
+    if (title) wlr_foreign_toplevel_handle_v1_set_title(h->wlr, title);
+    if (app_id) wlr_foreign_toplevel_handle_v1_set_app_id(h->wlr, app_id);
     h->activate.notify = handle_activate;
     wl_signal_add(&h->wlr->events.request_activate, &h->activate);
     h->close.notify = handle_close;
@@ -152,15 +151,15 @@ void lw_publish_clients(const ObSurfaceId *ids, guint n)
     for (i = 0; i < n; ++i) {
         gpointer key = (gpointer)ids[i];
         gpointer h;
-        struct wlr_xdg_toplevel *t;
+        const gchar *title, *app_id;
 
         if ((h = g_hash_table_lookup(handles, key))) {
             g_hash_table_steal(handles, key);
             g_hash_table_insert(now, key, h);
         }
-        else if ((t = lw_surface_toplevel(ids[i])))
+        else if (lw_surface_names(ids[i], &title, &app_id))
             /* the core's own dialogs aren't for taskbars */
-            g_hash_table_insert(now, key, handle_new(ids[i], t));
+            g_hash_table_insert(now, key, handle_new(ids[i], title, app_id));
     }
     /* what is left went away */
     g_hash_table_unref(handles);

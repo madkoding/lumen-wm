@@ -36,6 +36,8 @@ struct wlr_xdg_toplevel;
 struct wlr_xdg_toplevel_decoration_v1;
 struct wlr_surface;
 struct wlr_output;
+struct wlr_xwayland_surface;
+struct wlr_compositor;
 
 typedef struct _WlrCanvas WlrCanvas;
 typedef struct _WlrSurface WlrSurface;
@@ -97,7 +99,10 @@ struct _WlrCanvas {
 
 struct _WlrSurface {
     WlrNodeData node;
-    struct wlr_xdg_toplevel *toplevel;  /* NULL for a dialog canvas */
+    /* one of these: an xdg toplevel, an X11 client through Xwayland, or a
+       dialog of the core's own */
+    struct wlr_xdg_toplevel *toplevel;
+    struct wlr_xwayland_surface *xw;
     struct wlr_xdg_toplevel_decoration_v1 *decoration;
     WlrCanvas *dialog;
     struct wlr_scene_tree *tree;        /* the client's surfaces */
@@ -115,6 +120,9 @@ struct _WlrSurface {
     struct wl_listener request_fullscreen, request_minimize;
     struct wl_listener set_title, set_app_id, set_parent;
     struct wl_listener tree_destroy;
+    /* X11 clients */
+    struct wl_listener associate, dissociate, request_configure;
+    struct wl_listener request_activate, set_hints, set_decorations;
     /* waiting for the answer to a ping */
     struct wl_event_source *ping_check;
     guint32 ping_serial;
@@ -127,6 +135,7 @@ extern struct wlr_scene *lw_scene;
 extern struct wlr_scene_tree *lw_layers[WLR_NUM_LAYERS];
 extern struct wlr_seat *lw_seat;
 extern struct wlr_output_layout *lw_layout;
+extern struct wlr_compositor *lw_compositor;
 guint32 lw_now(void);
 /*! Start one event for the core, and end it. */
 void lw_begin(guint32 time);
@@ -167,11 +176,25 @@ void lw_surfaces_startup(void);
 void lw_surfaces_shutdown(void);
 /*! The surface a wlr_surface belongs to, or NULL. */
 WlrSurface *lw_surface_of(struct wlr_surface *s);
+/* what backend-wlr-xwayland.c shares with the xdg toplevels */
+WlrSurface *lw_surface_new(void);
+void lw_surface_free(WlrSurface *s);
+WlrSurface *lw_surface_lookup(ObSurfaceId id);
+ObSurfaceId lw_surface_id(WlrSurface *s);
+void lw_surface_changed(WlrSurface *s, ObSurfaceInfoFields fields);
+void lw_surface_mapped(WlrSurface *s);
+void lw_surface_unmapped(WlrSurface *s);
+void lw_surface_request_move(WlrSurface *s);
+void lw_surface_request_resize(WlrSurface *s, guint32 edges);
+/*! first and second: one state each, as the core takes them */
+void lw_surface_request_states(WlrSurface *s, ObSurfaceStates first,
+                               ObSurfaceStates second, gboolean on);
+void lw_surface_send_geometry(ObSurfaceId s, const Rect *area, gint border);
 /*! The wlr_surface to give the keyboard and pointer to, or NULL. */
 struct wlr_surface *lw_surface_wl(WlrSurface *s);
-/*! The xdg toplevel a managed surface is, or NULL (a dialog of the core's
-  own). */
-struct wlr_xdg_toplevel *lw_surface_toplevel(ObSurfaceId id);
+/*! A client's title and app id; FALSE for a dialog of the core's own. */
+gboolean lw_surface_names(ObSurfaceId id, const gchar **title,
+                          const gchar **app_id);
 /*! The output under its middle, or NULL. */
 struct wlr_output *lw_surface_output(ObSurfaceId id);
 /*! A dialog canvas becomes a surface the core can manage. */
@@ -238,6 +261,23 @@ struct wlr_surface *lw_layer_keyboard(gboolean *exclusive);
 /*! A press on s, a layer surface, or elsewhere for NULL. */
 void lw_layer_clicked(struct wlr_surface *s);
 guint lw_reserved_edges(const StrutPartial **edges);
+
+/* backend-wlr-xwayland.c: X11 clients; without Xwayland support these do
+   nothing */
+void lw_xwayland_startup(void);
+void lw_xwayland_shutdown(void);
+WlrSurface *lw_xw_surface_of(struct wlr_surface *ws);
+struct wlr_surface *lw_xw_wl(WlrSurface *s);
+gboolean lw_xw_names(WlrSurface *s, const gchar **title,
+                     const gchar **app_id);
+void lw_xw_configure(WlrSurface *s);
+void lw_xw_activate(WlrSurface *s, gboolean active);
+void lw_xw_close(WlrSurface *s);
+void lw_xw_kill(WlrSurface *s);
+void lw_xw_set_states(WlrSurface *s, ObSurfaceStates states);
+void lw_xw_info(WlrSurface *s, ObSurfaceInfoFields fields,
+                ObSurfaceInfo *info);
+void lw_xw_workareas(const Rect *areas, guint n);
 
 /* backend-wlr-toplevels.c: what taskbars see */
 void lw_toplevels_startup(void);

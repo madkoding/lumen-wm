@@ -73,6 +73,17 @@ if use_wayland
   wayland_protocols = dependency('wayland-protocols')
   pixman = dependency('pixman-1')
   libdrm = dependency('libdrm').partial_dependency(compile_args: true)
+  # X11 clients, when wlroots was built with Xwayland
+  use_xwayland = not get_option('xwayland').disabled() and \
+    wlroots.get_variable('have_xwayland', default_value: 'false') == 'true'
+  if get_option('xwayland').enabled() and not use_xwayland
+    error('wlroots was built without Xwayland')
+  endif
+  xwayland_deps = []
+  if use_xwayland
+    xwayland_deps = [dependency('xcb'), dependency('xcb-icccm'),
+                     dependency('xcb-ewmh').partial_dependency(compile_args: true)]
+  endif
   wayland_scanner = find_program(
     dependency('wayland-scanner', native: true).get_variable('wayland_scanner'))
   wl_protocol_dir = wayland_protocols.get_variable('pkgdatadir')
@@ -139,6 +150,9 @@ if use_sm
 endif
 if use_wayland
   defs += '-DUSE_WLROOTS'
+  if use_xwayland
+    defs += '-DUSE_XWAYLAND'
+  endif
 endif
 add_project_arguments(defs, language: 'c')
 
@@ -311,13 +325,14 @@ executable('lumen-wm',
     'openbox/backend-wlr-layer.c',
     'openbox/backend-wlr-surface.c',
     'openbox/backend-wlr-toplevels.c',
+    'openbox/backend-wlr-xwayland.c',
     protocol_headers,
   ] : [],
   c_args: paths + ['-DG_LOG_DOMAIN="Openbox"'] +
     (use_wayland ? ['-DWLR_USE_UNSTABLE'] : []),
   dependencies: [obrender, obt, cairo_xlib, x11, xext, xrandr, xinerama,
                  glib, xml, xkbcommon, libm, libsn, xcursor, sm, ice] +
-    (use_wayland ? [wlroots, wayland_server, pixman, libdrm] : []),
+    (use_wayland ? [wlroots, wayland_server, pixman, libdrm, xwayland_deps] : []),
   export_dynamic: true,
   install_rpath: rpath,
   install: true)
@@ -470,6 +485,7 @@ summary({
   'X Cursor library': xcursor.found(),
   'Session management': use_sm,
   'Wayland (wlroots)': use_wayland,
+  'Xwayland': use_wayland and use_xwayland,
   'Imlib2': imlib2.found(),
   'SVG (librsvg)': librsvg.found(),
   'Translations': nls,

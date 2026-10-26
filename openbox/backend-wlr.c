@@ -45,6 +45,7 @@ static struct wlr_backend *backend;
 static struct wlr_renderer *renderer;
 static struct wlr_allocator *allocator;
 struct wlr_output_layout *lw_layout;
+struct wlr_compositor *lw_compositor;
 static struct wlr_scene_output_layout *scene_layout;
 static struct wl_listener new_output;
 static gboolean started = FALSE;
@@ -233,7 +234,7 @@ static gboolean lw_startup(const gchar *display, ObStartupFlags flags,
     wlr_renderer_init_wl_display(renderer, lw_display);
     allocator = wlr_allocator_autocreate(backend, renderer);
 
-    wlr_compositor_create(lw_display, 5, renderer);
+    lw_compositor = wlr_compositor_create(lw_display, 5, renderer);
     wlr_subcompositor_create(lw_display);
     wlr_data_device_manager_create(lw_display);
 
@@ -252,6 +253,7 @@ static gboolean lw_startup(const gchar *display, ObStartupFlags flags,
     lw_surfaces_startup();
     lw_layers_startup();
     lw_toplevels_startup();
+    lw_xwayland_startup();
     lw_input_startup(backend);
 
     socket = wl_display_add_socket_auto(lw_display);
@@ -277,6 +279,7 @@ static void lw_shutdown(void)
     if (!lw_display) return;
     wl_display_destroy_clients(lw_display);
     lw_input_shutdown();
+    lw_xwayland_shutdown();
     lw_toplevels_shutdown();
     lw_layers_shutdown();
     lw_surfaces_shutdown();
@@ -414,7 +417,6 @@ static void nothing_surface_geometry(ObSurfaceId s, const Rect *a, gint b) {}
 static void nothing_names(const gchar *const *names) {}
 static void nothing_icon(ObSurfaceId s, const ObIcon *icon) {}
 static void nothing_titles(ObSurfaceId s, const gchar *t, const gchar *i) {}
-static void nothing_workareas(const Rect *a, guint n) {}
 static void nothing_extents(ObSurfaceId s, const Strut *e) {}
 static void nothing_actions(ObSurfaceId s, ObSurfaceActions a) {}
 static void nothing_app(ObSurfaceId s, const ObSurfaceApp *a) {}
@@ -458,7 +460,7 @@ const ObBackend ob_backend_wlr = {
     .surface_set_border = nothing_surface_int,
     .surface_configure = lw_surface_configure,
     .surface_install_colors = nothing_surface,
-    .surface_send_geometry = nothing_surface_geometry,
+    .surface_send_geometry = lw_surface_send_geometry,
     .surface_show = lw_surface_show,
     .surface_focus = lw_surface_focus,
     .surface_close = lw_surface_close,
@@ -525,7 +527,7 @@ const ObBackend ob_backend_wlr = {
     .publish_surface_desktop = nothing_surface_uint,
     .publish_surface_icon = nothing_icon,
     .publish_surface_titles = lw_publish_surface_titles,
-    .publish_workareas = nothing_workareas,
+    .publish_workareas = lw_xw_workareas,
     .publish_layout_size = nothing_size,
     .publish_last_desktop = nothing_uint,
     .publish_showing_desktop = nothing_bool,
