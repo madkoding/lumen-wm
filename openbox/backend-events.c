@@ -37,7 +37,7 @@
 
 static ObClient *client_of(ObSurfaceId s)
 {
-    ObWindow *w = window_find((Window)s);
+    ObWindow *w = window_find((ObWindowId)s);
     return w && WINDOW_IS_CLIENT(w) ? WINDOW_AS_CLIENT(w) : NULL;
 }
 
@@ -54,7 +54,7 @@ static void surface_new(ObSurfaceId s)
     ObClient *client = client_of(s);
 
     if (!client)
-        window_manage((Window)s);
+        window_manage((ObWindowId)s);
     /* one already managed normally doesn't ask, and when it does it is on
        another desktop or iconified, and only an iconified one is shown */
     else if (client->iconic)
@@ -68,7 +68,7 @@ static void surface_gone(ObSurfaceId s)
 
     if (client)
         client_unmanage(client);
-    else if ((app = dock_find_dockapp((Window)s)))
+    else if ((app = dock_find_dockapp((ObWindowId)s)))
         dock_unmanage(app, FALSE);
 }
 
@@ -78,7 +78,7 @@ static void surface_withdrawn(ObSurfaceId s)
     ObDockApp *app;
 
     if (!client) {
-        if ((app = dock_find_dockapp((Window)s))) {
+        if ((app = dock_find_dockapp((ObWindowId)s))) {
             if (app->ignore_unmaps)
                 app->ignore_unmaps--;
             else
@@ -116,7 +116,7 @@ static void surface_changed(ObSurfaceId s, ObSurfaceInfoFields changed,
     ObDockApp *app;
 
     if (!client) {
-        if ((app = dock_find_dockapp((Window)s)))
+        if ((app = dock_find_dockapp((ObWindowId)s)))
             dockapp_changed(app, s, changed);
         return;
     }
@@ -340,7 +340,7 @@ static void request_configure(ObSurfaceId s, const ObConfigureRequest *req)
             /* get the sibling */
             if (req->fields & OB_CONFIGURE_SIBLING) {
                 ObWindow *win;
-                win = window_find((Window)req->sibling);
+                win = window_find((ObWindowId)req->sibling);
                 if (win && WINDOW_IS_CLIENT(win) &&
                     WINDOW_AS_CLIENT(win) != client)
                 {
@@ -440,7 +440,7 @@ static void request_configure(ObSurfaceId s, const ObConfigureRequest *req)
            XXX remove this some day...that would be nice. but really unexpected
            from Sun Microsystems.
         */
-        if (x == 0 && y == 0 && client->gravity == NorthWestGravity &&
+        if (x == 0 && y == 0 && client->gravity == OB_GRAVITY_NORTHWEST &&
             client_normal(client))
         {
             const Rect to = { x, y, w, h };
@@ -573,7 +573,7 @@ static void request_restack(ObSurfaceId s, guintptr sibling_id,
     }
 
     if (sibling_id) {
-        ObWindow *win = window_find((Window)sibling_id);
+        ObWindow *win = window_find((ObWindowId)sibling_id);
         if (WINDOW_IS_CLIENT(win) &&
             WINDOW_AS_CLIENT(win) != client)
         {
@@ -656,7 +656,7 @@ static void request_frame_extents(ObSurfaceId s)
 {
     /* Pretend to manage the client, getting information used to
        determine its decorations */
-    ObClient *c = client_fake_manage((Window)s);
+    ObClient *c = client_fake_manage((ObWindowId)s);
 
     ob_backend->publish_surface_extents(s, &c->frame->size);
 
@@ -713,11 +713,6 @@ static void keymap_changed(void)
     ob_set_state(OB_STATE_RUNNING);
 }
 
-static void canvas_exposed(ObCanvasId c)
-{
-    shelf_exposed(c);
-}
-
 const ObBackendEvents ob_backend_events = {
     .begin = event_begin,
     .end = event_end,
@@ -750,5 +745,4 @@ const ObBackendEvents ob_backend_events = {
     .keymap_changed = keymap_changed,
     .outputs_changed = screen_resize,
     .input = event_input,
-    .canvas_exposed = canvas_exposed,
 };

@@ -457,11 +457,11 @@ static gboolean should_set_client_position(ObClient *client,
     gboolean has_position = settings && settings->pos_given;
     gboolean has_forced_position = has_position && settings->pos_force;
 
-    gboolean user_positioned = client->positioned & USPosition;
+    gboolean user_positioned = client->positioned & OB_CLIENT_USER_POSITION;
     if (user_positioned && !has_forced_position)
         return FALSE;
 
-    gboolean program_positioned = client->positioned & PPosition;
+    gboolean program_positioned = client->positioned & OB_CLIENT_PROGRAM_POSITION;
     if (program_positioned && !has_position)
         return FALSE;
 

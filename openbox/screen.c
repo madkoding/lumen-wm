@@ -37,10 +37,7 @@
 #include "version.h"
 #include "obrender/render.h"
 #include "gettext.h"
-#include "obt/display.h"
-#include "obt/prop.h"
 
-#include <X11/Xlib.h>
 #ifdef HAVE_UNISTD_H
 #  include <sys/types.h>
 #  include <unistd.h>
@@ -57,7 +54,7 @@ guint                  screen_last_desktop;
 ObScreenShowDestopMode screen_show_desktop_mode;
 ObDesktopLayout        screen_desktop_layout;
 gchar                **screen_desktop_names;
-Time                   screen_desktop_user_time = CurrentTime;
+guint32                   screen_desktop_user_time = 0;
 
 static Size     screen_physical_size;
 static guint    screen_old_desktop;
@@ -477,7 +474,7 @@ void screen_set_desktop(guint num, gboolean dofocus)
 
     event_end_ignore_all_enters(ignore_start);
 
-    if (event_source_time() != CurrentTime)
+    if (event_source_time() != 0)
         screen_desktop_user_time = event_source_time();
 }
 
@@ -699,7 +696,7 @@ void screen_show_desktop_popup(guint d, gboolean perm)
 
     for (i = 0; i < screen_num_monitors; i++) {
         a = screen_physical_area_monitor(i);
-        pager_popup_position(desktop_popup[i], CenterGravity,
+        pager_popup_position(desktop_popup[i], OB_GRAVITY_CENTER,
                              a->x + a->width / 2, a->y + a->height / 2);
         pager_popup_icon_size_multiplier(desktop_popup[i],
                                          (screen_desktop_layout.columns /

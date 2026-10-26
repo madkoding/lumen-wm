@@ -98,7 +98,7 @@ static void set_curpos(KeyBindingTree *newpos)
         }
 
         a = screen_physical_area_primary(FALSE);
-        popup_position(popup, NorthWestGravity, a->x + 10, a->y + 10);
+        popup_position(popup, OB_GRAVITY_NORTHWEST, a->x + 10, a->y + 10);
         /* 1 second delay for the popup to show */
         popup_delay_show(popup, 1000, text);
         g_free(text);

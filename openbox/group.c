@@ -21,8 +21,8 @@
 
 static GHashTable *group_map;
 
-static guint window_hash(Window *w) { return *w; }
-static gboolean window_comp(Window *w1, Window *w2) { return *w1 == *w2; }
+static guint window_hash(ObWindowId *w) { return *w; }
+static gboolean window_comp(ObWindowId *w1, ObWindowId *w2) { return *w1 == *w2; }
 
 void group_startup(gboolean reconfig)
 {
@@ -39,7 +39,7 @@ void group_shutdown(gboolean reconfig)
     g_hash_table_destroy(group_map);
 }
 
-ObGroup *group_add(Window leader, ObClient *client)
+ObGroup *group_add(ObWindowId leader, ObClient *client)
 {
     ObGroup *self;
 

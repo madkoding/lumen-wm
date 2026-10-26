@@ -21,8 +21,8 @@
 #ifndef __render_h
 #define __render_h
 
-#include <X11/Xlib.h> /* some platforms dont include this as needed for Xft */
-#include <pango/pangoxft.h>
+#include <pango/pango.h>
+#include <cairo.h>
 #include <glib.h>
 
 G_BEGIN_DECLS
@@ -162,7 +162,6 @@ struct _RrTextureText {
 
 struct _RrPixmapMask {
     const RrInstance *inst;
-    Pixmap mask;
     gint width;
     gint height;
     gchar *data;
@@ -226,8 +225,8 @@ struct _RrAppearance {
     RrSurface surface;
     gint textures;
     RrTexture *texture;
-    Pixmap pixmap;
-    XftDraw *xftdraw;
+    /*! what RrPaintImage drew: opaque ARGB32, w by h */
+    cairo_surface_t *image;
 
     /* cached for internal use */
     gint w, h;
@@ -345,24 +344,18 @@ struct _RrButton {
 #define RrDefaultFontWeight       RR_FONTWEIGHT_NORMAL
 #define RrDefaultFontSlant        RR_FONTSLANT_NORMAL
 
-RrInstance* RrInstanceNew (Display *display, gint screen);
-void        RrInstanceFree (RrInstance *inst);
+/*! How text is drawn on this screen: what the display server shares with
+  its clients (X11: the Xft resources). */
+typedef struct _RrFontSettings {
+    gdouble dpi;                        /*!< 0 for 96 */
+    cairo_antialias_t antialias;
+    cairo_hint_style_t hint_style;
+    cairo_subpixel_order_t subpixel_order;
+} RrFontSettings;
 
-Display* RrDisplay      (const RrInstance *inst);
-gint     RrScreen       (const RrInstance *inst);
-Window   RrRootWindow   (const RrInstance *inst);
-Visual*  RrVisual       (const RrInstance *inst);
-gint     RrDepth        (const RrInstance *inst);
-Colormap RrColormap     (const RrInstance *inst);
-gint     RrRedOffset    (const RrInstance *inst);
-gint     RrGreenOffset  (const RrInstance *inst);
-gint     RrBlueOffset   (const RrInstance *inst);
-gint     RrRedShift     (const RrInstance *inst);
-gint     RrGreenShift   (const RrInstance *inst);
-gint     RrBlueShift    (const RrInstance *inst);
-gint     RrRedMask      (const RrInstance *inst);
-gint     RrGreenMask    (const RrInstance *inst);
-gint     RrBlueMask     (const RrInstance *inst);
+/*! settings: NULL for cairo's defaults at 96 dpi. */
+RrInstance* RrInstanceNew (const RrFontSettings *settings);
+void        RrInstanceFree (RrInstance *inst);
 
 RrColor *RrColorNew   (const RrInstance *inst, gint r, gint g, gint b);
 RrColor *RrColorCopy  (RrColor *c);
@@ -372,8 +365,6 @@ void     RrColorFree  (RrColor *in);
 gint     RrColorRed   (const RrColor *c);
 gint     RrColorGreen (const RrColor *c);
 gint     RrColorBlue  (const RrColor *c);
-gulong   RrColorPixel (const RrColor *c);
-GC       RrColorGC    (RrColor *c);
 
 RrAppearance *RrAppearanceNew  (const RrInstance *inst, gint numtex);
 RrAppearance *RrAppearanceCopy (RrAppearance *a);
@@ -400,21 +391,16 @@ gint    RrFontMaxCharWidth  (const RrFont *f);
 /*! Select a font from a pango description string */
 void    RrFontDescriptionFromString(RrFont *font, gchar *description);
 
-/* Paint into the appearance. The old pixmap is returned (if there was one). It
-   is the responsibility of the caller to call XFreePixmap on the return when
-   it is non-null. */
-Pixmap RrPaintPixmap (RrAppearance *a, gint w, gint h);
-void   RrPaint       (RrAppearance *a, Window win, gint w, gint h);
+/*! Draw the appearance into its image (a->image), w by h. FALSE when there
+  is nothing to draw (no size, or a parent-relative one outside its
+  parent). */
+gboolean RrPaintImage(RrAppearance *a, gint w, gint h);
 void   RrMinSize     (RrAppearance *a, gint *w, gint *h);
 gint   RrMinWidth    (RrAppearance *a);
 /* For text textures, if flow is TRUE, then the string must be set before
    calling this, otherwise it doesn't need to be */
 gint   RrMinHeight   (RrAppearance *a);
 void   RrMargins     (RrAppearance *a, gint *l, gint *t, gint *r, gint *b);
-
-gboolean RrPixmapToRGBA(const RrInstance *inst,
-                        Pixmap pmap, Pixmap mask,
-                        gint *w, gint *h, RrPixel32 **data);
 
 /*! Create a new image cache for RrImages.
   @param max_resized_saved The number of resized copies of an image to save

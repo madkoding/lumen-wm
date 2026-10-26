@@ -172,7 +172,12 @@ gint main(gint argc, gchar **argv)
     obt_signal_add_callback(SIGTTIN, signal_handler, NULL);
     obt_signal_add_callback(SIGTTOU, signal_handler, NULL);
 
-    ob_rr_inst = RrInstanceNew(obt_display, ob_screen);
+    {
+        RrFontSettings fs;
+
+        ob_backend->font_settings(&fs);
+        ob_rr_inst = RrInstanceNew(&fs);
+    }
     if (ob_rr_inst == NULL)
         ob_exit_with_error(_("Failed to initialize the obrender library."));
     /* Saving 3 resizes of an RrImage makes a lot of sense for icons, as there
@@ -307,7 +312,7 @@ gint main(gint argc, gchar **argv)
                 /* focus what was focused if a wm was already running */
                 ob_backend->previous_state(&prev);
                 if (prev.active &&
-                    (w = window_find((Window)prev.active)) &&
+                    (w = window_find((ObWindowId)prev.active)) &&
                     WINDOW_IS_CLIENT(w))
                 {
                     client_focus(WINDOW_AS_CLIENT(w));

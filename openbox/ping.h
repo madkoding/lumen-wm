@@ -20,7 +20,6 @@
 #ifndef __ping_h
 #define __ping_h
 
-#include <X11/Xlib.h>
 #include <glib.h>
 
 struct _ObClient;

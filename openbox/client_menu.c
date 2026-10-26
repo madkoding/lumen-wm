@@ -28,7 +28,6 @@
 #include "moveresize.h"
 #include "event.h"
 #include "gettext.h"
-#include "obt/prop.h"
 
 #include <glib.h>
 

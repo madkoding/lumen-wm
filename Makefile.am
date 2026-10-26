@@ -69,8 +69,7 @@ obrender_rendertest_LDADD = \
 	obrender/libobrender.la \
 	$(GLIB_LIBS) \
 	$(PANGO_LIBS) \
-	$(XML_LIBS) \
-	$(X_LIBS)
+	$(XML_LIBS)
 obrender_rendertest_SOURCES = obrender/test.c
 
 obrender_libobrender_la_CPPFLAGS = \
@@ -111,6 +110,7 @@ obrender_libobrender_la_SOURCES = \
 	obrender/instance.c \
 	obrender/mask.h \
 	obrender/mask.c \
+	obrender/pixels.h \
 	obrender/render.h \
 	obrender/render.c \
 	obrender/theme.h \
@@ -246,6 +246,7 @@ openbox_lumen_wm_SOURCES = \
 	openbox/backend.h \
 	openbox/backend-events.c \
 	openbox/backend-x11.c \
+	openbox/backend-x11-canvas.c \
 	openbox/backend-x11-event.c \
 	openbox/backend-x11-int.h \
 	openbox/backend-x11-surface.c \
@@ -300,6 +301,8 @@ openbox_lumen_wm_SOURCES = \
 	openbox/mwm.h \
 	openbox/openbox.c \
 	openbox/openbox.h \
+	openbox/paint.c \
+	openbox/paint.h \
 	openbox/ping.c \
 	openbox/ping.h \
 	openbox/place.c \

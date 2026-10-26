@@ -29,7 +29,6 @@
 #include "backend.h"
 #include "dock.h"
 #include "config.h"
-#include "obt/prop.h"
 
 GList  *stacking_list = NULL;
 GList  *stacking_list_tail = NULL;

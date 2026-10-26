@@ -27,6 +27,7 @@
 #include "gettext.h"
 
 #include <glib.h>
+#include <pango/pangocairo.h>
 #include <string.h>
 #include <stdlib.h>
 #include <locale.h>
@@ -53,7 +54,8 @@ static void measure_font(const RrInstance *inst, RrFont *f)
     }
 
     /* measure the ascent and descent */
-    metrics = pango_context_get_metrics(inst->pango, f->font_desc, lang);
+    metrics = pango_context_get_metrics(inst->pango_metrics, f->font_desc,
+                                        lang);
     f->ascent = pango_font_metrics_get_ascent(metrics);
     f->descent = pango_font_metrics_get_descent(metrics);
     pango_font_metrics_unref(metrics);
@@ -227,10 +229,20 @@ static inline int font_calculate_baseline(RrFont *f, gint height)
         / PANGO_SCALE; /* back to pixels */
 }
 
-void RrFontDraw(XftDraw *d, RrTextureText *t, RrRect *area)
+/* a single line's y is its baseline, a flowing layout's its top */
+static void draw_layout(cairo_t *cr, RrTextureText *t, gint x, gint y)
+{
+    cairo_move_to(cr, x, y);
+    if (!t->flow)
+        pango_cairo_show_layout_line(
+            cr, pango_layout_get_line_readonly(t->font->layout, 0));
+    else
+        pango_cairo_show_layout(cr, t->font->layout);
+}
+
+void RrFontDraw(cairo_t *cr, RrTextureText *t, RrRect *area)
 {
     gint x,y,w;
-    XftColor c;
     gint mw;
     PangoRectangle rect;
     PangoAttrList *attrlist;
@@ -285,8 +297,7 @@ void RrFontDraw(XftDraw *d, RrTextureText *t, RrRect *area)
     pango_layout_get_pixel_extents(t->font->layout, NULL, &rect);
     mw = rect.width;
 
-    /* pango_layout_set_alignment doesn't work with
-       pango_xft_render_layout_line */
+    /* the line is drawn on its own, so align it here */
     switch (t->justify) {
     case RR_JUSTIFY_LEFT:
         break;
@@ -301,48 +312,16 @@ void RrFontDraw(XftDraw *d, RrTextureText *t, RrRect *area)
     }
 
     if (t->shadow_offset_x || t->shadow_offset_y) {
-        /* From nvidia's readme (chapter 23):
-
-           When rendering to a 32-bit window, keep in mind that the X RENDER
-           extension, used by most composite managers, expects "premultiplied
-           alpha" colors. This means that if your color has components (r,g,b)
-           and alpha value a, then you must render (a*r, a*g, a*b, a) into the
-           target window.
-        */
-        c.color.red = (t->shadow_color->r | t->shadow_color->r << 8) *
-            t->shadow_alpha / 255;
-        c.color.green = (t->shadow_color->g | t->shadow_color->g << 8) *
-            t->shadow_alpha / 255;
-        c.color.blue = (t->shadow_color->b | t->shadow_color->b << 8) *
-            t->shadow_alpha / 255;
-        c.color.alpha = 0xffff * t->shadow_alpha / 255;
-        c.pixel = t->shadow_color->pixel;
-
-        /* see below... */
-        if (!t->flow) {
-            pango_xft_render_layout_line
-                (d, &c,
-#if PANGO_VERSION_MAJOR > 1 || \
-    (PANGO_VERSION_MAJOR == 1 && PANGO_VERSION_MINOR >= 16)
-                 pango_layout_get_line_readonly(t->font->layout, 0),
-#else
-                 pango_layout_get_line(t->font->layout, 0),
-#endif
-                 (x + t->shadow_offset_x) * PANGO_SCALE,
-                 (y + t->shadow_offset_y) * PANGO_SCALE);
-        }
-        else {
-            pango_xft_render_layout(d, &c, t->font->layout,
-                                    (x + t->shadow_offset_x) * PANGO_SCALE,
-                                    (y + t->shadow_offset_y) * PANGO_SCALE);
-        }
+        cairo_set_source_rgba(cr, t->shadow_color->r / 255.0,
+                              t->shadow_color->g / 255.0,
+                              t->shadow_color->b / 255.0,
+                              t->shadow_alpha / 255.0);
+        draw_layout(cr, t, x + t->shadow_offset_x, y + t->shadow_offset_y);
     }
 
-    c.color.red = t->color->r | t->color->r << 8;
-    c.color.green = t->color->g | t->color->g << 8;
-    c.color.blue = t->color->b | t->color->b << 8;
-    c.color.alpha = 0xff | 0xff << 8; /* fully opaque text */
-    c.pixel = t->color->pixel;
+    /* fully opaque text */
+    cairo_set_source_rgb(cr, t->color->r / 255.0, t->color->g / 255.0,
+                         t->color->b / 255.0);
 
     if (t->shortcut) {
         const gchar *s = t->string + t->shortcut_pos;
@@ -360,25 +339,7 @@ void RrFontDraw(XftDraw *d, RrTextureText *t, RrRect *area)
         pango_attr_list_unref(attrlist);
     }
 
-    /* layout_line() uses y to specify the baseline
-       The line doesn't need to be freed, it's a part of the layout */
-    if (!t->flow) {
-        pango_xft_render_layout_line
-            (d, &c,
-#if PANGO_VERSION_MAJOR > 1 || \
-    (PANGO_VERSION_MAJOR == 1 && PANGO_VERSION_MINOR >= 16)
-             pango_layout_get_line_readonly(t->font->layout, 0),
-#else
-             pango_layout_get_line(t->font->layout, 0),
-#endif
-             x * PANGO_SCALE,
-             y * PANGO_SCALE);
-    }
-    else {
-        pango_xft_render_layout(d, &c, t->font->layout,
-                                x * PANGO_SCALE,
-                                y * PANGO_SCALE);
-    }
+    draw_layout(cr, t, x, y);
 
     if (t->shortcut) {
         t->font->shortcut_underline->start_index = 0;

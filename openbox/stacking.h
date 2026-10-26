@@ -23,7 +23,6 @@
 #include "backend.h"
 
 #include <glib.h>
-#include <X11/Xlib.h>
 
 struct _ObWindow;
 struct _ObClient;

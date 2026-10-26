@@ -25,7 +25,6 @@
 #include "obrender/render.h"
 #include "obt/keyboard.h"
 #include <glib.h>
-#include <X11/Xlib.h>
 
 typedef struct _ObPrompt       ObPrompt;
 typedef struct _ObPromptElement ObPromptElement;
@@ -36,7 +35,7 @@ typedef void (*ObPromptCleanup)(ObPrompt *p, gpointer data);
 
 struct _ObPromptElement {
     gchar *text;
-    Window window;
+    ObWindowId window;
 
     gint x, y, width, height;
     gboolean pressed;
@@ -49,7 +48,6 @@ struct _ObPrompt
     ObInternalWindow super;
     gint ref;
 
-    ObtIC *ic;
 
     /* keep a copy of this because we re-render things that may need it
        (i.e. the buttons) */

@@ -23,7 +23,6 @@
 #include "misc.h"
 #include "focus_cycle_popup.h"
 
-#include <X11/Xlib.h>
 #include <glib.h>
 
 struct _ObClient;

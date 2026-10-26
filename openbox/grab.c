@@ -29,7 +29,7 @@
 static guint kgrabs = 0;
 static guint pgrabs = 0;
 /*! The time at which the last grab was made */
-static guint32 grab_time = 0; /* 0 for none, as X's CurrentTime */
+static guint32 grab_time = 0; /* 0 for none, as X's 0 */
 static gint passive_count = 0;
 
 /* grab.h's grab_keyboard() and grab_pointer() macros would take the backend
@@ -42,7 +42,7 @@ static guint32 ungrab_time(void)
         !(t == 0 || event_time_after(t, grab_time)))
         /* When the time moves backward on the server, then we can't use
            the grab time because that will be in the future. So instead we
-           have to use CurrentTime.
+           have to use 0.
 
            "XUngrabPointer does not release the pointer if the specified time
            is earlier than the last-pointer-grab time or is later than the

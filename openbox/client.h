@@ -29,7 +29,6 @@
 #include "obrender/color.h"
 
 #include <glib.h>
-#include <X11/Xlib.h>
 
 #ifdef HAVE_SYS_TYPES_H
 #  include <sys/types.h> /* for pid_t */
@@ -41,6 +40,15 @@ struct _ObSessionState;
 struct _ObPrompt;
 
 typedef struct _ObClient      ObClient;
+
+/*! Who asked for a client's position and size (ICCCM WM_SIZE_HINTS' flags,
+  with their values). */
+typedef enum {
+    OB_CLIENT_USER_POSITION    = 1 << 0,
+    OB_CLIENT_USER_SIZE        = 1 << 1,
+    OB_CLIENT_PROGRAM_POSITION = 1 << 2,
+    OB_CLIENT_PROGRAM_SIZE     = 1 << 3
+} ObClientRequested;
 
 /*! Possible window types */
 typedef enum
@@ -81,7 +89,7 @@ typedef enum
 struct _ObClient
 {
     ObWindow obwin;
-    Window  window;
+    ObWindowId  window;
     gboolean managed;
 
     /*! If this client is managing an ObPrompt window, then this is set to the
@@ -338,7 +346,7 @@ void client_remove_destroy_notify_data(ObClientCallback func, gpointer data);
   @param prompt This specifies an ObPrompt which is being managed.  It is
                 possible to manage Openbox-owned windows through this.
 */
-void client_manage(Window win, struct _ObPrompt *prompt);
+void client_manage(ObWindowId win, struct _ObPrompt *prompt);
 /*! Unmanages all managed windows */
 void client_unmanage_all(void);
 /*! Unmanages a given client */
@@ -348,7 +356,7 @@ void client_unmanage(ObClient *client);
    This is used when you want to determine a window's decorations before it
    is mapped. Call client_fake_unmanage() with the returned client when you
    are done with it. */
-ObClient *client_fake_manage(Window win);
+ObClient *client_fake_manage(ObWindowId win);
 /*! Free the stuff created by client_fake_manage() */
 void client_fake_unmanage(ObClient *self);
 

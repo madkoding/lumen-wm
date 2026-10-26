@@ -25,7 +25,6 @@
 #include "icon.h"
 #include "obt/paths.h"
 
-#include <X11/Xlib.h>
 #include <X11/Xresource.h>
 #include <ctype.h>
 #include <stdlib.h>
@@ -1234,20 +1233,57 @@ static gboolean read_color(XrmDatabase db, const RrInstance *inst,
     return ret;
 }
 
+/* An X bitmap file (XBM): "#define name_width 6", "#define name_height 6"
+   and the rows, least significant bit first, as bytes. NULL when it isn't
+   one. */
+static gchar *read_xbm(const gchar *file, gint *w, gint *h)
+{
+    gchar *text, *p, *bits = NULL;
+    gint n = 0, size;
+
+    if (!g_file_get_contents(file, &text, NULL, NULL))
+        return NULL;
+    *w = *h = 0;
+    for (p = text; (p = strstr(p, "#define")); ) {
+        gchar *name, *end;
+
+        p += 7;
+        while (*p == ' ' || *p == '\t') ++p;
+        name = p;
+        while (*p && !g_ascii_isspace(*p)) ++p;
+        end = p;
+        if (end - name >= 6 && !strncmp(end - 6, "_width", 6))
+            *w = atoi(p);
+        else if (end - name >= 7 && !strncmp(end - 7, "_height", 7))
+            *h = atoi(p);
+    }
+    size = (*w + 7) / 8 * *h;
+    if (*w > 0 && *h > 0 && (p = strchr(text, '{'))) {
+        bits = g_new0(gchar, size);
+        while (n < size && (p = strstr(p, "0x")))
+            bits[n++] = (gchar)strtol(p, &p, 16);
+    }
+    g_free(text);
+    if (bits && n < size) {
+        g_free(bits);
+        bits = NULL;
+    }
+    return bits;
+}
+
 static gboolean read_mask(const RrInstance *inst, const gchar *path,
                           const gchar *maskname, RrPixmapMask **value)
 {
     gboolean ret = FALSE;
     gchar *s;
-    gint hx, hy; /* ignored */
-    guint w, h;
-    guchar *b;
+    gint w, h;
+    gchar *b;
 
     s = g_build_filename(path, maskname, NULL);
-    if (XReadBitmapFileData(s, &w, &h, &b, &hx, &hy) == BitmapSuccess) {
+    if ((b = read_xbm(s, &w, &h))) {
         ret = TRUE;
-        *value = RrPixmapMaskNew(inst, w, h, (gchar*)b);
-        XFree(b);
+        *value = RrPixmapMaskNew(inst, w, h, b);
+        g_free(b);
     }
     g_free(s);
 

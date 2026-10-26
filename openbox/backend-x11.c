@@ -320,7 +320,7 @@ static gboolean find_enter(XEvent *e, gpointer data)
     return TRUE;
 }
 
-gboolean x11_input_event(const XEvent *e, ObInputEvent *out)
+static gboolean translate_input(const XEvent *e, ObInputEvent *out)
 {
     out->crossing = OB_CROSSING_NORMAL;
     out->inferior = FALSE;
@@ -426,6 +426,13 @@ gboolean x11_input_event(const XEvent *e, ObInputEvent *out)
     default:
         return FALSE;
     }
+}
+
+gboolean x11_input_event(const XEvent *e, ObInputEvent *out)
+{
+    if (!translate_input(e, out)) return FALSE;
+    out->desktop = out->over == obt_root(ob_screen);
+    return TRUE;
 }
 
 static guint32 x11_time(void)
@@ -1140,7 +1147,7 @@ static void get_icons(Window win, ObSurfaceInfo *info)
 {
     guint num;
     guint32 *data, *argb;
-    guint w, h, i, j;
+    guint w, h, i;
     XWMHints *hints;
 
     for (i = 0; i < info->n_icons; ++i)
@@ -1175,22 +1182,14 @@ static void get_icons(Window win, ObSurfaceInfo *info)
         if (hints->flags & IconPixmapHint) {
             gboolean xicon;
             obt_display_ignore_errors(TRUE);
-            xicon = RrPixmapToRGBA(ob_rr_inst,
-                                   hints->icon_pixmap,
-                                   (hints->flags & IconMaskHint ?
-                                    hints->icon_mask : None),
-                                   (gint*)&w, (gint*)&h, &data);
+            xicon = x11_pixmap_argb(hints->icon_pixmap,
+                                    (hints->flags & IconMaskHint ?
+                                     hints->icon_mask : None),
+                                    (gint*)&w, (gint*)&h, &data);
             obt_display_ignore_errors(FALSE);
 
             if (xicon) {
                 if (w > 0 && h > 0) {
-                    /* from ObRender's bit order */
-                    for (j = 0; j < w*h; ++j)
-                        data[j] =
-                            (((data[j] >> RrDefaultAlphaOffset) & 0xff) << 24) +
-                            (((data[j] >> RrDefaultRedOffset) & 0xff) << 16) +
-                            (((data[j] >> RrDefaultGreenOffset) & 0xff) << 8) +
-                            (((data[j] >> RrDefaultBlueOffset) & 0xff) << 0);
                     add_icon(info, w, h, data);
                 } else
                     g_free(data);
@@ -2000,11 +1999,27 @@ const ObBackend ob_backend_x11 = {
     .request_serial_bump = x11_request_serial_bump,
 
     .canvas_new = x11_canvas_new,
+    .canvas_new_child = x11_canvas_new_child,
+    .canvas_has_alpha = x11_canvas_has_alpha,
     .canvas_free = x11_canvas_free,
     .canvas_place = x11_canvas_place,
+    .canvas_move = x11_canvas_move,
+    .canvas_resize = x11_canvas_resize,
     .canvas_show = x11_canvas_show,
     .canvas_set_shape = x11_canvas_set_shape,
     .canvas_set_opacity = x11_canvas_set_opacity,
+
+    .font_settings = x11_font_settings,
+    .screen_read = x11_screen_read,
+
+    .dialog_set_title = x11_dialog_set_title,
+    .dialog_set_size = x11_dialog_set_size,
+    .dialog_set_parent = x11_dialog_set_parent,
+    .canvas_present = x11_canvas_present,
+    .canvas_fill = x11_canvas_fill,
+    .canvas_set_border = x11_canvas_set_border,
+    .canvas_set_outline = x11_canvas_set_outline,
+    .canvas_set_input = x11_canvas_set_input,
 
     .grab_pointer = x11_grab_pointer,
     .grab_keyboard = x11_grab_keyboard,

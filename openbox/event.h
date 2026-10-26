@@ -85,7 +85,7 @@ void event_reset_time(void);
 
 /*! A time at which an event happened that caused this current event to be
   generated.  This is a user-provided time and not to be trusted.
-  Returns CurrentTime if there was no source time provided.
+  Returns 0 if there was no source time provided.
 */
 guint32 event_source_time(void);
 /*! The time a request says the user asked for it, for focus stealing

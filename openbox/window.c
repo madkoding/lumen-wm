@@ -30,8 +30,8 @@
 
 static GHashTable *window_map;
 
-static guint window_hash(Window *w) { return *w; }
-static gboolean window_comp(Window *w1, Window *w2) { return *w1 == *w2; }
+static guint window_hash(ObWindowId *w) { return *w; }
+static gboolean window_comp(ObWindowId *w1, ObWindowId *w2) { return *w1 == *w2; }
 
 void window_startup(gboolean reconfig)
 {
@@ -48,7 +48,7 @@ void window_shutdown(gboolean reconfig)
     g_hash_table_destroy(window_map);
 }
 
-Window window_top(ObWindow *self)
+ObWindowId window_top(ObWindow *self)
 {
     switch (self->type) {
     case OB_WINDOW_CLASS_MENUFRAME:
@@ -85,19 +85,19 @@ ObStackingLayer window_layer(ObWindow *self)
     return None;
 }
 
-ObWindow* window_find(Window xwin)
+ObWindow* window_find(ObWindowId xwin)
 {
     return g_hash_table_lookup(window_map, &xwin);
 }
 
-void window_add(Window *xwin, ObWindow *win)
+void window_add(ObWindowId *xwin, ObWindow *win)
 {
     g_assert(xwin != NULL);
     g_assert(win != NULL);
     g_hash_table_insert(window_map, xwin, win);
 }
 
-void window_remove(Window xwin)
+void window_remove(ObWindowId xwin)
 {
     g_assert(xwin != None);
     g_hash_table_remove(window_map, &xwin);
@@ -109,12 +109,12 @@ void window_manage_all(void)
     ObSurfaceId *existing = ob_backend->existing_surfaces(&n);
 
     for (i = 0; i < n; ++i)
-        if (!window_find((Window)existing[i])) /* skip our own windows */
-            window_manage((Window)existing[i]);
+        if (!window_find((ObWindowId)existing[i])) /* skip our own windows */
+            window_manage((ObWindowId)existing[i]);
     g_free(existing);
 }
 
-void window_manage(Window win)
+void window_manage(ObWindowId win)
 {
     ObSurfaceId icon = OB_SURFACE_NONE;
 
@@ -130,7 +130,7 @@ void window_manage(Window win)
         grab_server(FALSE);
         break;
     case OB_SURFACE_KIND_DOCKAPP:
-        dock_manage((Window)icon, win);
+        dock_manage((ObWindowId)icon, win);
         break;
     case OB_SURFACE_KIND_CLIENT:
         client_manage(win, NULL);

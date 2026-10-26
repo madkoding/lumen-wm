@@ -8,13 +8,13 @@ much is left. The contract tests (`tests/contract`, 42 cases) stay green on X11 
 | 1. Contract tests | done | 1 | 0 |
 | 2. Backend design (`backend.h`) | done | 1 | 0 |
 | 3. Core onto the interface | done | 29 | 0 |
-| 4. Render without Xlib, windows as canvases | pending | 0 | 1 |
+| 4. Render without Xlib, windows as canvases | done | 1 | 0 |
 | 5. Wayland backend (wlroots) | pending | 0 | 3–5, one per milestone |
 
 Phase 3 ended with one PR for all that was left; from here each phase (in phase 5, each milestone) is one PR,
-with a semantic commit per step inside it. Phase 4 grew: the frames' and the
-internal windows' X windows move there, since making them canvases and drawing them through `canvas_present` is
-one change.
+with a semantic commit per step inside it. Phase 4 moved the frames' and the
+internal windows' X windows too, since making them canvases and drawing them through `canvas_present` is one
+change.
 
 ## 1. Contract tests (done)
 
@@ -58,21 +58,28 @@ Done:
   messages, FocusIn/FocusOut bookkeeping and dock apps all come through `ObBackendEvents`
   (`backend-x11-event.c`). `event.c` reads no XEvent.
 
-What still calls Xlib in the core is the windows the core draws, which phase 4 turns into canvases: the frames'
+At the end of phase 3, what still called Xlib in the core was the windows the core draws, which phase 4 turned into canvases: the frames'
 decoration windows (`frame.c`, `framerender.c`), menus, the shelf, the window cycling popup and indicator,
 prompts, other popups and the dock's own window. `startupnotify.c` keeps feeding libsn from the X queue until
 phase 5 decides what launch feedback is on Wayland.
 
-## 4. Render without Xlib, windows as canvases (pending, one PR)
+## 4. Render without Xlib, windows as canvases (done, one PR)
 
-- [ ] obrender draws into cairo image surfaces instead of Xlib pixmaps, and fonts go through cairo/pango
-  instead of Xft.
-- [ ] `canvas_present` in the X11 backend puts the image on screen.
-- [ ] Frames become one canvas each: the core finds the part under the pointer from coordinates instead of from
-  which decoration window got the event.
-- [ ] Menus, the shelf, popups, prompts and the dock become canvases, one at a time.
-- [ ] Core headers stop using X types (`Window`, `Time`, `Atom`); no core file includes an X11 header.
-- [ ] Themes stay as they are; `tools/shelf-themes.sh` checks each switch.
+- [x] obrender draws into cairo image surfaces instead of Xlib pixmaps, fonts go through cairo/pango, and it
+  needs no display (colors, font settings and XBM masks without X).
+- [x] `canvas_present` in the X11 backend puts the image on screen and keeps it there (no expose handling).
+- [x] Frames are a tree of child canvases: the part under the pointer is still the canvas that got the event.
+- [x] Menus (with round corners and translucency), the shelf, popups, the focus indicator, prompts and the dock
+  are canvases.
+- [x] Core headers stop using X types (`Window`, `Time`, gravities, size hint bits).
+- [x] Themes stay as they are; `tools/shelf-themes.sh` (with and without a compositor) checks each switch.
+
+Still X11 in the core, for phase 5: keysyms and modifier masks (`obt/keyboard`, to xkbcommon), XSMP through ICE
+(`session.c`), libsn (`startupnotify.c`) and Xrm for theme files (`obrender/theme.c`).
+
+Found on the way, to fix with a contract case first: since phase 3 a window with a position hint counts as
+placed by the user whether it set the user or the program bit, and a size hint never counts as the user's (`ObClientRequested`
+keeps that behaviour for now).
 
 ## 5. Wayland backend (pending, one PR per milestone)
 

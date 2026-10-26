@@ -31,9 +31,9 @@
 void sn_startup(gboolean reconfig) {}
 void sn_shutdown(gboolean reconfig) {}
 gboolean sn_app_starting() { return FALSE; }
-Time sn_app_started(const gchar *id, const gchar *wmclass, const gchar *name)
+guint32 sn_app_started(const gchar *id, const gchar *wmclass, const gchar *name)
 {
-    return CurrentTime;
+    return 0;
 }
 gboolean sn_get_desktop(gchar *id, guint *desktop) { return FALSE; }
 void sn_setup_spawn_environment(const gchar *program, const gchar *name,
@@ -163,10 +163,10 @@ static void sn_event_func(SnMonitorEvent *ev, gpointer data)
         screen_set_root_cursor();
 }
 
-Time sn_app_started(const gchar *id, const gchar *wmclass, const gchar *name)
+guint32 sn_app_started(const gchar *id, const gchar *wmclass, const gchar *name)
 {
     GSList *it;
-    Time t = CurrentTime;
+    guint32 t = 0;
 
     if (!id && !wmclass)
         return t;

@@ -30,9 +30,7 @@
 #include "keyboard.h"
 #include "focus.h"
 #include "stacking.h"
-#include "obt/prop.h"
 
-#include <X11/Xlib.h>
 #include <glib.h>
 
 #define FOCUS_INDICATOR_WIDTH 6

@@ -28,7 +28,6 @@
 #include "translate.h"
 #include "mouse.h"
 #include "gettext.h"
-#include "obt/display.h"
 
 #include <glib.h>
 
@@ -219,7 +218,7 @@ gboolean mouse_event(ObClient *client, const ObInputEvent *e)
 
     switch (e->type) {
     case OB_INPUT_BUTTON_PRESS:
-        context = frame_context(client, (Window)e->over,
+        context = frame_context(client, (ObWindowId)e->over, e->desktop,
                                 e->x, e->y);
         context = mouse_button_frame_context(context, e->button,
                                              e->mods);
@@ -268,7 +267,8 @@ gboolean mouse_event(ObClient *client, const ObInputEvent *e)
 
     case OB_INPUT_BUTTON_RELEASE:
         /* use where the press occured in the window */
-        context = frame_context(client, (Window)e->over, pwx, pwy);
+        context = frame_context(client, (ObWindowId)e->over, e->desktop,
+                                pwx, pwy);
         context = mouse_button_frame_context(context, e->button,
                                              e->mods);
 
@@ -325,7 +325,8 @@ gboolean mouse_event(ObClient *client, const ObInputEvent *e)
 
     case OB_INPUT_MOTION:
         if (button) {
-            context = frame_context(client, (Window)e->over, pwx, pwy);
+            context = frame_context(client, (ObWindowId)e->over, e->desktop,
+                                pwx, pwy);
             context = mouse_button_frame_context(context, button, state);
 
             if (ABS(e->root_x - px) >= config_mouse_threshold ||

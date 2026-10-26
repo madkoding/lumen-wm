@@ -387,7 +387,7 @@ void x11_get_geometry(ObSurfaceId s, ObSurfaceInfo *info)
     }
 }
 
-ObCanvasId x11_canvas_new(ObCanvasLayer layer, ObSurfaceId owner)
+Window x11_decor_new(ObSurfaceId owner)
 {
     XSetWindowAttributes attrib;
     XWindowAttributes wattrib;
@@ -395,15 +395,12 @@ ObCanvasId x11_canvas_new(ObCanvasLayer layer, ObSurfaceId owner)
     Visual *visual = NULL;
     Decor *d;
 
-    /* only frames are made here so far */
-    g_return_val_if_fail(layer == OB_CANVAS_DECOR, OB_CANVAS_NONE);
-
     d = g_slice_new0(Decor);
     d->owner = (Window)owner;
 
     /* a client with a 32-bit visual gets a frame with its visual, unless
        we're already running at 32 bit depth */
-    if (RrDepth(ob_rr_inst) != 32 &&
+    if (x11_depth() != 32 &&
         XGetWindowAttributes(obt_display, d->owner, &wattrib) &&
         wattrib.depth == 32)
         visual = wattrib.visual;
@@ -420,8 +417,8 @@ ObCanvasId x11_canvas_new(ObCanvasLayer layer, ObSurfaceId owner)
         attrib.border_pixel = BlackPixel(obt_display, ob_screen);
     }
     d->frame = XCreateWindow(obt_display, obt_root(ob_screen), 0, 0, 1, 1, 0,
-                             (visual ? 32 : RrDepth(ob_rr_inst)), InputOutput,
-                             (visual ? visual : RrVisual(ob_rr_inst)),
+                             (visual ? 32 : x11_depth()), InputOutput,
+                             (visual ? visual : x11_visual()),
                              mask, &attrib);
 
     if (!decor_frames) {
@@ -430,15 +427,13 @@ ObCanvasId x11_canvas_new(ObCanvasLayer layer, ObSurfaceId owner)
     }
     g_hash_table_insert(decor_frames, &d->frame, d);
     g_hash_table_insert(decor_owners, &d->owner, d);
-    return (ObCanvasId)d->frame;
+    return d->frame;
 }
 
-void x11_canvas_free(ObCanvasId c)
+void x11_decor_free(Window w)
 {
-    Window w = (Window)c;
     Decor *d = decor_frames ? g_hash_table_lookup(decor_frames, &w) : NULL;
 
-    XDestroyWindow(obt_display, w);
     if (d) {
         if (d->colormap)
             XFreeColormap(obt_display, d->colormap);
@@ -580,9 +575,9 @@ static void install_colormap(Window w, gboolean install)
 
     if (c == None) {
         if (install)
-            XInstallColormap(obt_display, RrColormap(ob_rr_inst));
+            XInstallColormap(obt_display, x11_colormap());
         else
-            XUninstallColormap(obt_display, RrColormap(ob_rr_inst));
+            XUninstallColormap(obt_display, x11_colormap());
     } else {
         obt_display_ignore_errors(TRUE);
         if (install)

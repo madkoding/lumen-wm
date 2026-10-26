@@ -20,6 +20,7 @@
 #ifndef __frame_h
 #define __frame_h
 
+#include "backend.h"
 #include "geom.h"
 #include "obrender/render.h"
 
@@ -83,9 +84,9 @@ struct _ObFrame
 {
     struct _ObClient *client;
 
-    /*! the decoration canvas the client sits in (canvas_new); a Window
-      while the decorations below are windows of their own */
-    Window    window;
+    /*! the decoration canvas the client sits in (canvas_new); the parts
+      below are its child canvases */
+    ObWindowId window;
 
     Strut     size;    /* the size of the frame */
     Strut     oldsize; /* the size of the frame last told to the client */
@@ -95,55 +96,55 @@ struct _ObFrame
     guint     functions;
     guint     decorations;
 
-    Window    title;
-    Window    label;
-    Window    max;
-    Window    close;
-    Window    desk;
-    Window    shade;
-    Window    icon;
-    Window    iconify;
-    Window    handle;
-    Window    lgrip;
-    Window    rgrip;
+    ObWindowId title;
+    ObWindowId label;
+    ObWindowId max;
+    ObWindowId close;
+    ObWindowId desk;
+    ObWindowId shade;
+    ObWindowId icon;
+    ObWindowId iconify;
+    ObWindowId handle;
+    ObWindowId lgrip;
+    ObWindowId rgrip;
 
     /* These are borders of the frame and its elements */
-    Window    titleleft;
-    Window    titletop;
-    Window    titletopleft;
-    Window    titletopright;
-    Window    titleright;
-    Window    titlebottom;
-    Window    left;
-    Window    right;
-    Window    handleleft;
-    Window    handletop;
-    Window    handleright;
-    Window    handlebottom;
-    Window    lgriptop;
-    Window    lgripleft;
-    Window    lgripbottom;
-    Window    rgriptop;
-    Window    rgripright;
-    Window    rgripbottom;
-    Window    innerleft;    /*!< For drawing the inner client border */
-    Window    innertop;     /*!< For drawing the inner client border */
-    Window    innerright;   /*!< For drawing the inner client border */
-    Window    innerbottom;  /*!< For drawing the inner client border */
-    Window    innerblb;
-    Window    innerbll;
-    Window    innerbrb;
-    Window    innerbrr;
-    Window    backback;     /*!< A colored window shown while resizing */
-    Window    backfront;    /*!< An undrawn-in window, to prevent flashing on
+    ObWindowId titleleft;
+    ObWindowId titletop;
+    ObWindowId titletopleft;
+    ObWindowId titletopright;
+    ObWindowId titleright;
+    ObWindowId titlebottom;
+    ObWindowId left;
+    ObWindowId right;
+    ObWindowId handleleft;
+    ObWindowId handletop;
+    ObWindowId handleright;
+    ObWindowId handlebottom;
+    ObWindowId lgriptop;
+    ObWindowId lgripleft;
+    ObWindowId lgripbottom;
+    ObWindowId rgriptop;
+    ObWindowId rgripright;
+    ObWindowId rgripbottom;
+    ObWindowId innerleft;    /*!< For drawing the inner client border */
+    ObWindowId innertop;     /*!< For drawing the inner client border */
+    ObWindowId innerright;   /*!< For drawing the inner client border */
+    ObWindowId innerbottom;  /*!< For drawing the inner client border */
+    ObWindowId innerblb;
+    ObWindowId innerbll;
+    ObWindowId innerbrb;
+    ObWindowId innerbrr;
+    ObWindowId backback;     /*!< A colored window shown while resizing */
+    ObWindowId backfront;    /*!< An undrawn-in window, to prevent flashing on
                                  unmap */
 
     /* These are resize handles inside the titlebar */
-    Window    topresize;
-    Window    tltresize;
-    Window    tllresize;
-    Window    trtresize;
-    Window    trrresize;
+    ObWindowId topresize;
+    ObWindowId tltresize;
+    ObWindowId tllresize;
+    ObWindowId trtresize;
+    ObWindowId trrresize;
 
     gint      icon_on;    /* if the window icon button is on */
     gint      label_on;   /* if the window title is on */
@@ -234,8 +235,9 @@ ObFrameContext frame_context_from_string(const gchar *name);
 */
 gboolean frame_next_context_from_string(gchar *names, ObFrameContext *cx);
 
-ObFrameContext frame_context(struct _ObClient *self, Window win,
-                             gint x, gint y);
+/*! desktop: win is the desktop (ObInputEvent's desktop) */
+ObFrameContext frame_context(struct _ObClient *self, ObWindowId win,
+                             gboolean desktop, gint x, gint y);
 
 /*! Applies gravity to the client's position to find where the frame should
   be positioned.

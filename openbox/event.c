@@ -318,7 +318,8 @@ static void event_handle_frame_pointer(ObClient *client,
             px = e->x;
             py = e->y;
 
-            pcon = frame_context(client, (Window)e->over, px, py);
+            pcon = frame_context(client, (ObWindowId)e->over,
+                                 e->desktop, px, py);
             pcon = mouse_button_frame_context(pcon, e->button,
                                               e->mods);
         }
@@ -333,7 +334,8 @@ static void event_handle_frame_pointer(ObClient *client,
             !grab_on_keyboard())
         {
             /* use where the press occured */
-            con = frame_context(client, (Window)e->over, px, py);
+            con = frame_context(client, (ObWindowId)e->over,
+                                e->desktop, px, py);
             con = mouse_button_frame_context(con, e->button,
                                              e->mods);
 
@@ -355,7 +357,7 @@ static void event_handle_frame_pointer(ObClient *client,
            notifies, but we still get motion events */
         if (grab_on_pointer()) break;
 
-        con = frame_context(client, (Window)e->over,
+        con = frame_context(client, (ObWindowId)e->over, e->desktop,
                             e->x, e->y);
         switch (con) {
         case OB_FRAME_CONTEXT_TITLEBAR:
@@ -384,7 +386,7 @@ static void event_handle_frame_pointer(ObClient *client,
         }
         break;
     case OB_INPUT_LEAVE:
-        con = frame_context(client, (Window)e->over,
+        con = frame_context(client, (ObWindowId)e->over, e->desktop,
                             e->x, e->y);
         switch (con) {
         case OB_FRAME_CONTEXT_TITLEBAR:
@@ -444,7 +446,7 @@ static void event_handle_frame_pointer(ObClient *client,
         break;
     case OB_INPUT_ENTER:
     {
-        con = frame_context(client, (Window)e->over,
+        con = frame_context(client, (ObWindowId)e->over, e->desktop,
                             e->x, e->y);
         switch (con) {
         case OB_FRAME_CONTEXT_FRAME:
@@ -736,7 +738,7 @@ static void event_handle_menu(ObMenuFrame *frame, const ObInputEvent *ev)
 {
     ObMenuFrame *f;
     ObMenuEntryFrame *e;
-    Window over = (Window)ev->over, next = (Window)ev->next_over;
+    ObWindowId over = (ObWindowId)ev->over, next = (ObWindowId)ev->next_over;
 
     switch (ev->type) {
     case OB_INPUT_MOTION:
@@ -823,7 +825,7 @@ void event_input(const ObInputEvent *e)
     if (shelf_input(e))
         return;
 
-    if ((obwin = window_find((Window)e->over))) {
+    if ((obwin = window_find((ObWindowId)e->over))) {
         switch (obwin->type) {
         case OB_WINDOW_CLASS_DOCK:
             dock = WINDOW_AS_DOCK(obwin);
@@ -845,7 +847,7 @@ void event_input(const ObInputEvent *e)
         }
     }
     else
-        dockapp = dock_find_dockapp((Window)e->over);
+        dockapp = dock_find_dockapp((ObWindowId)e->over);
 
     if (client) {
         if (e->type != OB_INPUT_KEY_PRESS && e->type != OB_INPUT_KEY_RELEASE)
@@ -881,7 +883,7 @@ void event_input(const ObInputEvent *e)
             pressed == e->button ||
             /* ...or it if it was physically on an openbox
                internal window... */
-            ((w = window_find((Window)e->under)) &&
+            ((w = window_find((ObWindowId)e->under)) &&
              (WINDOW_IS_INTERNAL(w) || WINDOW_IS_DOCK(w))))
             /* ...then process the event, otherwise ignore it */
         {
@@ -1060,7 +1062,7 @@ gboolean event_time_after(guint32 t1, guint32 t2)
       - http://tronche.com/gui/x/xlib/input/pointer-grabbing.html
     */
 
-    /* TIME_HALF is not half of the number space of a Time type variable.
+    /* TIME_HALF is not half of the number space of a guint32 type variable.
      * Rather, it is half the number space of a timestamp value, which is
      * always 32 bits. */
 #define TIME_HALF (guint32)(1 << 31)

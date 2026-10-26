@@ -22,7 +22,6 @@
 #include "backend.h"
 
 #include <glib.h>
-#include <X11/Xlib.h>
 
 /*! The space the shelf takes from the work area (bottom edge only) */
 extern StrutPartial shelf_strut;
@@ -31,18 +30,13 @@ extern StrutPartial shelf_strut;
   -1 when the shelf is not shown */
 gint shelf_menu_limit(void);
 
-/*! When a compositor runs, the 32-bit visual and colormap a menu frame can use
-  to be drawn with real alpha: its rounded corners are then anti-aliased by
-  cairo instead of cut with a shape mask. FALSE when there is none. */
-gboolean shelf_menu_argb(Visual **visual, Colormap *cmap);
-
 struct _ObMenuFrame;
 
 /*! Paints a whole menu frame on its ARGB window with cairo: the rounded box
   with the theme's border and background, then every entry (the selected one
   on a rounded highlight, titles, separators, icons, submenu arrows). Its
   entries' windows only take input. */
-void shelf_menu_paint(struct _ObMenuFrame *frame, Visual *visual);
+void shelf_menu_paint(struct _ObMenuFrame *frame);
 
 /*! The shelf is two floating islands at the bottom of the screen: a dock
   listing the running applications, and a clock with status glyphs. It is
@@ -57,7 +51,5 @@ void shelf_menu_startup(void);
 /*! Gives the shelf a chance to take an input event. Returns TRUE when it
   was over the shelf and must not be processed any further. */
 gboolean shelf_input(const ObInputEvent *e);
-/*! Draws the shelf again when c is its canvas. */
-gboolean shelf_exposed(ObCanvasId c);
 
 #endif

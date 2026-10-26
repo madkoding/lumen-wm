@@ -23,7 +23,7 @@ through the core rather than kept behind a layer:
 | Move/resize | `moveresize.c` | XSync counters, pointer warps |
 | Input | `grab.c`, `keyboard.c`, `mouse.c` | passive and active grabs |
 | Stacking | `stacking.c` | XRestackWindows |
-| Drawing | `obrender/`, `menuframe.c`, `shelf.c`, popups | Xft, Xlib pixmaps, cairo-xlib |
+| Drawing | `obrender/`, `menuframe.c`, `shelf.c`, popups | cairo image surfaces; the X11 backend shows them (cairo-xlib) |
 
 Most of the rest (`place.c`, `focus.c`, `actions/`, `config.c`, `menu.c`, `resist.c`) is logic that only touches X
 through those files.
@@ -127,7 +127,7 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       host, and builds the icon images from the ARGB sizes the backend hands over (`ObIcon`), publishing the
       theme's icon with `publish_surface_icon` for a window that has none. Still read in `client.c`: the geometry,
       shape and colormap, which go with the frames. The opacity a client asks for is `OB_SURFACE_INFO_OPACITY`,
-      and the core hands it to its frame with `canvas_set_opacity` (the frame's window until frames are canvases).
+      and the core hands it to its frame with `canvas_set_opacity`.
    7. Requests: `event.c` splits in two (done). The X11 backend reads the queue (`backend-x11-event.c`) and
       turns each XEvent into `ObBackendEvents`; the core half (`backend-events.c`, and `event.c` for input)
       handles them. Property changes on clients are `surface_changed`, with the queue compression for titles
@@ -162,7 +162,7 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       queued motion. `event_input()` finds what the input is over and hands it on. Pointer crossings are `OB_INPUT_ENTER` and `OB_INPUT_LEAVE`, with why
       (`crossing`: a grab starting or ending), whether it only went into a child (`inferior`) and, for a leave,
       what it enters next when that is already known (`next_over`); the frames, the dock and the menus take them
-      (done; the shelf too, and it repaints on `canvas_exposed`).
+      (done; the shelf too).
    9. Move/resize: XSync and pointer warps go behind the backend. Done: `moveresize_start()` takes an
       `ObMoveResize` (the `_NET_WM_MOVERESIZE` directions as a core enum) instead of the atoms, and the
       client's `_NET_WM_MOVERESIZE` is `request_move_resize`. The pointer queries and warps (keyboard moves,
@@ -171,9 +171,17 @@ Every step is its own small PR, and the contract tests stay green on X11 through
       answer is `surface_synced`: the backend owns the XSync counter and alarm (`OB_SURFACE_INFO_SYNC`
       reads the counter id) and the core only counts the pending request and its timeouts. A Wayland
       backend maps the same calls onto configure and ack_configure.
-4. **Render without Xlib**: obrender, frames, the shelf, menus and popups draw into cairo image surfaces and hand
-   them to `canvas_present`. Their X windows become canvases at the same time: a frame is one canvas, and the
-   core finds the part under the pointer from coordinates. Themes are unchanged, and `tools/shelf-themes.sh` checks that they still read.
+4. **Render without Xlib** (done): obrender draws into cairo image surfaces (`RrPaintImage`) and needs no
+   display: colors parse like XParseColor, fonts take their settings from the backend (`font_settings`), XBM
+   masks have their own reader. Every window the core draws is a canvas: frames are a tree of child canvases
+   (`canvas_new_child`), so the part under the pointer is still the canvas that got the event; menus, the shelf,
+   popups, the focus indicator, the dock and prompts (`OB_CANVAS_DIALOG`, with `dialog_set_*`) are canvases too.
+   `canvas_present` keeps the picture (X11 makes it the window's background pixmap), so there is no expose event;
+   `canvas_set_outline` and `canvas_set_input` do the round corners and input shapes, `screen_read` the shelf's
+   wallpaper snapshot. Core headers use `ObWindowId`, `guint32` times and `ObGravity`. Left in X11 in the core:
+   keysyms and modifier masks (`obt/keyboard`, xkbcommon in step 5), XSMP through ICE (`session.c`), libsn
+   (`startupnotify.c`) and Xrm for theme files (`obrender/theme.c`, no display needed). Themes are unchanged, and
+   `tools/shelf-themes.sh` checks that they still read.
 5. **backend-wlroots**: a compositor on wlroots' scene graph with xdg-shell, xdg-decoration, layer-shell,
    foreign-toplevel, ext-workspace and XWayland. The contract tests get a Wayland driver that runs on wlroots'
    headless backend, and both drivers run in CI.

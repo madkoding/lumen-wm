@@ -19,7 +19,7 @@
 #ifndef __group_h
 #define __group_h
 
-#include <X11/Xlib.h>
+#include "backend.h"
 #include <glib.h>
 
 typedef struct _ObGroup ObGroup;
@@ -28,7 +28,7 @@ struct _ObClient;
 
 struct _ObGroup
 {
-    Window leader;
+    ObWindowId leader;
 
     /* list of clients */
     GSList *members;
@@ -37,7 +37,7 @@ struct _ObGroup
 void group_startup(gboolean reconfig);
 void group_shutdown(gboolean reconfig);
 
-ObGroup *group_add(Window leader, struct _ObClient *client);
+ObGroup *group_add(ObWindowId leader, struct _ObClient *client);
 
 void group_remove(ObGroup *self, struct _ObClient *client);
 

@@ -22,6 +22,7 @@
 #include "render.h"
 #include "geom.h"
 #include <pango/pango.h>
+#include <cairo.h>
 
 struct _RrFont {
     const RrInstance *inst;
@@ -33,7 +34,7 @@ struct _RrFont {
     gint descent; /*!< The font's descent in pango-units */
 };
 
-void RrFontDraw(XftDraw *d, RrTextureText *t, RrRect *position);
+void RrFontDraw(cairo_t *cr, RrTextureText *t, RrRect *position);
 
 /*! Increment the references for this font, RrFontClose will decrement until 0
   and then really close it */

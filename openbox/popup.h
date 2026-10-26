@@ -19,6 +19,7 @@
 #ifndef __popup_h
 #define __popup_h
 
+#include "backend.h"
 #include "client.h"
 #include "window.h"
 #include "obrender/render.h"
@@ -36,9 +37,9 @@ typedef struct _ObPagerPopup ObPagerPopup;
 struct _ObPopup
 {
     ObWindow obwin;
-    Window bg;
+    ObWindowId bg;
 
-    Window text;
+    ObWindowId text;
 
     gboolean hasicon;
     RrAppearance *a_bg;
@@ -66,7 +67,7 @@ struct _ObIconPopup
 {
     ObPopup *popup;
 
-    Window icon;
+    ObWindowId icon;
     RrAppearance *a_icon;
 };
 
@@ -76,7 +77,7 @@ struct _ObPagerPopup
 
     guint desks;
     guint curdesk;
-    Window *wins;
+    ObWindowId *wins;
     RrAppearance *hilight;
     RrAppearance *unhilight;
 };

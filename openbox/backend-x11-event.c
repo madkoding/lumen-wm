@@ -539,10 +539,6 @@ static void event_process(const XEvent *ec, gpointer data)
         focus_in(e, client);
     else if (e->type == FocusOut)
         focus_out(e, client);
-    else if (e->type == Expose) {
-        if (!e->xexpose.count)
-            x11_events->canvas_exposed((ObCanvasId)window);
-    }
     else if (x11_input_event(e, &input)) {
         /* keys typed during a grab go to menus, which want their text */
         if (input.type == OB_INPUT_KEY_PRESS &&

@@ -1,6 +1,5 @@
 #include "openbox/actions.h"
 #include "openbox/moveresize.h"
-#include "obt/prop.h"
 
 static gboolean run_func(ObActionsData *data, gpointer options);
 
