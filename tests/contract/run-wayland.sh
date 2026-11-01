@@ -30,6 +30,8 @@ mkdir -m 700 "$XDG_RUNTIME_DIR"
 unset DISPLAY WAYLAND_DISPLAY
 
 mkdir -p "$WORK/home"
+# themes the configurations pick (configs/*.sed)
+cp -R "$HERE/themes" "$WORK/home/.themes"
 start_wm() {
     rm -f "$XDG_RUNTIME_DIR"/wayland-*
     HOME=$WORK/home XDG_CONFIG_HOME=$WORK/home/.config \

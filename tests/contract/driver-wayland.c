@@ -927,6 +927,13 @@ ct_rect ct_screen(void)
     return screen;
 }
 
+/* xdg-shell clients can't read the screen; no CT_CAP_PIXELS. */
+uint32_t ct_screen_pixel(int x, int y)
+{
+    (void)x; (void)y;
+    return 0;
+}
+
 ct_rect ct_workarea(void)
 {
     refresh();
@@ -1038,6 +1045,11 @@ void ct_input_keys(const char *keys)
     key(k, false);
     if (shift) key(mod_key('S'), false);
     mods(m, n, false);
+}
+
+void ct_input_mods(const char *m, bool down)
+{
+    if (vkbd) mods(m, strlen(m), down);
 }
 
 static void move_to(int x, int y)

@@ -34,6 +34,14 @@ Or use your own colours. Fill in any of them and leave the rest empty:
 
 If a theme's colour would be hard to read, the shelf picks black or white instead.
 
+The outline Alt-Tab draws around the next window also comes from the theme. Set these in its `themerc`
+(they default to white on black):
+
+```
+focus.cycle.border.color: #7aa2f7
+focus.cycle.bg.color: #21252b
+```
+
 ### Pin your apps
 
 Right click any open app in the dock and choose **Pin to dock**. Choose **Unpin from dock** to remove it.

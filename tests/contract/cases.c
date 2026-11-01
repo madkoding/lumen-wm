@@ -498,6 +498,28 @@ static void alt_tab_switches(void)
     ct_window_destroy(a);
 }
 
+/* While Alt-Tab cycles, the indicator around the window it would focus
+   is drawn in the theme's focus.cycle.border.color (its outer line) and
+   focus.cycle.bg.color (inside); configs/cycle-colors.sed picks
+   themes/ContractCycle, which sets them to red and green. */
+static void focus_cycle_colors(void)
+{
+    CT_REQUIRE(CT_CAP_INPUT | CT_CAP_PIXELS);
+    ct_win *a = mapped(CT_WIN_NORMAL, "cycle a", SMALL);
+    ct_win *b = mapped(CT_WIN_NORMAL, "cycle b", SMALL);
+    CT_EVENTUALLY(ct_window_focused(b));
+
+    ct_input_mods("A", true);
+    ct_input_keys("Tab");
+    ct_rect f = ct_window_frame(a);
+    CT_EVENTUALLY(ct_screen_pixel(f.x, f.y) == 0xff0000);
+    CT_EVENTUALLY(ct_screen_pixel(f.x + 3, f.y + 3) == 0x00ff00);
+    ct_input_mods("A", false);
+    CT_EVENTUALLY(ct_window_focused(a));
+    ct_window_destroy(b);
+    ct_window_destroy(a);
+}
+
 /* Clicking a window behind another focuses and raises it, and the client
    still gets the click. */
 static void click_focuses_and_passes(void)
@@ -759,5 +781,6 @@ const ct_case ct_cases[] = {
     { "keyboard_move_steps", keyboard_move_steps },
     { "opacity_follows_client", opacity_follows_client },
     { "follow_mouse_focuses", follow_mouse_focuses, "follow-mouse" },
+    { "focus_cycle_colors", focus_cycle_colors, "cycle-colors" },
     { NULL, NULL }
 };

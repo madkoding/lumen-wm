@@ -11,6 +11,7 @@
 #define lumen__contract_driver_h
 
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct { int x, y, w, h; } ct_rect;
 
@@ -28,6 +29,7 @@ typedef enum {
     CT_CAP_SYNC_RESIZE     = 1 << 6, /* clients can sync resizes (XSync) */
     CT_CAP_OPACITY         = 1 << 7, /* clients can ask to be see-through */
     CT_CAP_CLIENT_DESKTOP  = 1 << 8, /* a client can ask for a desktop */
+    CT_CAP_PIXELS          = 1 << 9, /* the driver can read the screen */
 } ct_caps;
 
 typedef enum {
@@ -125,6 +127,9 @@ void ct_request_window_desktop(ct_win *w, int d);
 /* What the user does (CT_CAP_INPUT). keys are the window manager's own
    syntax: modifiers C, A, S and W, then a key name, as in "C-A-Right". */
 void ct_input_keys(const char *keys);
+/* Press (down) or let go of mods ("A", "C-S" style letters without the
+   dashes), to hold them across ct_input_keys() calls. */
+void ct_input_mods(const char *mods, bool down);
 /* Hold mods ("A", or "" for none), press the first button over the middle of
    the window, drag it by dx, dy and let go. */
 void ct_input_drag(ct_win *w, const char *mods, int dx, int dy);
@@ -164,6 +169,8 @@ double ct_window_shown_opacity(ct_win *w);
 bool ct_window_clicked(ct_win *w);
 
 ct_rect ct_screen(void);
+/* The color on screen at x, y as 0xRRGGBB (CT_CAP_PIXELS). */
+uint32_t ct_screen_pixel(int x, int y);
 ct_rect ct_workarea(void);
 int ct_desktop_count(void);
 int ct_current_desktop(void);
