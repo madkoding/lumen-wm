@@ -41,7 +41,9 @@ against the build's prefix, and `WMARGS=--debug` passes flags to Lumen.
 Cases written for another configuration name it in `ct_cases` (the third
 field). `run.sh` then starts Lumen again with `data/rc.xml` changed by
 `configs/NAME.sed` and runs them with `contract-x11 --config NAME`;
-`run-wayland.sh` does the same.
+`run-wayland.sh` does the same. Themes a configuration picks live in
+`themes/` (copied to the test `~/.themes`). Cases that read the screen
+(`ct_screen_pixel`) need `CT_CAP_PIXELS`, which only the X11 driver has.
 
 ## Adding a case
 

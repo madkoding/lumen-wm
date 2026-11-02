@@ -37,6 +37,8 @@ done
 export DISPLAY=$DISP
 
 mkdir -p "$WORK/home"
+# themes the configurations pick (configs/*.sed)
+cp -R "$HERE/themes" "$WORK/home/.themes"
 start_wm() {
     HOME=$WORK/home XDG_CONFIG_HOME=$WORK/home/.config \
         XDG_DATA_DIRS=$PREFIX/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share} \

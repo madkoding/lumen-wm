@@ -39,7 +39,6 @@ static struct
 } focus_indicator;
 
 static RrAppearance *a_focus_indicator;
-static RrColor      *color_white;
 static gboolean      visible;
 
 static ObWindowId create_window(void)
@@ -53,6 +52,27 @@ static ObWindowId create_window(void)
 void focus_cycle_indicator_startup(gboolean reconfig)
 {
     visible = FALSE;
+
+    a_focus_indicator = RrAppearanceNew(ob_rr_inst, 4);
+    a_focus_indicator->surface.grad = RR_SURFACE_SOLID;
+    a_focus_indicator->surface.relief = RR_RELIEF_FLAT;
+    a_focus_indicator->surface.primary =
+        RrColorCopy(ob_rr_theme->focus_cycle_bg_color);
+
+    /* Texture colors are not owned by the appearance, so just use the theme's
+       pointer. */
+    a_focus_indicator->texture[0].type = RR_TEXTURE_LINE_ART;
+    a_focus_indicator->texture[0].data.lineart.color =
+        ob_rr_theme->focus_cycle_border_color;
+    a_focus_indicator->texture[1].type = RR_TEXTURE_LINE_ART;
+    a_focus_indicator->texture[1].data.lineart.color =
+        ob_rr_theme->focus_cycle_border_color;
+    a_focus_indicator->texture[2].type = RR_TEXTURE_LINE_ART;
+    a_focus_indicator->texture[2].data.lineart.color =
+        ob_rr_theme->focus_cycle_border_color;
+    a_focus_indicator->texture[3].type = RR_TEXTURE_LINE_ART;
+    a_focus_indicator->texture[3].data.lineart.color =
+        ob_rr_theme->focus_cycle_border_color;
 
     if (reconfig) return;
 
@@ -78,31 +98,13 @@ void focus_cycle_indicator_startup(gboolean reconfig)
                INTERNAL_AS_WINDOW(&focus_indicator.right));
     window_add(&focus_indicator.bottom.window,
                INTERNAL_AS_WINDOW(&focus_indicator.bottom));
-
-    color_white = RrColorNew(ob_rr_inst, 0xff, 0xff, 0xff);
-
-    a_focus_indicator = RrAppearanceNew(ob_rr_inst, 4);
-    a_focus_indicator->surface.grad = RR_SURFACE_SOLID;
-    a_focus_indicator->surface.relief = RR_RELIEF_FLAT;
-    a_focus_indicator->surface.primary = RrColorNew(ob_rr_inst,
-                                                    0, 0, 0);
-    a_focus_indicator->texture[0].type = RR_TEXTURE_LINE_ART;
-    a_focus_indicator->texture[0].data.lineart.color = color_white;
-    a_focus_indicator->texture[1].type = RR_TEXTURE_LINE_ART;
-    a_focus_indicator->texture[1].data.lineart.color = color_white;
-    a_focus_indicator->texture[2].type = RR_TEXTURE_LINE_ART;
-    a_focus_indicator->texture[2].data.lineart.color = color_white;
-    a_focus_indicator->texture[3].type = RR_TEXTURE_LINE_ART;
-    a_focus_indicator->texture[3].data.lineart.color = color_white;
 }
 
 void focus_cycle_indicator_shutdown(gboolean reconfig)
 {
-    if (reconfig) return;
-
-    RrColorFree(color_white);
-
     RrAppearanceFree(a_focus_indicator);
+
+    if (reconfig) return;
 
     window_remove(focus_indicator.top.window);
     window_remove(focus_indicator.left.window);

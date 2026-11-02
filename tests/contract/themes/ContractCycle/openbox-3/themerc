@@ -1,0 +1,3 @@
+# Contract test theme: everything else falls back to the defaults.
+focus.cycle.border.color: #ff0000
+focus.cycle.bg.color: #00ff00

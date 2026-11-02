@@ -175,6 +175,7 @@ const char *ct_driver_name(void)
 ct_caps ct_driver_caps(void)
 {
     return CT_CAP_CLIENT_POSITION | CT_CAP_DESKTOPS | CT_CAP_STRUTS |
+        CT_CAP_PIXELS |
         CT_CAP_STACKING | CT_CAP_CLIENT_FOCUS | CT_CAP_OPACITY |
         CT_CAP_CLIENT_DESKTOP
 #ifdef CT_HAVE_XTEST
@@ -763,6 +764,17 @@ ct_rect ct_screen(void)
     return (ct_rect){ 0, 0, DisplayWidth(dpy, s), DisplayHeight(dpy, s) };
 }
 
+uint32_t ct_screen_pixel(int x, int y)
+{
+    XImage *img = XGetImage(dpy, root, x, y, 1, 1, AllPlanes, ZPixmap);
+    uint32_t p;
+
+    if (!img) return 0;
+    p = (uint32_t)(XGetPixel(img, 0, 0) & 0xffffff);
+    XDestroyImage(img);
+    return p;
+}
+
 ct_rect ct_workarea(void)
 {
     unsigned long *v;
@@ -835,6 +847,18 @@ void ct_input_keys(const char *keys)
     /* release in the opposite order */
     for (size_t i = n; i > 0; --i)
         fake_mods(&mods[i - 1], 1, False);
+    XFlush(dpy);
+}
+
+void ct_input_mods(const char *mods, bool down)
+{
+    size_t n = strlen(mods);
+
+    if (down)
+        fake_mods(mods, n, True);
+    else
+        for (size_t i = n; i > 0; --i)
+            fake_mods(&mods[i - 1], 1, False);
     XFlush(dpy);
 }
 
@@ -945,6 +969,7 @@ void ct_input_root_click(int button)
 }
 #else
 void ct_input_keys(const char *keys) { (void)keys; }
+void ct_input_mods(const char *mods, bool down) { (void)mods; (void)down; }
 void ct_input_root_click(int button) { (void)button; }
 void ct_input_title_click(ct_win *w, int count) { (void)w; (void)count; }
 void ct_input_click(ct_win *w, int x, int y) { (void)w; (void)x; (void)y; }
