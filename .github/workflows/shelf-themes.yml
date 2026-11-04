@@ -53,14 +53,26 @@ jobs:
     runs-on: ubuntu-24.04
     # a stuck mirror or a hung step fails the job instead of holding it
     timeout-minutes: 15
+    env:
+      CCACHE_DIR: /home/runner/.cache/ccache
+      CCACHE_MAXSIZE: 200M
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/deps
         timeout-minutes: 10
+      # meson compiles through ccache when it is installed; the cache of
+      # the newest run is restored, so only changed files are compiled
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-
       - name: Build, unit tests and install
         run: |
+          ccache --zero-stats
           meson setup build --prefix="$PREFIX" -Dwayland=enabled
           meson compile -C build
+          ccache --show-stats
           meson test -C build --print-errorlogs
           meson install -C build
       # tar keeps modes and symlinks (openbox -> lumen-wm), which the

@@ -34,7 +34,7 @@ runs:
         if [ -n "$RUNTIME" ]; then
           pkgs="$tools $(cat "$RUNTIME")"
         else
-          pkgs="$tools build-essential meson ninja-build \
+          pkgs="$tools build-essential ccache meson ninja-build \
             gettext pkg-config libglib2.0-dev libxml2-dev \
             libpango1.0-dev libcairo2-dev libx11-dev libxext-dev \
             libxcursor-dev libxrandr-dev libxinerama-dev libxkbcommon-dev \
