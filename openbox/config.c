@@ -1095,10 +1095,21 @@ static gchar *shelf_string(xmlNodePtr node, const gchar *name)
 
 /* the levels the shelf shows when rc.xml leaves them out */
 #define SHELF_NETWORK_LIST "nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID dev wifi"
-#define SHELF_VOLUME_SET "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@"
+/* PipeWire's wpctl when it is there, else PulseAudio's pactl (a container, an older desktop) */
+#define SHELF_HAS_WPCTL "command -v wpctl >/dev/null 2>&1"
+#define SHELF_VOLUME_STEP(wp, pa) \
+    "if " SHELF_HAS_WPCTL "; then wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ " wp \
+    "; else pactl set-sink-volume @DEFAULT_SINK@ " pa "; fi"
+#define SHELF_VOLUME_UP SHELF_VOLUME_STEP("5%+", "+5%")
+#define SHELF_VOLUME_DOWN SHELF_VOLUME_STEP("5%-", "-5%")
+#define SHELF_VOLUME_TOGGLE \
+    "if " SHELF_HAS_WPCTL "; then wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle; " \
+    "else pactl set-sink-mute @DEFAULT_SINK@ toggle; fi"
 #define SHELF_VOLUME_LEVEL \
-    "wpctl get-volume @DEFAULT_AUDIO_SINK@ | " \
-    "awk '{ printf \"%d\", $2 * 100 + 0.5 }'"
+    "if " SHELF_HAS_WPCTL "; then wpctl get-volume @DEFAULT_AUDIO_SINK@ | " \
+    "awk '{ printf \"%d\", $2 * 100 + 0.5 }'; " \
+    "else pactl get-sink-volume @DEFAULT_SINK@ | grep -o '[0-9]*%' | " \
+    "head -n1 | tr -d %; fi"
 
 static void parse_shelf_system(xmlNodePtr node)
 {
@@ -1129,9 +1140,9 @@ static void parse_shelf_system(xmlNodePtr node)
         config_shelf_volume = v;
     } else if (config_shelf_enabled) {
         ObShelfVolume *v = g_slice_new0(ObShelfVolume);
-        v->up = g_strdup(SHELF_VOLUME_SET " 5%+");
-        v->down = g_strdup(SHELF_VOLUME_SET " 5%-");
-        v->toggle = g_strdup("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle");
+        v->up = g_strdup(SHELF_VOLUME_UP);
+        v->down = g_strdup(SHELF_VOLUME_DOWN);
+        v->toggle = g_strdup(SHELF_VOLUME_TOGGLE);
         v->level = g_strdup(SHELF_VOLUME_LEVEL);
         config_shelf_volume = v;
     }
