@@ -17,7 +17,9 @@ PREFIX=${1:-/usr/local}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${2:-$ROOT/docs/screenshots/shelf-themes.png}
 WORK=$(mktemp -d)
-DISP=:97
+# JOBS themes are shot at once (default: the number of CPUs), each on a
+# display of its own from :97 up.
+JOBS=${JOBS:-$(nproc)}
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$WORK"' EXIT
 
 cat >"$WORK/media" <<'X'
@@ -38,12 +40,19 @@ echo 65%
 X
 chmod +x "$WORK/media" "$WORK/weather" "$WORK/wifi" "$WORK/level"
 
-status=0
-shots=()
-menus=()
+themes=()
 for dir in "$ROOT"/themes/${ONLY:-*}/; do
-    t=$(basename "$dir")
-    [ -d "$dir/openbox-3" ] || continue
+    [ -d "$dir/openbox-3" ] && themes+=("$(basename "$dir")")
+done
+# the compositor paints the wallpaper from _XROOTPMAP_ID
+[ -n "${COMPOSITOR:-}" ] &&
+    convert -size 1000x420 gradient:'#6d8fb5-#3b5173' "$WORK/wall.png"
+
+# shoot THEME N: the shots of THEME on display :97+N, and its contrast
+# check in $WORK/THEME.result
+shoot() {
+    t=$1
+    DISP=:$((97 + $2))
     home=$WORK/home-$t
     mkdir -p "$home/.config/openbox" "$home/.themes"
     cp -r "$ROOT"/themes/* "$home/.themes/"
@@ -80,8 +89,6 @@ PY
     export DISPLAY=$DISP
     if [ -n "${COMPOSITOR:-}" ]; then
         # the compositor paints the wallpaper from _XROOTPMAP_ID
-        [ -f "$WORK/wall.png" ] ||
-            convert -size 1000x420 gradient:'#6d8fb5-#3b5173' "$WORK/wall.png"
         hsetroot -fill "$WORK/wall.png" >/dev/null
         picom --backend xrender --no-fading-openclose 2>/dev/null &
         sleep 0.5
@@ -92,9 +99,13 @@ PY
         --config-file "$home/.config/openbox/rc.xml" 2>"$WORK/$t.log" &
     op=$!
     sleep 1
-    xterm -geometry 60x8+60+40 -T Focused &
     xterm -geometry 50x6+420+120 -T Other &
+    xterm -geometry 60x8+60+40 -T Focused -name focused &
     sleep 1.5
+    # whichever xterm maps last takes the focus; give it to the one meant
+    # to have it, so the shot doesn't depend on which started faster
+    timeout 5 xdotool search --sync --classname '^focused$' \
+        windowactivate --sync >/dev/null 2>&1
     xdotool mousemove 175 372; xdotool mousemove 181 376; sleep 0.7
     import -window root "$WORK/$t.png"
     # the menus: a tile's, its window submenu, then the glyphs'
@@ -114,7 +125,6 @@ PY
         n=$((n + 1))
     done
     convert "${parts[@]}" +append "$WORK/$t-menus.png"
-    menus+=("$WORK/$t-menus.png")
     kill $op $xp 2>/dev/null; wait 2>/dev/null
 
     line=$(grep -m1 shelf-material "$WORK/$t.log")
@@ -123,12 +133,32 @@ PY
     if [ -z "$c" ] || [ -z "$h" ] || [ -z "$a" ] ||
        awk "BEGIN{exit !($c < 4.5 || $h < 3.0 || $a < 3.0)}"; then
         echo "FAIL $t: text ${c:-?}:1 (>= 4.5), hover ${h:-?}:1 (>= 3)," \
-             "mark ${a:-?}:1 (>= 3)" >&2
-        status=1
+             "mark ${a:-?}:1 (>= 3)"
     else
         echo "ok   $t: text $c:1, hover $h:1, mark $a:1"
     fi
+}
+
+i=0
+for t in "${themes[@]}"; do
+    while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n; done
+    shoot "$t" $i >"$WORK/$t.result" 2>"$WORK/$t.err" &
+    i=$((i + 1))
+done
+wait
+
+status=0
+shots=()
+menus=()
+for t in "${themes[@]}"; do
+    if grep -q "^ok " "$WORK/$t.result"; then
+        cat "$WORK/$t.result"
+    else
+        status=1
+        cat "$WORK/$t.result" "$WORK/$t.err" >&2
+    fi
     shots+=("$WORK/$t.png")
+    menus+=("$WORK/$t-menus.png")
 done
 
 montage -label '%t' "${shots[@]}" -tile 2x -geometry 900x+8+8 -pointsize 18 \

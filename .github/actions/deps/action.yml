@@ -1,9 +1,18 @@
 name: Install dependencies
 description: >
-  Installs the apt packages Lumen needs to build and to run its tests. The
-  downloaded .debs are cached (a fresh key each ISO week, the newest one
-  restored in between), so a run only fetches what changed in the archive and
-  a slow mirror hurts less.
+  Installs the apt packages Lumen needs: everything to build it and run its
+  tests, or, given runtime, only what an installed build needs to run its
+  tests. The downloaded .debs are cached (a fresh key each ISO week, the
+  newest one restored in between), so a run only fetches what changed in the
+  archive and a slow mirror hurts less.
+inputs:
+  runtime:
+    description: >
+      A file listing the packages the build links against (the build job
+      writes it); when given, those and the test tools are installed instead
+      of the build dependencies.
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -13,20 +22,26 @@ runs:
     - uses: actions/cache@v4
       with:
         path: ~/apt-debs
-        key: apt-${{ runner.os }}-${{ hashFiles('.github/actions/deps/action.yml') }}-${{ steps.week.outputs.week }}
-        restore-keys: apt-${{ runner.os }}-${{ hashFiles('.github/actions/deps/action.yml') }}-
+        key: apt-${{ runner.os }}-${{ inputs.runtime && 'runtime' || 'build' }}-${{ hashFiles('.github/actions/deps/action.yml') }}-${{ steps.week.outputs.week }}
+        restore-keys: apt-${{ runner.os }}-${{ inputs.runtime && 'runtime' || 'build' }}-${{ hashFiles('.github/actions/deps/action.yml') }}-
     - shell: bash
       env:
         DEBIAN_FRONTEND: noninteractive
+        RUNTIME: ${{ inputs.runtime }}
       run: |
-        pkgs="build-essential meson ninja-build \
-          gettext pkg-config libglib2.0-dev libxml2-dev \
-          libpango1.0-dev libcairo2-dev libx11-dev libxext-dev \
-          libxcursor-dev libxrandr-dev libxinerama-dev libxkbcommon-dev \
-          libimlib2-dev libsm-dev libice-dev libxtst-dev \
-          xvfb xdotool xterm imagemagick fonts-dejavu-core picom hsetroot \
-          libwlroots-dev libwayland-dev wayland-protocols libpixman-1-dev \
-          libdrm-dev libxcb1-dev libxcb-icccm4-dev libxcb-ewmh-dev"
+        # what the tests run besides Lumen
+        tools="xvfb xdotool xterm imagemagick fonts-dejavu-core picom hsetroot"
+        if [ -n "$RUNTIME" ]; then
+          pkgs="$tools $(cat "$RUNTIME")"
+        else
+          pkgs="$tools build-essential meson ninja-build \
+            gettext pkg-config libglib2.0-dev libxml2-dev \
+            libpango1.0-dev libcairo2-dev libx11-dev libxext-dev \
+            libxcursor-dev libxrandr-dev libxinerama-dev libxkbcommon-dev \
+            libimlib2-dev libsm-dev libice-dev libxtst-dev \
+            libwlroots-dev libwayland-dev wayland-protocols libpixman-1-dev \
+            libdrm-dev libxcb1-dev libxcb-icccm4-dev libxcb-ewmh-dev"
+        fi
         apt="sudo -E apt-get -o Acquire::Retries=3"
         mkdir -p ~/apt-debs
         # what the cache holds goes where apt looks first
@@ -37,5 +52,5 @@ runs:
         $apt install -y --no-install-recommends --download-only $pkgs
         $apt autoclean
         rm -f ~/apt-debs/*.deb
-        cp /var/cache/apt/archives/*.deb ~/apt-debs/
+        cp /var/cache/apt/archives/*.deb ~/apt-debs/ 2>/dev/null || true
         $apt install -y --no-install-recommends $pkgs
