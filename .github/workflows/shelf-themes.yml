@@ -31,7 +31,7 @@ jobs:
     outputs:
       code: ${{ steps.diff.outputs.code }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - id: diff
@@ -57,12 +57,12 @@ jobs:
       CCACHE_DIR: /home/runner/.cache/ccache
       CCACHE_MAXSIZE: 200M
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/deps
         timeout-minutes: 10
       # meson compiles through ccache when it is installed; the cache of
       # the newest run is restored, so only changed files are compiled
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ccache-${{ runner.os }}-${{ github.sha }}
@@ -91,7 +91,7 @@ jobs:
             > "$out/runtime-packages"
           cat "$out/runtime-packages"
           test -s "$out/runtime-packages"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: lumen-build
           path: lumen-build/
@@ -106,8 +106,8 @@ jobs:
       matrix:
         backend: [x11, wayland]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with:
           name: lumen-build
           path: lumen-build
@@ -139,8 +139,8 @@ jobs:
     steps:
       - name: The build passed
         run: test "${{ needs.build.result }}" = success
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with:
           name: lumen-build
           path: lumen-build
@@ -159,7 +159,7 @@ jobs:
         env:
           COMPOSITOR: 1
         run: tools/shelf-themes.sh "$PREFIX" "$RUNNER_TEMP/shelf-themes.png"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always() && needs.build.result == 'success'
         with:
           name: shelf-themes
