@@ -1,0 +1,41 @@
+name: Install dependencies
+description: >
+  Installs the apt packages Lumen needs to build and to run its tests. The
+  downloaded .debs are cached (a fresh key each ISO week, the newest one
+  restored in between), so a run only fetches what changed in the archive and
+  a slow mirror hurts less.
+runs:
+  using: composite
+  steps:
+    - id: week
+      shell: bash
+      run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v4
+      with:
+        path: ~/apt-debs
+        key: apt-${{ runner.os }}-${{ hashFiles('.github/actions/deps/action.yml') }}-${{ steps.week.outputs.week }}
+        restore-keys: apt-${{ runner.os }}-${{ hashFiles('.github/actions/deps/action.yml') }}-
+    - shell: bash
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        pkgs="build-essential meson ninja-build \
+          gettext pkg-config libglib2.0-dev libxml2-dev \
+          libpango1.0-dev libcairo2-dev libx11-dev libxext-dev \
+          libxcursor-dev libxrandr-dev libxinerama-dev libxkbcommon-dev \
+          libimlib2-dev libsm-dev libice-dev libxtst-dev \
+          xvfb xdotool xterm imagemagick fonts-dejavu-core picom hsetroot \
+          libwlroots-dev libwayland-dev wayland-protocols libpixman-1-dev \
+          libdrm-dev libxcb1-dev libxcb-icccm4-dev libxcb-ewmh-dev"
+        apt="sudo -E apt-get -o Acquire::Retries=3"
+        mkdir -p ~/apt-debs
+        # what the cache holds goes where apt looks first
+        sudo cp ~/apt-debs/*.deb /var/cache/apt/archives/ 2>/dev/null || true
+        $apt update
+        # download only, so the runner's post-install clean-up keeps the
+        # .debs; autoclean drops the ones the archive no longer has
+        $apt install -y --no-install-recommends --download-only $pkgs
+        $apt autoclean
+        rm -f ~/apt-debs/*.deb
+        cp /var/cache/apt/archives/*.deb ~/apt-debs/
+        $apt install -y --no-install-recommends $pkgs

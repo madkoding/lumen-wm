@@ -1,55 +1,141 @@
 name: shelf-themes
 
-# Builds Lumen with both backends, runs the contract tests (tests/contract) on
-# X11 (Xvfb) and on Wayland (headless wlroots), then shoots the shelf under
-# every bundled theme and checks that its colours read
-# (tools/shelf-themes.sh). The screenshots are kept as an artifact.
+# Builds Lumen with both backends once (job build), then, from that build, runs
+# the contract tests (tests/contract) on X11 (Xvfb) and on Wayland (headless
+# wlroots) and shoots the shelf under every bundled theme, checking that its
+# colours read (tools/shelf-themes.sh), all in parallel. The themes are split
+# in shards; job themes gathers their screenshots in one artifact.
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
+
+# a newer push to the same pull request cancels the run it makes stale; on
+# main every commit runs to the end
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  PREFIX: /home/runner/ob
 
 jobs:
-  themes:
+  build:
     runs-on: ubuntu-24.04
-    # a stuck mirror or a hung X client fails the job instead of holding it
-    timeout-minutes: 25
-    env:
-      DEBIAN_FRONTEND: noninteractive
+    # a stuck mirror or a hung step fails the job instead of holding it
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies
+      - uses: ./.github/actions/deps
         timeout-minutes: 10
+      - name: Build, unit tests and install
         run: |
-          sudo -E apt-get -o Acquire::Retries=3 update
-          sudo -E apt-get -o Acquire::Retries=3 install -y --no-install-recommends build-essential meson ninja-build \
-            gettext pkg-config libglib2.0-dev libxml2-dev \
-            libpango1.0-dev libcairo2-dev libx11-dev libxext-dev \
-            libxcursor-dev libxrandr-dev libxinerama-dev libxkbcommon-dev \
-            libimlib2-dev libsm-dev libice-dev libxtst-dev \
-            xvfb xdotool xterm imagemagick fonts-dejavu-core picom hsetroot \
-            libwlroots-dev libwayland-dev wayland-protocols libpixman-1-dev \
-            libdrm-dev libxcb1-dev libxcb-icccm4-dev libxcb-ewmh-dev
-      - name: Build and install
-        run: |
-          meson setup build --prefix="$HOME/ob" -Dwayland=enabled
+          meson setup build --prefix="$PREFIX" -Dwayland=enabled
           meson compile -C build
           meson test -C build --print-errorlogs
           meson install -C build
-      - name: Contract tests on X11
+      # tar keeps modes and symlinks (lumen-wm -> openbox), which the
+      # artifact zip would drop; the prefix is the same path on every runner
+      - name: Pack the build
+        run: |
+          mkdir -p "$RUNNER_TEMP/lumen"
+          tar -cf "$RUNNER_TEMP/lumen/prefix.tar" -C "$(dirname "$PREFIX")" "$(basename "$PREFIX")"
+          tar -cf "$RUNNER_TEMP/lumen/contract.tar" build/contract-x11 build/contract-wayland
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumen-build
+          path: ${{ runner.temp }}/lumen/
+          retention-days: 1
+
+  contract:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [x11, wayland]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/deps
+        timeout-minutes: 10
+      - uses: actions/download-artifact@v4
+        with:
+          name: lumen-build
+          path: ${{ runner.temp }}/lumen
+      - name: Unpack the build
+        run: |
+          mkdir -p "$(dirname "$PREFIX")"
+          tar -xf "$RUNNER_TEMP/lumen/prefix.tar" -C "$(dirname "$PREFIX")"
+          tar -xf "$RUNNER_TEMP/lumen/contract.tar"
+      - name: Contract tests on ${{ matrix.backend }}
         timeout-minutes: 5
-        run: tests/contract/run.sh "$HOME/ob"
-      - name: Contract tests on Wayland
-        timeout-minutes: 5
-        run: tests/contract/run-wayland.sh "$HOME/ob"
+        run: |
+          if [ "${{ matrix.backend }}" = x11 ]; then
+            tests/contract/run.sh "$PREFIX"
+          else
+            tests/contract/run-wayland.sh "$PREFIX"
+          fi
+
+  theme-shard:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # globs over themes/ (ONLY in tools/shelf-themes.sh); together they
+        # take every theme, a new one included, and each about the same time
+        include:
+          - shard: c
+            only: 'C*'
+          - shard: o
+            only: 'O*'
+          - shard: rest
+            only: '[!CO]*'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/deps
+        timeout-minutes: 10
+      - uses: actions/download-artifact@v4
+        with:
+          name: lumen-build
+          path: ${{ runner.temp }}/lumen
+      - name: Unpack the build
+        run: |
+          mkdir -p "$(dirname "$PREFIX")"
+          tar -xf "$RUNNER_TEMP/lumen/prefix.tar" -C "$(dirname "$PREFIX")"
       - name: Shoot the themes
         timeout-minutes: 10
         # with a compositor, so the menus take the cairo path
         env:
           COMPOSITOR: 1
-        run: tools/shelf-themes.sh "$HOME/ob" "$RUNNER_TEMP/shelf-themes.png"
+          ONLY: ${{ matrix.only }}
+        run: tools/shelf-themes.sh "$PREFIX" "$RUNNER_TEMP/shelf-themes-${{ matrix.shard }}.png"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: shelf-themes
+          name: shelf-themes-${{ matrix.shard }}
           path: ${{ runner.temp }}/shelf-themes*.png
+          retention-days: 1
+
+  # keeps the check called "themes" and the artifact called "shelf-themes"
+  themes:
+    needs: theme-shard
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/upload-artifact/merge@v4
+        with:
+          name: shelf-themes
+          pattern: shelf-themes-*
+          delete-merged: true
+      - name: Every shard passed
+        run: test "${{ needs.theme-shard.result }}" = success
