@@ -1,55 +1,166 @@
 name: shelf-themes
 
-# Builds Lumen with both backends, runs the contract tests (tests/contract) on
-# X11 (Xvfb) and on Wayland (headless wlroots), then shoots the shelf under
-# every bundled theme and checks that its colours read
-# (tools/shelf-themes.sh). The screenshots are kept as an artifact.
+# Builds Lumen with both backends once (job build), then, from that build and
+# in parallel, runs the contract tests (tests/contract) on X11 (Xvfb) and on
+# Wayland (headless wlroots), and shoots the shelf under every bundled theme,
+# checking that its colours read (tools/shelf-themes.sh). The screenshots are
+# kept as an artifact. A change that only touches documentation skips all of
+# it, and the themes check still reports, so it can stay a required check.
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# a newer push to the same pull request cancels the run it makes stale; on
+# main every commit runs to the end
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  PREFIX: /home/runner/ob
 
 jobs:
-  themes:
+  changes:
     runs-on: ubuntu-24.04
-    # a stuck mirror or a hung X client fails the job instead of holding it
-    timeout-minutes: 25
-    env:
-      DEBIAN_FRONTEND: noninteractive
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        # code=false only when every changed file is Markdown or under docs/;
+        # with no base to compare against (a new branch, a manual run) it runs
+        run: |
+          code=true
+          if [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            git diff --name-only "$BASE" HEAD | tee "$RUNNER_TEMP/changed"
+            grep -qvE '(\.md$|^docs/)' "$RUNNER_TEMP/changed" || code=false
+          fi
+          echo "code=$code" | tee -a "$GITHUB_OUTPUT"
+
+  build:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    # a stuck mirror or a hung step fails the job instead of holding it
+    timeout-minutes: 15
+    env:
+      CCACHE_DIR: /home/runner/.cache/ccache
+      CCACHE_MAXSIZE: 200M
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/deps
         timeout-minutes: 10
+      # meson compiles through ccache when it is installed; the cache of
+      # the newest run is restored, so only changed files are compiled
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-
+      - name: Build, unit tests and install
         run: |
-          sudo -E apt-get -o Acquire::Retries=3 update
-          sudo -E apt-get -o Acquire::Retries=3 install -y --no-install-recommends build-essential meson ninja-build \
-            gettext pkg-config libglib2.0-dev libxml2-dev \
-            libpango1.0-dev libcairo2-dev libx11-dev libxext-dev \
-            libxcursor-dev libxrandr-dev libxinerama-dev libxkbcommon-dev \
-            libimlib2-dev libsm-dev libice-dev libxtst-dev \
-            xvfb xdotool xterm imagemagick fonts-dejavu-core picom hsetroot \
-            libwlroots-dev libwayland-dev wayland-protocols libpixman-1-dev \
-            libdrm-dev libxcb1-dev libxcb-icccm4-dev libxcb-ewmh-dev
-      - name: Build and install
-        run: |
-          meson setup build --prefix="$HOME/ob" -Dwayland=enabled
+          ccache --zero-stats
+          meson setup build --prefix="$PREFIX" -Dwayland=enabled
           meson compile -C build
+          ccache --show-stats
           meson test -C build --print-errorlogs
           meson install -C build
-      - name: Contract tests on X11
+      # tar keeps modes and symlinks (openbox -> lumen-wm), which the
+      # artifact zip would drop; the prefix is the same path on every runner.
+      # runtime-packages lists what the binaries link against, for the tests
+      - name: Pack the build
+        run: |
+          out=lumen-build
+          mkdir -p "$out"
+          tar -cf "$out/prefix.tar" -C "$(dirname "$PREFIX")" "$(basename "$PREFIX")"
+          tar -cf "$out/contract.tar" build/contract-x11 build/contract-wayland
+          find "$PREFIX" build/contract-x11 build/contract-wayland -type f \
+              \( -perm -u+x -o -name '*.so*' \) -exec ldd {} + 2>/dev/null |
+            awk '/=> \//{print $3}' | sort -u | xargs -r readlink -f |
+            xargs -r dpkg -S 2>/dev/null | cut -d: -f1 | sort -u \
+            > "$out/runtime-packages"
+          cat "$out/runtime-packages"
+          test -s "$out/runtime-packages"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumen-build
+          path: lumen-build/
+          retention-days: 1
+
+  contract:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [x11, wayland]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: lumen-build
+          path: lumen-build
+      - uses: ./.github/actions/deps
+        timeout-minutes: 10
+        with:
+          runtime: lumen-build/runtime-packages
+      - name: Unpack the build
+        run: |
+          mkdir -p "$(dirname "$PREFIX")"
+          tar -xf lumen-build/prefix.tar -C "$(dirname "$PREFIX")"
+          tar -xf lumen-build/contract.tar
+      - name: Contract tests on ${{ matrix.backend }}
         timeout-minutes: 5
-        run: tests/contract/run.sh "$HOME/ob"
-      - name: Contract tests on Wayland
-        timeout-minutes: 5
-        run: tests/contract/run-wayland.sh "$HOME/ob"
+        run: |
+          if [ "${{ matrix.backend }}" = x11 ]; then
+            tests/contract/run.sh "$PREFIX"
+          else
+            tests/contract/run-wayland.sh "$PREFIX"
+          fi
+
+  themes:
+    needs: [changes, build]
+    # runs (and fails) when the build failed too, so a required themes
+    # check never passes as skipped on a broken build
+    if: always() && needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: The build passed
+        run: test "${{ needs.build.result }}" = success
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: lumen-build
+          path: lumen-build
+      - uses: ./.github/actions/deps
+        timeout-minutes: 10
+        with:
+          runtime: lumen-build/runtime-packages
+      - name: Unpack the build
+        run: |
+          mkdir -p "$(dirname "$PREFIX")"
+          tar -xf lumen-build/prefix.tar -C "$(dirname "$PREFIX")"
+      # every theme on a display of its own, as many at once as CPUs
       - name: Shoot the themes
         timeout-minutes: 10
         # with a compositor, so the menus take the cairo path
         env:
           COMPOSITOR: 1
-        run: tools/shelf-themes.sh "$HOME/ob" "$RUNNER_TEMP/shelf-themes.png"
+        run: tools/shelf-themes.sh "$PREFIX" "$RUNNER_TEMP/shelf-themes.png"
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && needs.build.result == 'success'
         with:
           name: shelf-themes
           path: ${{ runner.temp }}/shelf-themes*.png
