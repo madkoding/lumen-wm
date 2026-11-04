@@ -94,7 +94,7 @@ Each extra is a small section inside `<shelf>`. They use common tools (`nmcli`, 
 install those first.
 
 **Wifi, volume and battery work out of the box.** With the shelf on, Lumen shows the wifi signal (`nmcli`), the
-volume (`wpctl`, PipeWire) and the battery charge as percentages under their icons, without any of the sections
+volume (`wpctl`, PipeWire; `pactl` when there is no `wpctl`) and the battery charge as percentages under their icons, without any of the sections
 below. Add a section only to use other commands; `<battery>no</battery>` hides the battery.
 
 ### Wifi
